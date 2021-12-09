@@ -1,0 +1,45 @@
+{
+  "algorithm": {
+    "flags": {
+      "downloading_mp": true,
+      "cleaning_dynamic_data_ancillary": true
+    },
+    "ancillary": {
+      "process_mp": 5
+    },
+    "general": {
+      "title": "Reanalysis ERA5 - Copernicus",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20211203]",
+      "project-info": "door",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    }
+  },
+  "data": {
+    "static": {
+      "bounding_box": {
+        "lon_right": 35.5,
+        "lon_left": 32,
+        "lat_bottom": -21.5,
+        "lat_top": -17
+      }
+    },
+    "dynamic": {
+      "time": {
+        "time_observed_period": 5,
+        "time_observed_frequency": "Y"
+      },
+      "ancillary": {
+        "folder": "/home/andrea/Desktop/ERA5_test/ancillary"
+      },
+      "outcome": {
+        "folder": "/home/andrea/Desktop/ERA5_test/outcome"
+      }
+    },
+    "log": {
+      "filename": "door_downloader_era5.txt",
+      "folder": "/home/andrea/Desktop/ERA5_test/"
+    }
+  }
+}
