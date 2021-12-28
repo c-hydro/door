@@ -1,0 +1,74 @@
+{
+  "algorithm": {
+    "flags": {
+      "downloading_mp": true,
+      "clean_dynamic_data_ancillary": true,
+      "download_final_imerg": false,
+      "download_late_imerg": true,
+      "download_early_imerg": true
+    },
+    "ancillary": {
+      "domain": "IGAD_D15",
+      "process_mp": null,
+      "note": "If users and passwords are not set they are searched in the .netrc file in the /home directory",
+      "gpm_arthurhouhttps_user": null,
+      "gpm_arthurhouhttps_pass": null,
+      "gpm_jsimpsonhttps_user": null,
+      "gpm_jsimpsonhttps_pass": null
+    },
+    "template": {
+      "folder_datetime_out_final": "%Y/%m/%d",
+      "folder_datetime_out_late": "%Y/%m/%d",
+      "folder_datetime_out_early": "%Y/%m/%d",
+      "file_datetime_out_final": "%Y%m%d%H%M",
+      "file_datetime_out_late": "%Y%m%d%H%M",
+      "file_datetime_out_early": "%Y%m%d%H%M"
+    },
+    "general": {
+      "title": "IMERG - GPM Satellite Product",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20211227]",
+      "project-info": "door",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    }
+  },
+  "data": {
+    "static": {
+      "bounding_box": {
+        "lon_right": 47,
+        "lon_left": 35,
+        "lat_bottom": -1,
+        "lat_top": 11
+      }
+    },
+    "dynamic": {
+      "time": {
+        "time_observed_period": 48,
+        "time_observed_frequency": "H",
+        "product_frequency": "30min"
+      },
+      "ancillary": {
+        "folder": "/home/andrea/Desktop/IMERG/ancillary"
+      },
+      "outcome": {
+        "final": {
+          "folder": "/home/andrea/Desktop/IMERG/outcome/final/{folder_datetime_out_final}",
+          "file_name": "{domain}_final_imerg_{file_datetime_out_final}_mm_30min.tif"
+        },
+        "late": {
+          "folder": "/home/andrea/Desktop/IMERG/outcome/late/{folder_datetime_out_late}",
+          "file_name": "{domain}_late_imerg_{file_datetime_out_late}_mm_30min.tif"
+        },
+        "early": {
+          "folder": "/home/andrea/Desktop/IMERG/outcome/early/{folder_datetime_out_early}",
+          "file_name": "{domain}_early_imerg_{file_datetime_out_early}_mm_30min.tif"
+        }
+      }
+    },
+    "log": {
+      "filename": "door_downloader_imerg.txt",
+      "folder": "/home/andrea/Desktop/IMERG/"
+    }
+  }
+}
