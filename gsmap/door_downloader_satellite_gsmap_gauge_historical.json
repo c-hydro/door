@@ -1,0 +1,75 @@
+{
+  "algorithm": {
+    "flags": {
+      "downloading_mp": true,
+      "clean_dynamic_data_ancillary": false,
+      "download_full_days" : true
+    },
+    "ancillary": {
+      "domain": "IGAD_D15",
+      "process_mp": 4,
+      "cdo_bin": "/home/andrea/FP_libs/fp_libs_cdo/cdo-1.9.8_nc-4.6.0_hdf-1.8.17_eccodes-2.17.0/bin/",
+      "note": "If users and passwords are not set they are searched in the .netrc file in the /home directory",
+      "gsmap_ftp_user": null,
+      "gsmap_ftp_pass": null
+    },
+    "template": {
+      "folder_datetime_out_final": "%Y/%m/%d",
+      "folder_datetime_out_late": "%Y/%m/%d",
+      "folder_datetime_out_early": "%Y/%m/%d",
+      "file_datetime_out_final": "%Y%m%d%H%M",
+      "file_datetime_out_late": "%Y%m%d%H%M",
+      "file_datetime_out_early": "%Y%m%d%H%M"
+    },
+    "general": {
+      "title": "GSMAP GAUGE - Historical downloader",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20220319]",
+      "project-info": "door",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    }
+  },
+  "data": {
+    "static": {
+      "bounding_box": {
+        "lon_right": 47,
+        "lon_left": 35,
+        "lat_bottom": -1,
+        "lat_top": 11
+      }
+    },
+    "dynamic": {
+      "time": {
+        "time_observed_period": 1,
+        "time_observed_frequency": "D",
+        "product_frequency": "1H"
+      },
+      "ancillary": {
+        "folder": "/home/andrea/Desktop/GSMAP/ancillary",
+        "ctl_file_settings": {
+          "line_01":  "* GrADS control file for GSMaP_NRT Hourly Gauge-calibrated Rain (ver.7)",
+          "line_02":  "DSET   {dset}",
+          "line_03":  "TITLE  GSMaP_GAUGE 0.1deg Hourly (ver.7)",
+          "line_04":  "OPTIONS YREV LITTLE_ENDIAN TEMPLATE",
+          "line_05":  "UNDEF  -99.0",
+          "line_06":  "XDEF   3600 LINEAR  0.05 0.1",
+          "line_07":  "YDEF   1200  LINEAR -59.95 0.1",
+          "line_08":  "ZDEF     1 LEVELS 1013",
+          "line_09":  "TDEF   1 LINEAR {tdef} 1hr",
+          "line_10":  "VARS    1",
+          "line_11":  "precip    0  99   hourly averaged rain rate [mm/hr]",
+          "line_12":  "ENDVARS"
+          }
+      },
+      "outcome": {
+        "folder": "/home/andrea/Desktop/GSMAP/{folder_datetime_out_final}",
+        "file_name": "{domain}_gsmap_gauge_{file_datetime_out_final}.tif"
+      }
+    },
+    "log": {
+      "filename": "door_downloader_imerg.txt",
+      "folder": "/home/andrea/Desktop/GSMAP/"
+    }
+  }
+}

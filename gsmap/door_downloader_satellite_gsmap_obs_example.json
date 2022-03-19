@@ -11,7 +11,7 @@
       "cleaning_all_sources": true
     },
     "ancillary": {
-      "domain" : "marche",
+      "domain" : "sicily",
       "process_mp": 6,
       "type": [
         "gsmap_gauge",
@@ -48,10 +48,10 @@
   "data": {
     "static": {
       "bounding_box": {
-        "lon_right": 14,
-        "lon_left": 12,
-        "lat_bottom": 42.5,
-        "lat_top": 44
+        "lon_right": 16,
+        "lon_left": 13,
+        "lat_bottom": 36.3,
+        "lat_top": 40
       }
     },
     "dynamic": {
@@ -138,11 +138,11 @@
       "outcome": {
         "global": {
           "filename": "gsmap_gauge_{outcome_datetime}.nc",
-          "folder": "/home/andrea/CIMA/DEVELOPEMENT/conditional_merging/data_dynamic/outcome/obs/satellite/gsmap_gauge_rt/global/{outcome_sub_path_time}"
+          "folder": "/home/andrea/Desktop/CASO STUDIO/gsmap/global/{outcome_sub_path_time}"
         },
         "domain" : {
           "filename": "{domain}_gsmap_gauge_{outcome_datetime}.nc",
-          "folder": "/home/andrea/CIMA/DEVELOPEMENT/conditional_merging/data_dynamic/outcome/obs/satellite/gsmap_gauge_rt/domain/{outcome_sub_path_time}"
+          "folder": "/home/andrea/Desktop/CASO STUDIO/gsmap/domain/{outcome_sub_path_time}"
         }
       }
     },
