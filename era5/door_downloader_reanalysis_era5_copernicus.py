@@ -207,10 +207,20 @@ def cds_download(month, download_info):
     df_forcing = xr.open_dataset(temp_file)
 
     df_forcing['wind'] = np.sqrt(df_forcing['v10'] ** 2 + df_forcing['u10'] ** 2)
+    df_forcing.wind.attrs["units"] = 'm s**-1'
+
     df_forcing['temperature'] = df_forcing['t2m'] - 273.15
+    df_forcing.wind.attrs["units"] = 'C'
+
     df_forcing['RH'] = relative_humidity_from_dewpoint(df_forcing['temperature'], df_forcing['d2m'] - 273.15)
+    df_forcing.wind.attrs["units"] = '%'
+
     df_forcing['rain'] = df_forcing['tp'] * 1000
+    df_forcing.wind.attrs["units"] = 'mm'
+
     df_forcing = df_forcing.rename({"ssrd": "downward_radiation"})
+    df_forcing['downward_radiation'] = df_forcing['downward_radiation']/3600
+    df_forcing.downward_radiation.attrs["units"] = 'W m**-2'
 
     df_forcing = df_forcing.drop_vars(['v10', 'u10', 't2m', 'd2m', 'tp'])
 
@@ -286,17 +296,17 @@ def set_logging(logger_file='log.txt', logger_format=None):
         os.remove(logger_file)
 
     # Set level of root debugger
-    logging.root.setLevel(logging.DEBUG)
+    logging.root.setLevel(logging.INFO)
 
     # Open logging basic configuration
-    logging.basicConfig(level=logging.DEBUG, format=logger_format, filename=logger_file, filemode='w')
+    logging.basicConfig(level=logging.INFO, format=logger_format, filename=logger_file, filemode='w')
 
     # Set logger handle
     logger_handle_1 = logging.FileHandler(logger_file, 'w')
     logger_handle_2 = logging.StreamHandler()
     # Set logger level
-    logger_handle_1.setLevel(logging.DEBUG)
-    logger_handle_2.setLevel(logging.DEBUG)
+    logger_handle_1.setLevel(logging.INFO)
+    logger_handle_2.setLevel(logging.INFO)
     # Set logger formatter
     logger_formatter = logging.Formatter(logger_format)
     logger_handle_1.setFormatter(logger_formatter)

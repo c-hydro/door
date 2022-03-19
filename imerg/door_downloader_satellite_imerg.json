@@ -3,9 +3,9 @@
     "flags": {
       "downloading_mp": true,
       "clean_dynamic_data_ancillary": true,
-      "download_final_imerg": false,
-      "download_late_imerg": true,
-      "download_early_imerg": true
+      "download_final_imerg": true,
+      "download_late_imerg": false,
+      "download_early_imerg": false
     },
     "ancillary": {
       "domain": "IGAD_D15",

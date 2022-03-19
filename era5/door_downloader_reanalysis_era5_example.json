@@ -27,19 +27,19 @@
     },
     "dynamic": {
       "time": {
-        "time_observed_period": 5,
+        "time_observed_period": 1,
         "time_observed_frequency": "Y"
       },
       "ancillary": {
-        "folder": "/home/andrea/Desktop/ERA5_test/ancillary"
+        "folder": "/home/andrea/Desktop/ERA5_test2/ancillary"
       },
       "outcome": {
-        "folder": "/home/andrea/Desktop/ERA5_test/outcome"
+        "folder": "/home/andrea/Desktop/ERA5_test2/outcome"
       }
     },
     "log": {
       "filename": "door_downloader_era5.txt",
-      "folder": "/home/andrea/Desktop/ERA5_test/"
+      "folder": "/home/andrea/Desktop/ERA5_test2/"
     }
   }
 }
