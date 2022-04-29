@@ -31,6 +31,7 @@ import gzip
 import shutil
 from cdo import Cdo
 import ftplib
+import numpy as np
 
 # -------------------------------------------------------------------------------------
 
@@ -224,6 +225,7 @@ def dload_gsmap_gauge(time_now, downloader_settings):
         with gzip.open(ancillary_filename, 'rb') as f_in:
             with open(ancillary_filename_out, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
+        os.remove(ancillary_filename)
 
         # Compile ctl file
         hour_step = time_now.strftime('%H:00')
@@ -255,7 +257,7 @@ def dload_gsmap_gauge(time_now, downloader_settings):
         cdo.sellonlatbox(bbox_cdo, input=ancillary_filename_out + ".nc", output=local_filename_domain)
 
         if downloader_settings["clean_dynamic_data_ancillary"]:
-            for ancillary_files in [ancillary_filename, ancillary_filename_out]:
+            for ancillary_files in [filename_ctl, ancillary_filename_out, ancillary_filename_out + ".nc"]:
                 try:
                     os.remove(ancillary_files)
                 except:
@@ -279,65 +281,74 @@ def dload_gsmap_gauge_full_days(time_now, downloader_settings):
     global missing_steps
     try:
         ftp.cwd("/realtime/hourly_G/" + time_now.strftime("%Y/%m/%d") + "/")
-        filenames = ftp.nlst()
-        for remote_filename in filenames:
+        for time_step_now in [pd.Timestamp(time_now.year, time_now.month, time_now.day, h,0) for h in np.arange(0,24,1)]:
+            remote_filename = 'gsmap_gauge.' + time_step_now.strftime("%Y%m%d") + '.' + time_step_now.strftime("%H%M") + '.dat.gz'
             logging.info(" ---> Download file " + remote_filename + "... ")
             ancillary_filename = os.path.join(downloader_settings["ancillary_path"], remote_filename)
-            with open(ancillary_filename, 'wb') as file:
-                ftp.retrbinary('RETR ' + remote_filename, file.write)
+            try:
+                with open(ancillary_filename, 'wb') as file:
+                    ftp.retrbinary('RETR ' + remote_filename, file.write)
 
-            template_filled = fill_template(downloader_settings,time_now)
-            local_filename_domain = downloader_settings["outcome_path"].format(**template_filled)
-            os.makedirs(os.path.dirname(local_filename_domain), exist_ok = True)
+                template_filled = fill_template(downloader_settings,time_step_now)
+                local_filename_domain = downloader_settings["outcome_path"].format(**template_filled)
+                os.makedirs(os.path.dirname(local_filename_domain), exist_ok = True)
 
-            filename_ctl = ancillary_filename.replace(".dat.gz", ".ctl")
-            ancillary_filename_out = ancillary_filename.replace(".dat.gz", ".dat")
-            with gzip.open(ancillary_filename, 'rb') as f_in:
-                with open(ancillary_filename_out, 'wb') as f_out:
-                    shutil.copyfileobj(f_in, f_out)
+                filename_ctl = ancillary_filename.replace(".dat.gz", ".ctl")
+                ancillary_filename_out = ancillary_filename.replace(".dat.gz", ".dat")
+                with gzip.open(ancillary_filename, 'rb') as f_in:
+                    with open(ancillary_filename_out, 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                os.remove(ancillary_filename)
 
-            # Compile ctl file
-            logging.info(" ----> Write ctl file...")
-            hour_step = time_now.strftime('%H:00')
-            day_step = time_now.strftime('%-d')
-            year_step = time_now.strftime('%Y')
-            month_step = time_now.strftime('%b').lower()
+                # Compile ctl file
+                logging.info(" ----> Write ctl file...")
+                hour_step = time_step_now.strftime('%H:00')
+                day_step = time_step_now.strftime('%-d')
+                year_step = time_step_now.strftime('%Y')
+                month_step = time_step_now.strftime('%b').lower()
 
-            tdef_ctl_step = hour_step + 'Z' + day_step + month_step + year_step
-            dset_ctl_step = ancillary_filename_out
-            tags_ctl_step = {'dset': dset_ctl_step, 'tdef': tdef_ctl_step}
+                tdef_ctl_step = hour_step + 'Z' + day_step + month_step + year_step
+                dset_ctl_step = ancillary_filename_out
+                tags_ctl_step = {'dset': dset_ctl_step, 'tdef': tdef_ctl_step}
 
-            ctl_template_step = {}
-            for template_ctl_key, template_ctl_content_raw in downloader_settings["ctl_template"].items():
-                template_ctl_content_fill = template_ctl_content_raw.format(**tags_ctl_step)
-                ctl_template_step[template_ctl_key] = template_ctl_content_fill
+                ctl_template_step = {}
+                for template_ctl_key, template_ctl_content_raw in downloader_settings["ctl_template"].items():
+                    template_ctl_content_fill = template_ctl_content_raw.format(**tags_ctl_step)
+                    ctl_template_step[template_ctl_key] = template_ctl_content_fill
 
-            with open(filename_ctl, "w") as ctl_handle:
-                for line_key, line_content in ctl_template_step.items():
-                    ctl_handle.write(line_content)
-                    ctl_handle.write("\n")
-                ctl_handle.close()
+                with open(filename_ctl, "w") as ctl_handle:
+                    for line_key, line_content in ctl_template_step.items():
+                        ctl_handle.write(line_content)
+                        ctl_handle.write("\n")
+                    ctl_handle.close()
 
-            # Set cdo
-            logging.info(" ----> Crop and save...")
-            os.environ['PATH'] = os.environ['PATH'] + ':' + downloader_settings["cdo"]
-            cdo = Cdo()
-            bbox_cdo = ','.join(str(i) for i in downloader_settings["bbox"])
-            cdo.import_binary(input=filename_ctl, output=ancillary_filename_out + ".nc", options='-f nc')
-            cdo.sellonlatbox(bbox_cdo, input=ancillary_filename_out + ".nc", output=local_filename_domain)
+                # Set cdo, crop and save
+                logging.info(" ----> Crop and save...")
+                os.environ['PATH'] = os.environ['PATH'] + ':' + downloader_settings["cdo"]
+                cdo = Cdo()
+                bbox_cdo = ','.join(str(i) for i in downloader_settings["bbox"])
+                cdo.import_binary(input=filename_ctl, output=ancillary_filename_out + ".nc", options='-f nc')
+                cdo.sellonlatbox(bbox_cdo, input=ancillary_filename_out + ".nc", output=local_filename_domain)
 
-            if downloader_settings["clean_dynamic_data_ancillary"]:
-                for ancillary_files in [ancillary_filename, ancillary_filename_out]:
-                    try:
-                        os.remove(ancillary_files)
-                    except:
-                        continue
-        logging.info(" ---> All files for day " + time_now.strftime("%Y-%m-%d") + " downloaded!")
+                if downloader_settings["clean_dynamic_data_ancillary"]:
+                    for ancillary_files in [filename_ctl, ancillary_filename_out, ancillary_filename_out + ".nc"]:
+                        try:
+                            os.remove(ancillary_files)
+                        except:
+                            continue
+            except:
+                logging.warning(" ---> WARNING! Time step " + time_step_now.strftime("%H:%M") + " is missing!")
+                missing_steps.append(time_step_now)
+                continue
+
+        logging.info(" ---> All available files for day " + time_now.strftime("%Y-%m-%d") + " downloaded!")
 
     except ftplib.error_perm as reason:
         if str(reason)[:3] == '550':
             logging.warning(" WARNING! " + time_now.strftime("%Y-%m-%d") + "... Folder not found! SKIP")
-            missing_steps.append(time_now)
+            for time_step_now in [pd.Timestamp(time_now.year, time_now.month, time_now.day, h, 0) for h in
+                                  np.arange(0, 24, 1)]:
+                missing_steps.append(time_step_now)
     ftp.quit()
 
 # -------------------------------------------------------------------------------------
