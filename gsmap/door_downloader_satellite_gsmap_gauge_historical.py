@@ -3,8 +3,8 @@
 """
 door Tool - SATELLITE GSMAP GAUGE historical
 
-__date__ = '20220319'
-__version__ = '1.0.0'
+__date__ = '20220624'
+__version__ = '1.1.0'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'door'
@@ -13,6 +13,7 @@ General command line:
 python3 door_downloader_satellite_gsmap_gauge_historical.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
+20220624 (1.1.0) --> Check if all file has been downloaded and, in cse re-launch missing step in series
 20220319 (1.0.0) --> Beta release
 """
 # -------------------------------------------------------------------------------------
@@ -38,8 +39,8 @@ import numpy as np
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - SATELLITE GSMAP GAUGE historical'
-alg_version = '1.0.0'
-alg_release = '2022-03-19'
+alg_version = '1.1.0'
+alg_release = '2022-06-24'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -130,6 +131,7 @@ def main():
     if data_settings["algorithm"]["flags"]["download_full_days"]:
         data_settings["data"]["dynamic"]["time"]["time_observed_frequency"] = "1D"
     time_range = pd.date_range(time_start, time_end, freq=data_settings["data"]["dynamic"]["time"]["time_observed_frequency"])
+    time_range_prod = pd.date_range(time_start, time_end, freq=data_settings["data"]["dynamic"]["time"]["product_frequency"])
 
     downloader_settings["templates"] = data_settings["algorithm"]["template"]
     logging.info(" --> Setting algorithm time settings...DONE")
@@ -166,29 +168,57 @@ def main():
     # -------------------------------------------------------------------------------------
     # Process the download of the data
     logging.info(' --> Search and download of gsmap gauge products...')
-    global missing_steps
-    missing_steps = manager.list()
+    #### global missing_steps                   #mod20220616
+    downloader_settings["missing_steps"] = manager.list()                #mod20220616
+
     downloader_settings["outcome_path"] = os.path.join(
         data_settings["data"]["dynamic"]["outcome"]["folder"], \
         data_settings["data"]["dynamic"]["outcome"]["file_name"])
+
+    if data_settings["data"]["dynamic"]["outcome"]["format"] == "tif" or data_settings["data"]["dynamic"]["outcome"]["format"] == "GTiff":
+        downloader_settings["format"] = "tif"
+    elif data_settings["data"]["dynamic"]["outcome"]["format"] == "nc" or data_settings["data"]["dynamic"]["outcome"]["format"] == "netcdf":
+        downloader_settings["format"] = "nc"
+    else:
+        raise NotImplementedError("Only tif and nc output format accepted!")
+
     exec_pool = Pool(process_max)
     if data_settings["algorithm"]["flags"]["download_full_days"]:
         for time_now in time_range:
             exec_pool.apply_async(dload_gsmap_gauge_full_days, args=(time_now, downloader_settings))
+        exec_pool.close()
+        exec_pool.join()
     else:
         for time_now in time_range:
             exec_pool.apply_async(dload_gsmap_gauge, args=(time_now, downloader_settings))
-    exec_pool.close()
-    exec_pool.join()
+        exec_pool.close()
+        exec_pool.join()
     logging.info(' --> Search and download of gsmap gauge products...DONE')
 
-    if len(list(missing_steps))>0:
+    if len(list(downloader_settings["missing_steps"]))>0:
         logging.warning(' --> Some time steps are missing: ')
-        for date in missing_steps:
+        ######## for date in missing_steps:                         #mod20220616
+        for date in downloader_settings["missing_steps"]:
             logging.warning(' ---> Time: ' + date.strftime("%Y-%m-%d %H:%M") + "..MISSING!")
-    else:
-        logging.info(' --> All data have been downloaded!')
 
+    logging.info(" --> Check missing data...")
+    missing_steps = []
+    for time_now in time_range_prod:
+        template_filled = fill_template(downloader_settings, time_now)
+        local_filename_domain = downloader_settings["outcome_path"].format(**template_filled)
+        if not os.path.isfile(local_filename_domain):
+            logging.info(" --> Try to re-download " + time_now.strftime("%Y-%m-%d %H:%M") + "...")
+            try:
+                dload_gsmap_gauge(time_now, downloader_settings)
+                logging.info(" --> Try to re-download " + time_now.strftime("%Y-%m-%d %H:%M") + "...SUCCESS!")
+            except:
+                logging.error(" --> ERROR! Try to re-download " + time_now.strftime("%Y-%m-%d %H:%M") + "...FAILED!")
+                missing_steps = missing_steps + [time_now]
+
+    if len(missing_steps) == 0:
+        logging.info(' --> All data have been downloaded!')
+    else:
+        logging.warning(" --> WARNING! Some dates are missing: " + "\n".join([i.strftime("%Y-%m-%d %H:%M") for i in missing_steps]))
     # -------------------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------------------
@@ -209,7 +239,7 @@ def dload_gsmap_gauge(time_now, downloader_settings):
     ftp = ftplib.FTP("hokusai.eorc.jaxa.jp")
     ftp.login(downloader_settings['gsmap_user'], downloader_settings['gsmap_pwd'])
     logging.info(" ---> " + time_now.strftime("%Y-%m-%d %H:%M") + "... ")
-    global missing_steps
+    #global missing_steps                       #mod20220616
     try:
         ftp.cwd("/realtime/hourly_G/" + time_now.strftime("%Y/%m/%d") + "/")
         remote_filename = 'gsmap_gauge.' + time_now.strftime("%Y%m%d") + '.' + time_now.strftime("%H%M") + '.dat.gz'
@@ -254,7 +284,11 @@ def dload_gsmap_gauge(time_now, downloader_settings):
         cdo = Cdo()
         bbox_cdo = ','.join(str(i) for i in downloader_settings["bbox"])
         cdo.import_binary(input=filename_ctl, output=ancillary_filename_out + ".nc", options='-f nc')
-        cdo.sellonlatbox(bbox_cdo, input=ancillary_filename_out + ".nc", output=local_filename_domain)
+        cdo.sellonlatbox(bbox_cdo, input=ancillary_filename_out + ".nc", output=local_filename_domain.replace(".tif",".nc"))
+        if downloader_settings["format"] == "tif":
+            gdal.Translate(local_filename_domain, local_filename_domain.replace(".tif", ".nc"),
+                           format="GTiff", outputType=gdal.GDT_Float32, creationOptions=['COMPRESS=DEFLATE'])
+            os.remove(local_filename_domain.replace(".tif", ".nc"))
 
         if downloader_settings["clean_dynamic_data_ancillary"]:
             for ancillary_files in [filename_ctl, ancillary_filename_out, ancillary_filename_out + ".nc"]:
@@ -267,7 +301,8 @@ def dload_gsmap_gauge(time_now, downloader_settings):
     except ftplib.error_perm as reason:
         if str(reason)[:3] == '550':
             logging.warning(" WARNING! " + time_now.strftime("%Y-%m-%d %H:%M") + "... File not found! SKIP")
-            missing_steps.append(time_now)
+            ##### missing_steps.append(time_step_now)                   #mod20220616
+            downloader_settings["missing_steps"].append(time_now)  # mod20220616
     ftp.quit()
 
 # -------------------------------------------------------------------------------------
@@ -278,7 +313,7 @@ def dload_gsmap_gauge_full_days(time_now, downloader_settings):
     ftp = ftplib.FTP("hokusai.eorc.jaxa.jp")
     ftp.login(downloader_settings['gsmap_user'], downloader_settings['gsmap_pwd'])
     logging.info(" ---> Download day " + time_now.strftime("%Y-%m-%d") + "... ")
-    global missing_steps
+
     try:
         ftp.cwd("/realtime/hourly_G/" + time_now.strftime("%Y/%m/%d") + "/")
         for time_step_now in [pd.Timestamp(time_now.year, time_now.month, time_now.day, h,0) for h in np.arange(0,24,1)]:
@@ -328,8 +363,12 @@ def dload_gsmap_gauge_full_days(time_now, downloader_settings):
                 cdo = Cdo()
                 bbox_cdo = ','.join(str(i) for i in downloader_settings["bbox"])
                 cdo.import_binary(input=filename_ctl, output=ancillary_filename_out + ".nc", options='-f nc')
-                cdo.sellonlatbox(bbox_cdo, input=ancillary_filename_out + ".nc", output=local_filename_domain)
+                cdo.sellonlatbox(bbox_cdo, input=ancillary_filename_out + ".nc", output=local_filename_domain.replace(".tif",".nc"))
 
+                if downloader_settings["format"] == "tif":
+                    gdal.Translate(local_filename_domain, local_filename_domain.replace(".tif", ".nc"),
+                                   format="GTiff", outputType=gdal.GDT_Float32, creationOptions=['COMPRESS=DEFLATE'])
+                    os.remove(local_filename_domain.replace(".tif",".nc"))
                 if downloader_settings["clean_dynamic_data_ancillary"]:
                     for ancillary_files in [filename_ctl, ancillary_filename_out, ancillary_filename_out + ".nc"]:
                         try:
@@ -338,7 +377,8 @@ def dload_gsmap_gauge_full_days(time_now, downloader_settings):
                             continue
             except:
                 logging.warning(" ---> WARNING! Time step " + time_step_now.strftime("%H:%M") + " is missing!")
-                missing_steps.append(time_step_now)
+                downloader_settings["missing_steps"].append(time_step_now)                      #mod20220616
+                ##### missing_steps.append(time_step_now)                   #mod20220616
                 continue
 
         logging.info(" ---> All available files for day " + time_now.strftime("%Y-%m-%d") + " downloaded!")
@@ -348,7 +388,10 @@ def dload_gsmap_gauge_full_days(time_now, downloader_settings):
             logging.warning(" WARNING! " + time_now.strftime("%Y-%m-%d") + "... Folder not found! SKIP")
             for time_step_now in [pd.Timestamp(time_now.year, time_now.month, time_now.day, h, 0) for h in
                                   np.arange(0, 24, 1)]:
-                missing_steps.append(time_step_now)
+                ##### missing_steps.append(time_step_now)                   #mod20220616
+                downloader_settings["missing_steps"].append(time_step_now)                      #mod20220616
+        else:
+            raise ConnectionError
     ftp.quit()
 
 # -------------------------------------------------------------------------------------

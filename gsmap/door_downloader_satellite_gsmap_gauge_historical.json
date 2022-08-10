@@ -64,6 +64,7 @@
       },
       "outcome": {
         "folder": "/home/andrea/Desktop/GSMAP/{folder_datetime_out_final}",
+        "format": "tif",
         "file_name": "{domain}_gsmap_gauge_{file_datetime_out_final}.tif"
       }
     },
