@@ -1,6 +1,11 @@
 =========
 Changelog
 =========
+Version 1.0.1 [2022-08-17]
+**************************
+APP: **door_downloader_reanalysis_era5_copernicus.py**
+    - Add support for mixed ERA5 and ERA5T downloads
+    
 Version 1.0.0 [2021-11-30]
 **************************
 APP: **door_downloader_satellite_gsmap_gauge_historical.py**
