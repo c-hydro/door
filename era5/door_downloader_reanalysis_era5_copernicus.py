@@ -3,8 +3,8 @@
 """
 door - Download ERA5 reanalysis from Copernicus
 
-__date__ = '20211203'
-__version__ = '1.0.0'
+__date__ = '20220817'
+__version__ = '1.0.1'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'door'
@@ -14,6 +14,7 @@ python3 hyde_downloader_satellite_gsmap_obs.py -settings_file configuration.json
 
 Version(s):
 20211203 (1.0.0) --> Beta release
+20220817 (1.0.1) --> Support data with mix of ERA5 and ERA5T products
 """
 # -------------------------------------------------------------------------------------
 
@@ -33,8 +34,8 @@ import datetime as dt
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - ERA5 COPERNICUS'
-alg_version = '1.0.0'
-alg_release = '2021-12-03'
+alg_version = '1.0.1'
+alg_release = '2022-08-17'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -205,6 +206,10 @@ def cds_download(month, download_info):
         temp_file)
 
     df_forcing = xr.open_dataset(temp_file)
+
+    if "expver" in df_forcing.keys():
+        logging.warning(" --> WARNING! Menthly data contain a mixture of ERA5 and ERA5T values!")
+        df_forcing = df_forcing.max(dim="expver", skipna=True, keep_attrs=True)
 
     df_forcing['wind'] = np.sqrt(df_forcing['v10'] ** 2 + df_forcing['u10'] ** 2)
     df_forcing.wind.attrs["units"] = 'm s**-1'

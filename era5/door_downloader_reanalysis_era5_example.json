@@ -19,16 +19,16 @@
   "data": {
     "static": {
       "bounding_box": {
-        "lon_right": 35.5,
-        "lon_left": 32,
-        "lat_bottom": -21.5,
-        "lat_top": -17
+        "lon_right": 53,
+        "lon_left": 21,
+        "lat_bottom": -11,
+        "lat_top": 24
       }
     },
     "dynamic": {
       "time": {
-        "time_observed_period": 1,
-        "time_observed_frequency": "Y"
+        "time_observed_period": 30,
+        "time_observed_frequency": "D"
       },
       "ancillary": {
         "folder": "/home/andrea/Desktop/ERA5_test2/ancillary"
