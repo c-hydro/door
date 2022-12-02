@@ -209,6 +209,10 @@ def main():
                 logging.info(' ------> Combine wind component ... DONE')
 
             logging.info(' -----> Shift longitude to be in the -180 +180 range')
+            try:
+                out_file = out_file.rename_dims({"latitude": "lat", "longitude": "lon"})
+            except:
+                pass
             out_file = out_file.assign_coords({'lon': np.where(out_file['lon'].values > 180, out_file['lon'].values - 360, out_file['lon'].values)})
             out_file.to_netcdf(os.path.join(outFolder, out_file_name))
 

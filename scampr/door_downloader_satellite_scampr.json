@@ -1,0 +1,62 @@
+{
+  "algorithm": {
+    "flags": {
+      "clean_dynamic_data_ancillary": true,
+      "crop_map": true,
+      "download_only_first_version": false
+    },
+    "domain": "crews",
+    "template": {
+      "folder_datetime_out_final": "%Y/%m/%d",
+      "folder_datetime_out_late": "%Y/%m/%d",
+      "folder_datetime_out_early": "%Y/%m/%d",
+      "file_datetime_out": "%Y%m%d%H%M"
+    },
+    "general": {
+      "title": "DOOR - SATELLITE SCAmPR",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20211227]",
+      "project-info": "door",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    }
+  },
+  "data": {
+    "static": {
+      "bounding_box": {
+        "lon_right": -55.878539,
+        "lon_left": -63.2285396,
+        "lat_bottom": 9.5925450,
+        "lat_top": 16.7925450
+      }
+    },
+    "dynamic": {
+      "time": {
+        "time_observed_period": 0.5,
+        "time_observed_frequency": "H",
+        "product_frequency": "10min"
+      },
+      "ancillary": {
+        "folder": "/home/andrea/Desktop/SCAMPR/ancillary"
+      },
+      "outcome": {
+        "v0": {
+          "folder": "/home/andrea/Desktop/SCAMPR/outcome/early/{folder_datetime_out_final}",
+          "file_name": "{file_datetime_out}_SCAmPRv0.tif"
+        },
+        "v1": {
+          "folder": "/home/andrea/Desktop/SCAMPR/outcome/late/{folder_datetime_out_late}",
+          "file_name": "{file_datetime_out}_SCAmPRv0.tif"
+        },
+        "v2": {
+          "folder": "/home/andrea/Desktop/SCAMPR/outcome/final/{folder_datetime_out_early}",
+          "file_name": "{file_datetime_out}_SCAmPRv0.tif"
+        }
+      }
+    },
+    "log": {
+      "filename": "door_downloader_SCAMPR.txt",
+      "folder": "/home/andrea/Desktop/SCAMPR/"
+    }
+  }
+}
