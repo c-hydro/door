@@ -9,7 +9,7 @@
     },
     "ancillary": {
       "domain" : "mozambique",
-      "process_mp": 5,
+      "process_mp": 1,
       "remote_server_hit_per_min": 100,
       "ens_members": 30,
       "type": [
@@ -106,8 +106,8 @@
         ],
         "folder":
         [
-          "/share/fp/fp_mozambique/data/data_dynamic/ancillary/nwp/gefs025/{ancillary_sub_path_time}",
-          "/share/fp/fp_mozambique/data/data_dynamic/ancillary/nwp/gefs025/{ancillary_sub_path_time}"
+          "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/ancillary/nwp/gefs025/{ancillary_sub_path_time}",
+          "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/ancillary/nwp/gefs025/{ancillary_sub_path_time}"
         ]
       },
       "outcome": {
@@ -117,8 +117,8 @@
             "gep{ens_member}.t{run_hour}z.0p25.{outcome_datetime}_10m_variables.nc"
           ],
           "folder": [
-            "/share/fp/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/global/{outcome_sub_path_time}",
-            "/share/fp/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/global/{outcome_sub_path_time}"
+            "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/global/{outcome_sub_path_time}",
+            "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/global/{outcome_sub_path_time}"
           ]
         },
         "domain" : {
@@ -127,15 +127,15 @@
             "{domain}_gep0{ens_member}.t{run_hour}z.0p25.{outcome_datetime}_other_variables.nc"
           ],
           "folder": [
-            "/share/fp/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/domain/{outcome_sub_path_time}",
-            "/share/fp/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/domain/{outcome_sub_path_time}"
+            "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/domain/{outcome_sub_path_time}",
+            "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/domain/{outcome_sub_path_time}"
           ]
         }
       }
     },
     "log": {
         "filename": "hyde_downloader_nwp_gefs025_nomads.txt",
-        "folder": "/share/fp/fp_mozambique/log/preprocessing/"
+        "folder": "/home/andrea/Desktop/test/fp_mozambique/log/preprocessing/"
       },
     "library": {
       "filename": "",
