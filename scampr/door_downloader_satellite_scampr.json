@@ -3,7 +3,9 @@
     "flags": {
       "clean_dynamic_data_ancillary": true,
       "crop_map": true,
-      "download_only_first_version": false
+      "download_only_first_version": true,
+      "dump_lat_lon_grid": true,
+      "cumulate_time": true
     },
     "domain": "crews",
     "template": {
@@ -37,7 +39,8 @@
         "product_frequency": "10min"
       },
       "ancillary": {
-        "folder": "/home/andrea/Desktop/SCAMPR/ancillary"
+        "folder": "/home/andrea/Desktop/SCAMPR/ancillary",
+        "lat_lon_grid": "/home/andrea/Desktop/SCAMPR/ancillary2/lat_lon.nc"
       },
       "outcome": {
         "v0": {
@@ -58,5 +61,25 @@
       "filename": "door_downloader_SCAMPR.txt",
       "folder": "/home/andrea/Desktop/SCAMPR/"
     }
+  },
+  "cumulative": {
+    "cumulative_steps": [0,30],
+    "out_resolution_h": 0.5,
+    "scale_factor": 0.166666667,
+    "min_num_available_maps": 3,
+    "outcome": {
+        "v0": {
+          "folder": "/home/andrea/Desktop/SCAMPR/outcome/early/{folder_datetime_out_final}",
+          "file_name": "{file_datetime_out}_30minSCAmPRv0.tif"
+        },
+        "v1": {
+          "folder": "/home/andrea/Desktop/SCAMPR/outcome/late/{folder_datetime_out_late}",
+          "file_name": "{file_datetime_out}_30minSCAmPRv0.tif"
+        },
+        "v2": {
+          "folder": "/home/andrea/Desktop/SCAMPR/outcome/final/{folder_datetime_out_early}",
+          "file_name": "{file_datetime_out}_30minSCAmPRv0.tif"
+        }
+      }
   }
 }

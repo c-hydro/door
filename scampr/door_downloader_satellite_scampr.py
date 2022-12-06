@@ -73,7 +73,10 @@ def main():
     logging.info(" --> Create ancillary data path...")
     downloader_settings = {}
     downloader_settings["ancillary_path"] = data_settings["data"]["dynamic"]["ancillary"]["folder"].format(domain=data_settings['algorithm']['domain'])
+    lat_lon_grid = data_settings["data"]["dynamic"]["ancillary"]["lat_lon_grid"].format(domain=data_settings['algorithm']['domain'])
     os.makedirs(downloader_settings["ancillary_path"], exist_ok=True)
+    # make ancillary for temporary lat-lon grid
+    os.makedirs(os.path.dirname(lat_lon_grid), exist_ok=True)
     # -------------------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------------------
@@ -100,13 +103,15 @@ def main():
     dict_filled = dict_empty.copy()
     dict_filled["domain"] = data_settings['algorithm']['domain']
 
-    # Download lat-lon file and extract geographical info
+    # Download lat-lon file if not available in dedicated ancillary path and extract geographical info
     logging.info(" --> Get geographical information...")
-    urlretrieve(os.path.join(downloader_settings["url"], "rain_rate_grid_lat_lon.nc"), os.path.join(downloader_settings["ancillary_path"], "rain_rate_grid_lat_lon.nc"))
-    lat_lon = xr.open_dataset(os.path.join(downloader_settings["ancillary_path"], "rain_rate_grid_lat_lon.nc"))
+    if not os.path.isfile(lat_lon_grid):
+        urlretrieve(os.path.join(downloader_settings["url"], "rain_rate_grid_lat_lon.nc"), lat_lon_grid)
+    lat_lon = xr.open_dataset(lat_lon_grid)
     lat = np.unique(lat_lon.latitude.values)
     lon = np.unique(lat_lon.longitude.values)
-    os.remove(os.path.join(downloader_settings["ancillary_path"], "rain_rate_grid_lat_lon.nc"))
+    if not data_settings["algorithm"]["flags"]["dump_lat_lon_grid"]:
+        os.remove(lat_lon_grid)
     logging.info(" --> Get geographical information...DONE")
 
     # Get file list
@@ -118,7 +123,7 @@ def main():
 
     for time_now in date_to_explore:
         logging.info(" --> Compute time step " + time_now.strftime("%Y-%m-%d %H:%M"))
-        lista_in = [i for i in lista if time_now.strftime("%Y%m%d%H%M") in i]
+        lista_in = [i for i in lista if "s" + time_now.strftime("%Y%m%d%H%M") in i]
 
         if len(lista_in) == 0:
             logging.warning("WARNING! No map found for the time step!")
@@ -134,6 +139,40 @@ def main():
                 downloader_settings["out_folder"] = data_settings["data"]["dynamic"]["outcome"]["v" + str(num)]["folder"].format(**dict_filled)
                 downloader_settings["out_name"] = data_settings["data"]["dynamic"]["outcome"]["v" + str(num)]["file_name"].format(**dict_filled)
                 download_file(num, file, lat, lon, downloader_settings)
+
+                if data_settings["algorithm"]["flags"]["cumulate_time"]:
+                    if time_now.minute in data_settings["cumulative"]["cumulative_steps"]:
+                        logging.info(" --> Cumulation over time is active for current time step...")
+                        time_range = pd.date_range(time_now - pd.Timedelta(hours=data_settings["cumulative"]["out_resolution_h"]), time_now, freq=data_settings["data"]["dynamic"]["time"]["product_frequency"], closed='right')
+                        i = 0
+                        for time_now in time_range:
+                            for key in dict_empty.keys():
+                                dict_filled[key] = time_now.strftime(dict_empty[key])
+                            try:
+                                if i == 0:
+                                    logging.info(" ---> Cumulate map " + time_now.strftime("%Y-%m-%d %H:%M"))
+                                    cumulative = xr.open_rasterio(os.path.join(
+                                        data_settings["data"]["dynamic"]["outcome"]["v" + str(num)]["folder"],
+                                        data_settings["data"]["dynamic"]["outcome"]["v" + str(num)][
+                                            "file_name"]).format(**dict_filled), cache=False) * data_settings["cumulative"]["scale_factor"]
+                                    i = i +1
+                                else:
+                                    logging.info(" ---> Cumulate map " + time_now.strftime("%Y-%m-%d %H:%M"))
+                                    cumulative += xr.open_rasterio(os.path.join(
+                                        data_settings["data"]["dynamic"]["outcome"]["v" + str(num)]["folder"],
+                                        data_settings["data"]["dynamic"]["outcome"]["v" + str(num)]["file_name"]).format(**dict_filled), cache=False) * data_settings["cumulative"]["scale_factor"]
+                                    i = i + 1
+                            except:
+                                logging.info(" WARNING! Map not available for step " + time_now.strftime("%Y-%m-%d %H:%M"))
+                                continue
+
+                        if i >= data_settings["cumulative"]["min_num_available_maps"]:
+                            logging.info(" ---> Save output...")
+                            out_file = os.path.join(data_settings["cumulative"]["outcome"]["v" + str(num)]["folder"], data_settings["cumulative"]["outcome"]["v" + str(num)]["file_name"]).format(**dict_filled)
+                            cumulative.rio.to_raster(out_file)
+                            logging.info(" --> Cumulation over time... SUCCESFUL!")
+                        else:
+                            logging.info(" --> Not enough maps available! Map not saved for time step " + time_now.strftime("%Y-%m-%d %H:%M"))
 
     # -------------------------------------------------------------------------------------
 
