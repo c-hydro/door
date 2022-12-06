@@ -3,8 +3,8 @@
 """
 HyDE Downloading Tool - NWP GFS 0.25 backup procedure UCAR server
 
-__date__ = '20200428'
-__version__ = '2.0.0'
+__date__ = '20221205'
+__version__ = '2.0.2'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
         'Fabio Delogu (fabio.delogu@cimafoundation.org',
@@ -15,6 +15,7 @@ General command line:
 python3 hyde_downloader_nwp_gfs_ftp.py -settings_file configuration.json -time YYYY-MM-DD HH:MM
 
 Version(s):
+20221205 (2.0.2) --> Bug fixes
 20210609 (2.0.1) --> Add shifting of longitudes from [0,360] to [-180,180]
 20200428 (2.0.0) --> Change output format according to Nomads update.
 20200325 (1.8.0) --> Fix time accumulation for Continuum forcing compatibility
@@ -46,8 +47,8 @@ import numpy as np
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'HYDE DOWNLOADING TOOL - NWP GFS BACKUP PROCEDURE'
-alg_version = '2.0.0'
-alg_release = '2021-04-28'
+alg_version = '2.0.2'
+alg_release = '2022-12-05'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -210,7 +211,14 @@ def main():
 
             logging.info(' -----> Shift longitude to be in the -180 +180 range')
             try:
-                out_file = out_file.rename_dims({"latitude": "lat", "longitude": "lon"})
+                out_file["lat"] = out_file["latitude"]
+                out_file["lon"] = out_file["longitude"]
+                out_file = out_file.swap_dims({"latitude": "lat", "longitude": "lon"})
+                out_file = out_file.drop_vars(['latitude','longitude'])
+            except:
+                pass
+            try:
+                out_file = out_file.drop_vars(['reftime'])
             except:
                 pass
             out_file = out_file.assign_coords({'lon': np.where(out_file['lon'].values > 180, out_file['lon'].values - 360, out_file['lon'].values)})
