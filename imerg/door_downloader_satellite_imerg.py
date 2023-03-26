@@ -3,8 +3,8 @@
 """
 door Tool - SATELLITE IMERG
 
-__date__ = '20211227'
-__version__ = '1.0.0'
+__date__ = '20220803'
+__version__ = '1.1.0'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'door'
@@ -13,6 +13,7 @@ General command line:
 python3 hyde_downloader_satellite_gsmap_nowcasting.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
+20220308 (1.1.0) --> Fixed accumulation of late IMERG: now all the output maps are in mm/30min
 20211227 (1.0.0) --> Beta release
 """
 # -------------------------------------------------------------------------------------
@@ -33,8 +34,8 @@ import datetime as dt
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - SATELLITE IMERG'
-alg_version = '1.0.0'
-alg_release = '2021-12-27'
+alg_version = '1.1.0'
+alg_release = '2022-03-08'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -317,7 +318,7 @@ def dload_final_run(time_now, downloader_settings):
             template_filled = fill_template(downloader_settings, time_now)
             local_filename_domain = downloader_settings["outcome_path"].format(**template_filled)
             os.makedirs(os.path.dirname(local_filename_domain), exist_ok=True)
-            gdal.Translate(local_filename_domain, ancillary_filename, projWin = downloader_settings["bbox"], scaleParams=[[0.0,100.0,0.0,10.0]], outputType=gdal.GDT_Float32, noData=29999)
+            gdal.Translate(local_filename_domain, ancillary_filename, projWin = downloader_settings["bbox"], scaleParams=[[0.0,100.0,0.0,5.0]], outputType=gdal.GDT_Float32, noData=29999)
             if downloader_settings["clean_dynamic_data_ancillary"]:
                 os.system('rm ' + ancillary_filename)
             logging.info(" ---> " + time_now.strftime("%Y-%m-%d %H:%M") + "... File downloaded!")

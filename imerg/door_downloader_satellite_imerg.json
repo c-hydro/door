@@ -4,7 +4,7 @@
       "downloading_mp": true,
       "clean_dynamic_data_ancillary": true,
       "download_final_imerg": true,
-      "download_late_imerg": false,
+      "download_late_imerg": true,
       "download_early_imerg": false
     },
     "ancillary": {
@@ -44,7 +44,7 @@
     },
     "dynamic": {
       "time": {
-        "time_observed_period": 48,
+        "time_observed_period": 4,
         "time_observed_frequency": "H",
         "product_frequency": "30min"
       },
