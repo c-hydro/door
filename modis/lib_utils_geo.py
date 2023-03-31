@@ -1,3 +1,11 @@
+"""
+Library Features:
+
+Name:          lib_utils_geo
+Author(s):     Fabio Delogu (fabio.delogu@cimafoundation.org)
+Date:          '20230331'
+Version:       '1.0.0'
+"""
 # -------------------------------------------------------------------------------------
 # Libraries
 import logging

@@ -2,7 +2,7 @@
 
 #-----------------------------------------------------------------------------------------
 # Script information
-script_name='HYDE DOWNLOADER - SATELLITE MODIS - HISTORY'
+script_name='DOOR DOWNLOADER - SATELLITE MODIS'
 script_version="1.1.0"
 script_date='2020/10/30'
 
@@ -21,8 +21,7 @@ settings_file='/hydro/fp_tools_preprocessing/satellite/modis/hyde_downloader_sat
 
 # Get information (-u to get gmt time)
 # time_now=$(date -u +"%Y-%m-%d %H:00")
-time_now='2020-11-01 00:00' # DEBUG 
-time_now='2020-12-15 00:00'
+time_now='2020-11-01 00:00' # DEBUG
 #-----------------------------------------------------------------------------------------
 
 #-----------------------------------------------------------------------------------------

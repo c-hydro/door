@@ -1,17 +1,18 @@
 #!/usr/bin/python3
 
 """
-MODIS Downloading Tool - MODIS SNOW
+Door Downloading Tool - SATELLITE MODIS
 
-__date__ = '20191007'
-__version__ = '1.0.1'
+__date__ = '20230331'
+__version__ = '1.0.2'
 __author__ = 'Fabio Delogu (fabio.delogu@cimafoundation.org'
-__library__ = 'hyde'
+__library__ = 'door'
 
 General command line:
-python3 hyde_downloader_modis_snow.py -settings_file configuration.json
+python3 door_downloader_satellite_modis.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version:
+20230331 (1.0.2) --> Door package refactor
 20191007 (1.0.1) --> Hyde package refactor
 20180906 (1.0.0) --> Beta release
 """
@@ -22,31 +23,21 @@ Version:
 import logging
 import os
 import time
-import datetime
-import gzip
 
-from bin.downloader.modis.lib_utils_io import read_file_settings
-from bin.downloader.modis.lib_utils_system import make_folder
-from bin.downloader.modis.lib_utils_time import set_time
+from lib_utils_io import read_file_settings
+from lib_utils_system import make_folder
+from lib_utils_time import set_time
 
-#from bin.downloader.modis.drv_downloader_ws_geo import DriverGeo#
-from bin.downloader.modis.drv_downloader_modis_data import DriverData
+from drv_downloader_data import DriverData
 
-from shutil import rmtree, copyfileobj
-from glob import glob
-from subprocess import Popen, STDOUT, DEVNULL, PIPE
-from os import makedirs, stat, chmod, remove, rename
-from os.path import join, exists, isfile
-from pandas import date_range
 from argparse import ArgumentParser
-from json import load
 # -------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------
 # Algorithm information
-alg_name = 'HYDE DOWNLOADING TOOL - MODIS SNOW'
-alg_version = '1.5.0'
-alg_release = '2020-12-02'
+alg_name = 'DOOR DOWNLOADING TOOL - SATELLITE MODIS'
+alg_version = '1.0.2'
+alg_release = '2023-03-31'
 # Algorithm parameter(s)
 time_format = '%Y-%m-%d %H:%M'
 zip_ext = '.gz'
@@ -144,16 +135,11 @@ def get_args():
     parser_handle.add_argument('-time', action="store", dest="alg_time")
     parser_values = parser_handle.parse_args()
 
+    alg_settings, alg_time = 'configuration.json', None
     if parser_values.alg_settings:
         alg_settings = parser_values.alg_settings
-    else:
-        alg_settings = 'configuration.json'
-
     if parser_values.alg_time:
         alg_time = parser_values.alg_time
-    else:
-        alg_time = None
-
     return alg_settings, alg_time
 
 # -------------------------------------------------------------------------------------
