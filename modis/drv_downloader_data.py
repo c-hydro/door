@@ -1,3 +1,13 @@
+
+"""
+Class Features
+
+Name:          driver_downloader_data
+Author(s):     Fabio Delogu (fabio.delogu@cimafoundation.org)
+Date:          '20200515'
+Version:       '1.0.0'
+"""
+
 # -------------------------------------------------------------------------------------
 # Libraries
 import logging
@@ -8,14 +18,14 @@ import pandas as pd
 
 from copy import deepcopy
 
-from bin.downloader.modis.lib_utils_system import fill_tags2string, make_folder, get_root_path, list_folder, remove_url
-from bin.downloader.modis.lib_utils_process import make_bash_exec, run_bash_exec
-from bin.downloader.modis.lib_utils_zip import zip_filename
+from lib_utils_system import fill_tags2string, make_folder, get_root_path, list_folder, remove_url
+from lib_utils_process import make_bash_exec, run_bash_exec
+from lib_utils_zip import zip_filename
 
-from bin.downloader.modis.lib_utils_machine import get_machine_credential, define_machine_script_downloader
-from bin.downloader.modis.lib_utils_mrt import define_mrt_mosaic_file, define_mrt_mosaic_cmd
-from bin.downloader.modis.lib_utils_mrt import define_mrt_resample_file, define_mrt_resample_cmd
-from bin.downloader.modis.lib_utils_mrt import execute_mrt_cmd
+from lib_utils_machine import get_machine_credential, define_machine_script_downloader
+from lib_utils_mrt import define_mrt_mosaic_file, define_mrt_mosaic_cmd
+from lib_utils_mrt import define_mrt_resample_file, define_mrt_resample_cmd
+from lib_utils_mrt import execute_mrt_cmd
 # -------------------------------------------------------------------------------------
 
 

@@ -1,10 +1,18 @@
+"""
+Library Features:
+
+Name:          lib_utils_machine
+Author(s):     Fabio Delogu (fabio.delogu@cimafoundation.org)
+Date:          '20230331'
+Version:       '1.0.0'
+"""
 # -------------------------------------------------------------------------------------
 # Libraries
 import logging
 import os
 import subprocess
 
-from bin.downloader.modis.lib_utils_system import remove_url
+from lib_utils_system import remove_url
 # -------------------------------------------------------------------------------------
 
 

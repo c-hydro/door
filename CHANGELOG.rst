@@ -1,6 +1,12 @@
 =========
 Changelog
 =========
+
+Version 1.0.2 [2023-03-31]
+**************************
+APP: **door_downloader_satellite_modis.py**
+    - Refactor for door package (ET and SNOW examples)
+
 Version 1.0.1 [2022-12-02]
 **************************
 APP: **door_downloader_satellite_scampr.py**
