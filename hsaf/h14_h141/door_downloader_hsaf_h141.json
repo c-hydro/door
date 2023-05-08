@@ -1,0 +1,105 @@
+{
+  "algorithm": {
+    "flags": {
+      "cleaning_dynamic_data_source": true
+    },
+    "ancillary": {
+      "domain": "italy",
+      "url": "",
+      "server_folder_name": "",
+      "server_file_name": "h141_{source_datetime}00_R01.nc"
+    },
+    "general": {
+      "title": "Satellite H SAF - Downloading tool",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "2.0.0 [20230504]",
+      "project-info": "DOOR -  Data cOllector and dOwnloadeR",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation",
+      "path_cdo": "/home/cdo/bin/cdo"
+    },
+    "template": {
+      "var_name": "string_variable",
+      "group_name": "string_group",
+      "file_name": "string_filename",
+      "domain": "string_domain",
+      "layer": "string_layer",
+      "source_sub_path_time": "%Y/",
+      "source_datetime": "%Y%m%d",
+      "ancillary_sub_path_time": "%Y/%m/%d/",
+      "ancillary_datetime": "%Y%m%d%H%M",
+      "outcome_sub_path_time": "%Y/%m/%d/",
+      "outcome_datetime": "%Y%m%d%H%M",
+      "run_datetime": "%Y%m%d"
+    }
+  },
+  "data": {
+    "static": {
+      "folder_name": "/home/static/italy/",
+      "file_name": "Mask.tif"
+    },
+    "dynamic": {
+      "time": {
+        "time_forecast_period": 0,
+        "time_forecast_frequency": "D",
+        "time_observed_period": 1,
+        "time_observed_frequency": "D",
+        "time_rounding": "D",
+        "time_format": "%Y-%m-%dT%H:%M:%SZ"
+      },
+      "source": {
+        "file_name": "h141_{source_datetime}_R01.nc",
+        "folder_name": "/home/h14_h141_h142/{source_sub_path_time}",
+        "variables": [
+          "var40",
+          "var41",
+          "var42",
+          "var43"
+        ],
+        "var_coords": {
+          "time": "time",
+          "y": "lat",
+          "x": "lon"
+        },
+        "grid_remapping_info": {
+          "regrid_lon": true,
+          "lon_grid_range": [-180,180,0.1],
+          "lon_grid_index": 0,
+          "lon_grid_round": 3,
+          "rows":false,
+          "columns": false
+        },
+        "grib_info": {
+          "grib_conversion":false,
+          "filename_grib_to_nc": false
+        },
+        "decompress_bz": false
+      }
+    },
+    "outcome": {
+        "file_name": "h14_h141_{layer}_{outcome_datetime}_{domain}.tiff",
+        "folder_name": "/home/h14_h141/{outcome_sub_path_time}"
+      },
+    "additional_variable": {
+        "var_mode": true,
+        "var_name": "var028",
+        "original_variables": [
+          "var40",
+          "var41"
+        ],
+        "weights": [0.25,0.75]
+    }
+  },
+  "log": {
+      "file_name": "hyde_downloader_satellite_hsaf_log.txt",
+      "folder_name": "/home/log/h14_h141_h142/"
+    },
+    "time": {
+      "time_now": null,
+      "time_period": 5,
+      "time_frequency": "D",
+      "time_rounding": "D"
+    }
+}
+
+
