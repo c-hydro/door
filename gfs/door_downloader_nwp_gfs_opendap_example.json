@@ -1,0 +1,58 @@
+{
+  "algorithm": {
+    "domain": "igad",
+    "general": {
+      "title": "NWP GFS 0.25 degree - backup procedure",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.1.0 [20210311]",
+      "project-info": "Hydrological Data Engines - HyDE Library/Project",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    },
+    "template": {
+      "folder_datetime": "%Y/%m/%d/",
+      "filename_datetime": "%Y%m%d%H"
+    }
+  },
+  "data": {
+    "static": {
+      "bounding_box": {
+        "lon_right": 54,
+        "lon_left": 20,
+        "lat_bottom": -16,
+        "lat_top": 25
+      }
+    },
+    "dynamic": {
+      "time": {
+        "time_forecast_period": 120,
+        "time_forecast_frequency": "H"
+      },
+      "variables": {
+        "tmp2m": "2t_C",
+        "apcpsfc": "tp",
+        "rh2m": "2r",
+        "ugrd10m": "10u",
+        "vgrd10m": "10v",
+        "dswrfsfc": "dswrf"
+      },
+      "vars_standards": {
+        "convert_temperature_to_C": true,
+        "aggregate_wind_components": true,
+        "decumulate_precipitation": true
+      }
+    },
+    "ancillary": {
+      "folder": "/home/andrea/Desktop/test/ancillary/{folder_datetime}",
+      "filename": "temp_{domain}_gfs0p25_{filename_datetime}.nc"
+    },
+    "outcome": {
+      "folder": "/home/andrea/Desktop/test/outcome/{folder_datetime}",
+      "filename": "{domain}_gfs0p25_{filename_datetime}.nc"
+    },
+    "log": {
+      "filename": "door_downloader_gfs025_opendap.txt",
+      "folder": "/home/andrea/Desktop/test//log/"
+    }
+  }
+}
