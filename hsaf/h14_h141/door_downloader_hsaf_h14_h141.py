@@ -161,93 +161,100 @@ def main():
 
         if downloaded:
 
-            if data_settings['data']['dynamic']['source']['decompress_bz']:
-                #decompress bz2 format
-                path_source_global_w_filename_unzipped = path_source_global_w_filename[0:-4]
-                unzipcmd = 'bzip2 -dc ' + path_source_global_w_filename + ' > ' + path_source_global_w_filename_unzipped
-                os.system(unzipcmd)
-            else:
-                path_source_global_w_filename_unzipped = path_source_global_w_filename
+            try:
 
-            if data_settings['data']['dynamic']['source']['grib_info']['grib_conversion']:
-                #convert grib to nc
-                path_grib_to_nc = os.path.join(path_source_global, data_settings['data']['dynamic']['source']['grib_info']['filename_grib_to_nc'])
-                path_grib_to_nc = fill_tags2string(path_grib_to_nc, data_settings['algorithm']['template'],
-                                               {'source_datetime': time_run_step})
-
-                h14cdoconverter(path_source_global_w_filename_unzipped, path_source_global, path_grib_to_nc,
-                                data_settings['algorithm']['general']['path_cdo'],
-                                data_settings['data']['dynamic']['source']['variables'],
-                                dim_name_time=data_settings['data']['dynamic']['source']['var_coords']['time'],
-                                dim_name_geo_x=data_settings['data']['dynamic']['source']['var_coords']['x'],
-                                dim_name_geo_y=data_settings['data']['dynamic']['source']['var_coords']['y'],
-                                rows=data_settings['data']['dynamic']['source']['grid_remapping_info']['rows'],
-                                columns=data_settings['data']['dynamic']['source']['grid_remapping_info']['columns'])
-                path_source_global_w_filename = path_grib_to_nc
-
-            # open nc file and load data
-            var_dset = None
-            for var_name in data_settings['data']['dynamic']['source']['variables']:
-                var_name_da = read_data_nc(
-                    path_source_global_w_filename,
-                    var_coords=data_settings['data']['dynamic']['source']['var_coords'],
-                    var_name=var_name,
-                    var_time=time_index_step,
-                    grid_remapping_info=data_settings['data']['dynamic']['source']['grid_remapping_info'],
-                    dim_name_time=data_settings['data']['dynamic']['source']['var_coords']['time'],
-                    dim_name_geo_x=data_settings['data']['dynamic']['source']['var_coords']['x'],
-                    dim_name_geo_y=data_settings['data']['dynamic']['source']['var_coords']['y'],
-                    coord_name_time=data_settings['data']['dynamic']['source']['var_coords']['time'],
-                    coord_name_geo_x=data_settings['data']['dynamic']['source']['var_coords']['x'],
-                    coord_name_geo_y=data_settings['data']['dynamic']['source']['var_coords']['y'])
-
-                if var_dset is None:
-                    var_dset = xr.Dataset(coords={"time": (["time"], time_index_step)})
-
-                var_dset[var_name] = var_name_da
-                logging.info(
-                    ' ---> Succesfully loaded: ' + var_name + ' from ' + path_source_global_w_filename + ' ... ')
-
-            # compute optional variable if activated
-            if data_settings['data']['additional_variable']['var_mode']:
-                var_dset = compute_weighted_mean(var_dset, data_settings['data']['additional_variable'])
-                logging.info(
-                    ' ---> Created additional layer: ' + data_settings['data']['additional_variable']['var_name'] + ' ... ')
-
-            # resample over target grid
-            coordinates = {data_settings['data']['dynamic']['source']['var_coords']['y']: geo_target_da["Latitude"].values,
-                           data_settings['data']['dynamic']['source']['var_coords']['x']: geo_target_da["Longitude"].values}
-            var_dset_clipped = var_dset.interp(coordinates, method='nearest')
-            logging.info(' ---> Dataset resampled over domain ... ')
-
-            # Export layers as geotiff
-            for var_name in data_settings['data']['dynamic']['source']['variables']:
-                file_name = os.path.join(path_outcome, data_settings['data']['outcome']['file_name'])
-                file_name = \
-                    fill_tags2string(file_name, data_settings['algorithm']['template'],
-                                     {'domain': data_settings['algorithm']['ancillary']['domain'],
-                                      'outcome_datetime': time_run_step,'layer': var_name})
-                write_file_tiff(file_name, var_dset_clipped[var_name].values,
-                                geo_target_wide, geo_target_high, geo_target_transform, geo_target_proj)
-                logging.info(' ---> Written ' + file_name + ' ... ')
-
-            if data_settings['data']['additional_variable']['var_mode']:
-                file_name = os.path.join(path_outcome, data_settings['data']['outcome']['file_name'])
-                file_name = \
-                    fill_tags2string(file_name, data_settings['algorithm']['template'],
-                                     {'domain': data_settings['algorithm']['ancillary']['domain'],
-                                      'outcome_datetime': time_run_step,
-                                      'layer': data_settings['data']['additional_variable']['var_name']})
-                write_file_tiff(file_name, var_dset_clipped[data_settings['data']['additional_variable']['var_name']].values,
-                                geo_target_wide, geo_target_high, geo_target_transform, geo_target_proj)
-                logging.info(' ---> Written ' + file_name + ' ... ')
-
-            # Delete source file
-            if data_settings['algorithm']['flags']['cleaning_dynamic_data_source']:
-                os.remove(path_source_global_w_filename)
                 if data_settings['data']['dynamic']['source']['decompress_bz']:
-                    os.remove(path_source_global_w_filename_unzipped)
-                logging.info(' ---> Deleted ' + path_source_global_w_filename + ' ... ')
+                    #decompress bz2 format
+                    path_source_global_w_filename_unzipped = path_source_global_w_filename[0:-4]
+                    unzipcmd = 'bzip2 -dc ' + path_source_global_w_filename + ' > ' + path_source_global_w_filename_unzipped
+                    os.system(unzipcmd)
+                else:
+                    path_source_global_w_filename_unzipped = path_source_global_w_filename
+
+                if data_settings['data']['dynamic']['source']['grib_info']['grib_conversion']:
+                    #convert grib to nc
+                    path_grib_to_nc = os.path.join(path_source_global, data_settings['data']['dynamic']['source']['grib_info']['filename_grib_to_nc'])
+                    path_grib_to_nc = fill_tags2string(path_grib_to_nc, data_settings['algorithm']['template'],
+                                                   {'source_datetime': time_run_step})
+
+                    h14cdoconverter(path_source_global_w_filename_unzipped, path_source_global, path_grib_to_nc,
+                                    data_settings['algorithm']['general']['path_cdo'],
+                                    data_settings['data']['dynamic']['source']['variables'],
+                                    dim_name_time=data_settings['data']['dynamic']['source']['var_coords']['time'],
+                                    dim_name_geo_x=data_settings['data']['dynamic']['source']['var_coords']['x'],
+                                    dim_name_geo_y=data_settings['data']['dynamic']['source']['var_coords']['y'],
+                                    rows=data_settings['data']['dynamic']['source']['grid_remapping_info']['rows'],
+                                    columns=data_settings['data']['dynamic']['source']['grid_remapping_info']['columns'])
+                    path_source_global_w_filename = path_grib_to_nc
+
+                # open nc file and load data
+                var_dset = None
+                for var_name in data_settings['data']['dynamic']['source']['variables']:
+                    var_name_da = read_data_nc(
+                        path_source_global_w_filename,
+                        var_coords=data_settings['data']['dynamic']['source']['var_coords'],
+                        var_name=var_name,
+                        var_time=time_index_step,
+                        grid_remapping_info=data_settings['data']['dynamic']['source']['grid_remapping_info'],
+                        dim_name_time=data_settings['data']['dynamic']['source']['var_coords']['time'],
+                        dim_name_geo_x=data_settings['data']['dynamic']['source']['var_coords']['x'],
+                        dim_name_geo_y=data_settings['data']['dynamic']['source']['var_coords']['y'],
+                        coord_name_time=data_settings['data']['dynamic']['source']['var_coords']['time'],
+                        coord_name_geo_x=data_settings['data']['dynamic']['source']['var_coords']['x'],
+                        coord_name_geo_y=data_settings['data']['dynamic']['source']['var_coords']['y'])
+
+                    if var_dset is None:
+                        var_dset = xr.Dataset(coords={"time": (["time"], time_index_step)})
+
+                    var_dset[var_name] = var_name_da
+                    logging.info(
+                        ' ---> Succesfully loaded: ' + var_name + ' from ' + path_source_global_w_filename + ' ... ')
+
+                # compute optional variable if activated
+                if data_settings['data']['additional_variable']['var_mode']:
+                    var_dset = compute_weighted_mean(var_dset, data_settings['data']['additional_variable'])
+                    logging.info(
+                        ' ---> Created additional layer: ' + data_settings['data']['additional_variable']['var_name'] + ' ... ')
+
+                # resample over target grid
+                coordinates = {data_settings['data']['dynamic']['source']['var_coords']['y']: geo_target_da["Latitude"].values,
+                               data_settings['data']['dynamic']['source']['var_coords']['x']: geo_target_da["Longitude"].values}
+                var_dset_clipped = var_dset.interp(coordinates, method='nearest')
+                logging.info(' ---> Dataset resampled over domain ... ')
+
+                # Export layers as geotiff
+                for var_name in data_settings['data']['dynamic']['source']['variables']:
+                    file_name = os.path.join(path_outcome, data_settings['data']['outcome']['file_name'])
+                    file_name = \
+                        fill_tags2string(file_name, data_settings['algorithm']['template'],
+                                         {'domain': data_settings['algorithm']['ancillary']['domain'],
+                                          'outcome_datetime': time_run_step,'layer': var_name})
+                    write_file_tiff(file_name, var_dset_clipped[var_name].values,
+                                    geo_target_wide, geo_target_high, geo_target_transform, geo_target_proj)
+                    logging.info(' ---> Written ' + file_name + ' ... ')
+
+                if data_settings['data']['additional_variable']['var_mode']:
+                    file_name = os.path.join(path_outcome, data_settings['data']['outcome']['file_name'])
+                    file_name = \
+                        fill_tags2string(file_name, data_settings['algorithm']['template'],
+                                         {'domain': data_settings['algorithm']['ancillary']['domain'],
+                                          'outcome_datetime': time_run_step,
+                                          'layer': data_settings['data']['additional_variable']['var_name']})
+                    write_file_tiff(file_name, var_dset_clipped[data_settings['data']['additional_variable']['var_name']].values,
+                                    geo_target_wide, geo_target_high, geo_target_transform, geo_target_proj)
+                    logging.info(' ---> Written ' + file_name + ' ... ')
+
+                # Delete source file
+                if data_settings['algorithm']['flags']['cleaning_dynamic_data_source']:
+                    os.remove(path_source_global_w_filename)
+                    if data_settings['data']['dynamic']['source']['decompress_bz']:
+                        os.remove(path_source_global_w_filename_unzipped)
+                    logging.info(' ---> Deleted ' + path_source_global_w_filename + ' ... ')
+
+            except Exception as e:
+                logging.warning(str(e))
+                logging.warning(' ===> Data for timestep ' + str(time_run_step) + ' not processed.')
+                logging.warning(' ===> Problems with data for timestep ' + str(time_run_step) + '!')
 
     # close connection
     host.close()
