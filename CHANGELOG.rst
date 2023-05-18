@@ -2,6 +2,23 @@
 Changelog
 =========
 
+Version 1.0.4 [2023-05-18]
+**************************
+APP: **door_downloader_hsaf_h60.sh**
+	- Development of new app to download and adapt the H60 product to the output file grid
+	  using CDO and NCO applications;
+APP: **door_downloader_hsaf_h61.sh**
+	- Development of new app to download and adapt the H61 product to the output file grid
+	  using CDO and NCO applications;
+
+Version 1.0.3 [2023-05-04]
+**************************
+APP: **door_downloader_hsaf_h14_h141.py**
+	- Development of new app to download and resample HSAF H14, H141, and H142 products
+
+GENERAL:
+	- Reorganization of the HSAF directories 
+
 Version 1.0.2 [2023-03-31]
 **************************
 APP: **door_downloader_satellite_modis.py**
