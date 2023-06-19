@@ -251,7 +251,7 @@ def dload_early_run(time_now, downloader_settings):
           '-S' + time_now.strftime("%H%M%S") + \
           '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
           '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(
-        4) + '.V06B.30min.tif'
+        4) + '.V06C.30min.tif'
     ancillary_filename = os.path.join(downloader_settings["ancillary_path"], url.split('/')[-1])
     with requests.get(url, auth=(downloader_settings["early_late_user"], downloader_settings["early_late_pwd"])) as r:
         if r.status_code == 404:
@@ -279,7 +279,7 @@ def dload_late_run(time_now,downloader_settings):
           '-S' + time_now.strftime("%H%M%S") + \
           '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
           '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(
-        4) + '.V06B.30min.tif'
+        4) + '.V06C.30min.tif'
     ancillary_filename = os.path.join(downloader_settings["ancillary_path"], url.split('/')[-1])
     with requests.get(url, auth=(downloader_settings["early_late_user"], downloader_settings["early_late_pwd"])) as r:
         if r.status_code == 404:
@@ -306,7 +306,7 @@ def dload_final_run(time_now, downloader_settings):
           '3B-HHR-GIS.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
           '-S' + time_now.strftime("%H%M%S") + \
           '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
-          '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(4) + '.V06B.tif'
+          '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(4) + '.V06C.tif'
     ancillary_filename = os.path.join(downloader_settings["ancillary_path"], url.split('/')[-1])
     with requests.get(url, auth=(downloader_settings["final_user"], downloader_settings["final_pwd"])) as r:
         if r.status_code == 404:

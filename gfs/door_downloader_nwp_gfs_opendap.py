@@ -30,6 +30,8 @@ import warnings
 
 from argparse import ArgumentParser
 from copy import deepcopy
+from itertools import chain
+from math import floor, ceil
 # -------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------
@@ -96,8 +98,25 @@ def main():
                                time_run + pd.Timedelta(str(max_step - 1) + "H"), freq="H")
     # Spatial settings
     logging.info(" ---> Space settings...")
-    lat = (data_settings['data']['static']['bounding_box']["lat_bottom"], data_settings['data']['static']['bounding_box']["lat_top"])
-    lon = (data_settings['data']['static']['bounding_box']["lon_left"], data_settings['data']['static']['bounding_box']["lon_right"])
+    logging.warning(" ---> WARNING! Domain limits will be rounded to integer!")
+    data_settings['data']['static']['bounding_box']["lat_bottom"] = floor(data_settings['data']['static']['bounding_box']["lat_bottom"])
+    data_settings['data']['static']['bounding_box']["lon_left"] = floor(data_settings['data']['static']['bounding_box']["lon_left"])
+    data_settings['data']['static']['bounding_box']["lat_top"] = ceil(data_settings['data']['static']['bounding_box']["lat_top"])
+    data_settings['data']['static']['bounding_box']["lon_right"] = ceil(data_settings['data']['static']['bounding_box']["lon_right"])
+
+    range1 = lambda start, end, step=1: np.arange(start, end + step, step)
+    lat = (floor(data_settings['data']['static']['bounding_box']["lat_bottom"]), ceil(data_settings['data']['static']['bounding_box']["lat_top"]))
+    geo_interval_lon = list(range1(data_settings['data']['static']['bounding_box']["lon_left"], min(data_settings['data']['static']['bounding_box']["lon_right"], 359.75), 0.25))
+
+    if data_settings['data']['static']['bounding_box']["lon_left"] < 0:
+        lon_left = 360 + data_settings['data']['static']['bounding_box']["lon_left"]
+        lon = list(chain(range1(lon_left, 359.75, 0.25), range1(0, data_settings['data']['static']['bounding_box']["lon_right"], 0.25)))
+        if data_settings['data']['static']['bounding_box']["lon_right"] < 0:
+            lon_right = 360 + data_settings['data']['static']['bounding_box']["lon_right"]
+            lon = list(range1(lon_left, lon_right, 0.25))
+    else:
+        lon = geo_interval_lon
+
     logging.info(" --> Set up algorithm settings... Space setting DONE!")
 
     # Other settings
@@ -116,20 +135,21 @@ def main():
     logging.info(" --> Download forecast...")
     ancillary_file = os.path.join(ancillary_fld, data_settings["data"]["ancillary"]["filename"]).format(**template_filled)
     try:
-        with xr.open_dataset(url) as ds:
+        with xr.open_dataset(url, engine="pydap") as ds:
             ds[vars]\
                 .isel(time=slice(*time_span))\
-                .sel(lat=slice(*lat), lon=slice(*lon))\
+                .sel(lat=slice(*lat), lon=lon)\
                 .to_netcdf(ancillary_file)
         logging.info(" --> Download forecast... DONE")
     except:
         logging.error(" ERROR! Download failed. If you are sure the file exist, try to wait considering the 120 hit/minute limits of nomads server")
+        raise FileNotFoundError
     # -------------------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------------------
     # Postprocessing
     logging.info(" --> Postprocess data...")
-    ds_sub = xr.open_dataset(ancillary_file).assign_coords(time = time_range)
+    ds_sub = xr.open_dataset(ancillary_file).assign_coords(time = time_range, lon = geo_interval_lon)
 
     if "apcpsfc" in ds_sub.keys() and \
             data_settings['data']['dynamic']["vars_standards"]["decumulate_precipitation"] is True:
