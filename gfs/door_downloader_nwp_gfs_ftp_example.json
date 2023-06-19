@@ -12,6 +12,7 @@
       "algorithm": "Downloading tool developed by CIMA Research Foundation"
     },
     "template": {
+      "outcome_filename": "%Y%m%d",
       "outcome_datetime": "%Y/%m/%d/",
       "outcome_timerun": "%H"
     }

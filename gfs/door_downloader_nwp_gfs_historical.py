@@ -15,6 +15,7 @@ General command line:
 python3 hyde_downloader_nwp_gfs_historical.py -settings_file configuration.json -time YYYY-MM-DD HH:MM
 
 Version(s):
+20220608 (1.0.1) --> Allow edit output name
 20210618 (1.0.0) --> Beta release
 """
 # -------------------------------------------------------------------------------------
@@ -91,6 +92,7 @@ def main():
     for keys in data_settings["algorithm"]["template"].keys():
         var_dic[keys] = timeRun.strftime(data_settings["algorithm"]["template"][keys])
 
+    var_dic["domain"] = data_settings["algorithm"]["ancillary"]["domain"]
     outFolder=outFolder.format(**var_dic)
     os.makedirs(outFolder, exist_ok=True)
     os.system("rm " + os.path.join(outFolder, data_settings["algorithm"]["ancillary"]["domain"] + "_gfs.t" + timeRun.strftime('%H') + "z.0p25." + timeRun.strftime('%Y%m%d') + "_*.nc") + " | True")
@@ -197,7 +199,8 @@ def main():
                 else:
                     varFilled = deepcopy(varFilled)*3600
 
-            outName = data_settings["algorithm"]["ancillary"]["domain"] + "_gfs.t" + timeRun.strftime('%H') + "z.0p25." + timeRun.strftime('%Y%m%d') + "_" + variables[varHMC][varGFS]["out_group"] + ".nc"
+            var_dic["var_group"] = variables[varHMC][varGFS]["out_group"]
+            outName = data_settings["data"]["dynamic"]["outcome"]["filename"].format(**var_dic)
 
             if not os.path.isfile(os.path.join(outFolder, outName)):
                 varFilled.to_dataset(name=variables[varHMC][varGFS]["varName"]).to_netcdf(

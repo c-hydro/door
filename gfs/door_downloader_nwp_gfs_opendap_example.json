@@ -17,8 +17,8 @@
   "data": {
     "static": {
       "bounding_box": {
-        "lon_right": 54,
-        "lon_left": 20,
+        "lon_right": 5,
+        "lon_left": -5,
         "lat_bottom": -16,
         "lat_top": 25
       }

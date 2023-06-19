@@ -10,6 +10,8 @@ APP: **door_downloader_hsaf_h60.sh**
 APP: **door_downloader_hsaf_h61.sh**
 	- Development of new app to download and adapt the H61 product to the output file grid
 	  using CDO and NCO applications;
+APP: **door_downloader_satellite_imerg.py**
+    - Update imerg version for real time use
 
 Version 1.0.3 [2023-05-04]
 **************************
