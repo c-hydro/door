@@ -1,0 +1,71 @@
+{
+  "algorithm": {
+    "flags": {
+      "downloading_mp": true,
+      "clean_ancillary": true
+    },
+    "domain": "africa",
+    "ancillary":{
+      "cdo_path": "/home/andrea/FP/fp_libs_system_cdo/cdo-1.9.8_nc-4.6.0_hdf-1.8.17_eccodes-2.17.0/bin/cdo",
+      "process_mp": null
+    },
+    "general": {
+      "title": "NWP GFS 0.25 degree - backup procedure",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.1.0 [20210311]",
+      "project-info": "Hydrological Data Engines - HyDE Library/Project",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    },
+    "template": {
+      "folder_datetime": "%Y/%m/%d/",
+      "filename_datetime": "%Y%m%d%H",
+      "run_date": "%Y%m%d",
+      "run_time": "%H"
+    }
+  },
+  "data": {
+    "static": {
+      "bounding_box": {
+        "lon_left": -20,
+        "lon_right": 55,
+        "lat_top": 40,
+        "lat_bottom": -40
+      }
+    },
+    "dynamic": {
+      "input": {
+        "__info__" : "types: GDPS0p15",
+        "model_type": "GDPS0p15"
+      },
+      "time": {
+        "time_forecast_period": 120,
+        "time_forecast_frequency": "H"
+      },
+      "__info__": "hmc vars are: TMP_TGL_2, APCP_SFC_0, UGRD_TGL_10, VGRD_TGL_10, RH_TGL_2, DSWRF_SFC_0",
+      "variables": {
+        "APCP_SFC_0": "tp",
+        "UGRD_TGL_10": "10u",
+        "VGRD_TGL_10": "10v"
+      },
+      "vars_standards": {
+        "convert_temperature_to_C": true,
+        "aggregate_wind_components": true,
+        "decumulate_precipitation": true,
+        "decumulate_radiation": true
+      }
+    },
+    "ancillary": {
+      "folder": "/home/andrea/Desktop/Working_dir/cmc/ancillary/{folder_datetime}",
+      "filename": "temp_{domain}_cmc-gdps0p15_{filename_datetime}.nc"
+    },
+    "outcome": {
+      "folder": "/home/andrea/Desktop/Working_dir/cmc/outcome/{folder_datetime}",
+      "filename": "{domain}_cmc-gdps0p15_{filename_datetime}.nc"
+    },
+    "log": {
+      "filename": "door_downloader-cmc.txt",
+      "folder": "/home/andrea/Desktop/test//log/"
+    }
+  }
+}

@@ -1,6 +1,13 @@
 =========
 Changelog
 =========
+Version 1.0.5 [2023-06-30]
+**************************
+APP: **door_downloader_nwp_icon.py**
+	- Development of new app to download dwd-icon 0.125 global forecast
+
+APP: **door_downloader_nwp_cmc-gdps.py**
+	- Development of new app to download CMC Global Deterministic Forecast System (GDPS) 0.15 global forecast
 
 Version 1.0.4 [2023-05-18]
 **************************

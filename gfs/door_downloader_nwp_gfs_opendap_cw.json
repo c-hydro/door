@@ -28,14 +28,11 @@
         "time_forecast_period": 120,
         "time_forecast_frequency": "H"
       },
+      "__info__": "hmc vars are: tmp2m, apcpsfc, rh2m, ugrd10m, vgrd10m, dswrf",
       "variables": {
-        "__info__": "hmc vars are: tmp2m, apcpsfc, rh2m, ugrd10m, vgrd10m, dswrf",
         "ugrd10m": "10u",
         "vgrd10m": "10v",
-        "apcpsfc": "tp",
-        "tmp2m": "2t_C",
-        "rh2m": "2r",
-        "dswrfsfc": "dswrf"
+        "apcpsfc": "tp"
       },
       "vars_standards": {
         "convert_temperature_to_C": true,
