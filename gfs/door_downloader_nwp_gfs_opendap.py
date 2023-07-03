@@ -2,16 +2,17 @@
 """
 door - NWP GFS 0.25 OPeNDAP
 
-__date__ = '20220512'
-__version__ = '1.0.0'
+__date__ = '20230630'
+__version__ = '1.0.1'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
-__library__ = 'HyDE'
+__library__ = 'door'
 
 General command line:
 python3 door_downloader_nwp_gfs_opendap.py -settings_file configuration.json -time YYYY-MM-DD HH:MM
 
 Version(s):
+20230630 (1.0.1) --> Fixed longitude value for georeferenced plot
 20220512 (1.0.0) --> Beta release
 """
 # -------------------------------------------------------------------------------------
@@ -37,8 +38,8 @@ from math import floor, ceil
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - NWP GFS - OPeNDAP'
-alg_version = '1.0.0'
-alg_release = '2022-05-12'
+alg_version = '1.0.1'
+alg_release = '2023-06-30'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -150,6 +151,9 @@ def main():
     # Postprocessing
     logging.info(" --> Postprocess data...")
     ds_sub = xr.open_dataset(ancillary_file).assign_coords(time = time_range, lon = geo_interval_lon)
+    ds_sub.lon.attrs = {"grads_dim": 'x', "grads_mapping": 'linear', "grads_size": str(len(geo_interval_lon)),
+                        "units": 'degrees_east', "long_name": 'longitude', "minimum": -180, "maximum": 180,
+                        "resolution": 0.25}
 
     if "apcpsfc" in ds_sub.keys() and \
             data_settings['data']['dynamic']["vars_standards"]["decumulate_precipitation"] is True:

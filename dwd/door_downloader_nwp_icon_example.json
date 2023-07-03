@@ -1,6 +1,14 @@
 {
   "algorithm": {
+    "flags": {
+      "downloading_mp": true,
+      "clean_ancillary": true
+    },
     "domain": "africa",
+    "ancillary":{
+      "cdo_path": "/home/andrea/FP/fp_libs_system_cdo/cdo-1.9.8_nc-4.6.0_hdf-1.8.17_eccodes-2.17.0/bin/cdo",
+      "process_mp": null
+    },
     "general": {
       "title": "NWP GFS 0.25 degree - backup procedure",
       "web-site": "",
@@ -11,7 +19,9 @@
     },
     "template": {
       "folder_datetime": "%Y/%m/%d/",
-      "filename_datetime": "%Y%m%d%H"
+      "filename_datetime": "%Y%m%d%H",
+      "run_date": "%Y%m%d",
+      "run_time": "%H"
     }
   },
   "data": {
@@ -24,18 +34,19 @@
       }
     },
     "dynamic": {
+      "input": {
+        "__info__" : "types: ICON0p125 - ICON-EU - ICON-D2",
+        "model_type": "ICON0p125"
+      },
       "time": {
         "time_forecast_period": 120,
         "time_forecast_frequency": "H"
       },
+      "__info__": "hmc vars are: t_2m, tot_prec, u_10m, v_10m, relhum_2m",
       "variables": {
-        "__info__": "hmc vars are: tmp2m, apcpsfc, rh2m, ugrd10m, vgrd10m, dswrf",
-        "ugrd10m": "10u",
-        "vgrd10m": "10v",
-        "apcpsfc": "tp",
-        "tmp2m": "2t_C",
-        "rh2m": "2r",
-        "dswrfsfc": "dswrf"
+        "tot_prec": "tp",
+        "u_10m": "10u",
+        "v_10m": "10v"
       },
       "vars_standards": {
         "convert_temperature_to_C": true,
@@ -44,16 +55,16 @@
       }
     },
     "ancillary": {
-      "folder": "/home/andrea/Desktop/Working_dir/gfs/ancillary/{folder_datetime}",
-      "filename": "temp_{domain}_gfs0p25_{filename_datetime}.nc"
+      "folder": "/home/andrea/Desktop/Working_dir/icon/ancillary/{folder_datetime}",
+      "filename": "temp_{domain}_icon_{filename_datetime}.nc"
     },
     "outcome": {
-      "folder": "/home/andrea/Desktop/Working_dir/gfs/outcome/{folder_datetime}",
-      "filename": "{domain}_gfs0p25_{filename_datetime}.nc"
+      "folder": "/home/andrea/Desktop/Working_dir/icon/outcome/{folder_datetime}",
+      "filename": "{domain}_icon0p125_{filename_datetime}.nc"
     },
     "log": {
       "filename": "door_downloader_gfs025_opendap.txt",
-      "folder": "/home/andrea/Desktop/Working_dir/gfs/"
+      "folder": "/home/andrea/Desktop/test//log/"
     }
   }
 }
