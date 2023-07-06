@@ -3,20 +3,25 @@ Changelog
 =========
 Version 1.0.5 [2023-06-30]
 **************************
+APP: **door_downloader_satellite_chirps.py**
+    - Development of new app to download CHIRPS at daily or monthly scale
+
 APP: **door_downloader_nwp_icon.py**
-	- Development of new app to download dwd-icon 0.125 global forecast
+    - Development of new app to download dwd-icon 0.125 global forecast
 
 APP: **door_downloader_nwp_cmc-gdps.py**
-	- Development of new app to download CMC Global Deterministic Forecast System (GDPS) 0.15 global forecast
+    - Development of new app to download CMC Global Deterministic Forecast System (GDPS) 0.15 global forecast
 
 Version 1.0.4 [2023-05-18]
 **************************
 APP: **door_downloader_hsaf_h60.sh**
 	- Development of new app to download and adapt the H60 product to the output file grid
 	  using CDO and NCO applications;
+
 APP: **door_downloader_hsaf_h61.sh**
 	- Development of new app to download and adapt the H61 product to the output file grid
 	  using CDO and NCO applications;
+
 APP: **door_downloader_satellite_imerg.py**
     - Update imerg version for real time use
 

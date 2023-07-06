@@ -1,0 +1,66 @@
+{
+  "algorithm": {
+    "flags": {
+      "downloading_mp": true,
+      "clean_dynamic_data_ancillary": true,
+      "regrid_with_map": true,
+      "crop_with_bounding_box": false,
+      "fill_with_preliminary_version": true
+    },
+    "ancillary": {
+      "domain": "volta",
+      "process_mp": null
+    },
+    "template": {
+      "folder_datetime_out": "%Y/%m",
+      "file_datetime_out": "%Y%m%d",
+      "data_daily_time": "%Y.%m.%d",
+      "data_monthly_time": "%Y.%m",
+      "data_daily_year": "%Y"
+    },
+    "general": {
+      "title": "CHIRPS - GPM Satellite Product",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.0.0 [20211227]",
+      "project-info": "door",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    }
+  },
+  "data": {
+    "static": {
+      "grid_raster": "/home/andrea/Desktop/belize.dem.txt",
+      "bounding_box": {
+        "lon_right": 47,
+        "lon_left": 35,
+        "lat_bottom": -1,
+        "lat_top": 11
+      }
+    },
+    "dynamic": {
+      "__note__": "available resolutions are: daily - monthly",
+      "time": {
+        "time_observed_period": 120,
+        "time_observed_frequency": "D",
+        "product_resolution": "daily"
+      },
+      "ancillary": {
+        "folder": "/home/andrea/Desktop/WorkingDir/CHIRPS/ancillary"
+      },
+      "outcome": {
+        "final": {
+          "folder": "/home/andrea/Desktop/WorkingDir/CHIRPS/outcome/final/{folder_datetime_out}",
+          "file_name": "{domain}_final_CHIRPS_{file_datetime_out}.tif"
+        },
+        "preliminar": {
+          "folder": "/home/andrea/Desktop/WorkingDir/CHIRPS/outcome/final/{folder_datetime_out}",
+          "file_name": "{domain}_preliminar_CHIRPS_{file_datetime_out}.tif"
+        }
+      }
+    },
+    "log": {
+      "filename": "door_downloader_CHIRPS.txt",
+      "folder": "/home/andrea/Desktop/WorkingDir/CHIRPS/"
+    }
+  }
+}
