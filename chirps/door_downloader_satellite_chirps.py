@@ -331,14 +331,18 @@ def download_url(args):
     # Postprocess data
     if os.path.isfile(fn):
         if fn[-2:] == "gz":
+            # If file is gzipped it means that it a final version, and should be read with virtualization
             pre_string = "/vsigzip/"
             nodata = -9999
         else:
+            # Preliminary files are not zipped. Common reader can be used.
             pre_string = ""
-            if "prelim" in url:
-                nodata = -9999
-            else:
+            # Daily preliminary has nodata = -1 (and p25 in url name)
+            if "p25" in url:
                 nodata = -1
+            else:
+                # Monthly preliminary has nodata = -9999
+                nodata = -9999
         if downloader_settings["crop_with_bounding_box"]:
             gdal.Translate(out, pre_string + fn, projWin = downloader_settings["bbox"], **{"noData": nodata,"creationOptions":['COMPRESS=DEFLATE']})
         if downloader_settings["regrid_with_map"]:
@@ -356,7 +360,7 @@ def download_url(args):
             dst = gdal.GetDriverByName('GTiff').Create(out, wide, high, 1, gdalconst.GDT_Float32, options=['COMPRESS=DEFLATE'])
             dst.SetGeoTransform(match_geotrans)
             dst.SetProjection(match_proj)
-            dst.GetRasterBand(1).SetNoDataValue(-9999)
+            dst.GetRasterBand(1).SetNoDataValue(nodata)
 
             gdal.ReprojectImage(data, dst, src_proj, match_proj, gdalconst.GRA_NearestNeighbour)
             del dst
