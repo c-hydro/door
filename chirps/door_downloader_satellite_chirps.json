@@ -8,7 +8,7 @@
       "fill_with_preliminary_version": true
     },
     "ancillary": {
-      "domain": "volta",
+      "domain": "marche",
       "process_mp": null
     },
     "template": {
@@ -29,7 +29,7 @@
   },
   "data": {
     "static": {
-      "grid_raster": "/home/andrea/Desktop/belize.dem.txt",
+      "grid_raster": "/home/andrea/Projects/DPC_Marche/A1/gridded_marche/marche.dem.txt",
       "bounding_box": {
         "lon_right": 47,
         "lon_left": 35,
