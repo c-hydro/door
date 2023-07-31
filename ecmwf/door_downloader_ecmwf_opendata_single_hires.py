@@ -1,19 +1,19 @@
 #!/usr/bin/python3
 
 """
-door - Download ECMWF open data High Resolution single run
+door - Download ECMWF open data High Resolution (0.4 degree) single run
 
-__date__ = '20230414'
+__date__ = '20230731'
 __version__ = '1.0.0'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'door'
 
 General command line:
-python3 hyde_downloader_satellite_gsmap_obs.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
+python3 door_downloader_ecmwf_opendata_single_hires.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
-20230414 (1.0.0) --> Beta release
+20230731 (1.0.0) --> Beta release
 """
 # -------------------------------------------------------------------------------------
 
@@ -24,7 +24,10 @@ import json
 import logging
 import time
 import os
+import numpy as np
+import pandas as pd
 import xarray as xr
+from copy import deepcopy
 
 from argparse import ArgumentParser
 from datetime import datetime
@@ -34,9 +37,9 @@ from requests.exceptions import HTTPError
 
 # -------------------------------------------------------------------------------------
 # Algorithm information
-alg_name = 'DOOR - ECMWF open data SINGLE RUN'
+alg_name = 'DOOR - ECMWF open data SINGLE RUN 0.4'
 alg_version = '1.0.0'
-alg_release = '2023-04-14'
+alg_release = '2023-07-31'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -73,7 +76,11 @@ def main():
     time_run = datetime.strptime(alg_time, '%Y-%m-%d %H:%M')
     step_end = data_settings["data"]["dynamic"]["time"]["time_forecast_period"]
     model_freq = 3
-
+    model_time_range = pd.date_range(time_run + pd.Timedelta(str(model_freq) + "H"),
+                               time_run + pd.Timedelta(str(step_end) + "H"), freq= str(model_freq) + "H")
+    time_range = pd.date_range(time_run + pd.Timedelta("1H"),
+                               time_run + pd.Timedelta(str(step_end - 1) + "H"), freq="H")
+    
     # Identify forecast run of interest and its availability
     logging.info(' --> TIME RUN: ' + str(time_run))
     if time_run.hour not in [0,6,12,18]:
@@ -92,9 +99,11 @@ def main():
     template_filled = copy.deepcopy(data_settings["algorithm"]["template"])
     for keys in data_settings["algorithm"]["template"].keys():
         template_filled[keys] = time_run.strftime(data_settings["algorithm"]["template"][keys])
+    template_filled["domain"] = data_settings["algorithm"]["domain"]
 
     output_folder = data_settings["data"]["dynamic"]["outcome"]["folder"].format(**template_filled)
     ancillary_folder = data_settings["data"]["dynamic"]["ancillary"]["folder"].format(**template_filled)
+    ancillary_file = data_settings["data"]["dynamic"]["ancillary"]["filename"].format(**template_filled)
     os.makedirs(output_folder, exist_ok=True)
     os.makedirs(ancillary_folder, exist_ok=True)
     logging.info(" --> Preparing system folders ... DONE!")
@@ -109,25 +118,90 @@ def main():
     )
     # Perform request
     try:
-        #result = client.retrieve(
-        #    type = "fc",
-        #    date = time_run.strftime("%Y%m%d"),
-        #    time = time_run.hour,
-        #    step = [i for i in np.arange(3,step_end + 1,model_freq)],
-        #    param = ["10u", "10v", "2t","tp"],
-        #    target = os.path.join(ancillary_folder, time_run.strftime("%Y%m%d%H") + "_fc_ecmwf_.grib2")
-        #)
-        #logging.info(" --> Forecast file " + result.datetime.strftime("%Y-%m-%d %H:%M") + " correctly downloaded!")
+        result = client.retrieve(
+            type = "fc",
+            date = time_run.strftime("%Y%m%d"),
+            time = time_run.hour,
+            step = [i for i in np.arange(3,step_end + 1,model_freq)],
+            param = [var for var in data_settings["data"]["dynamic"]["variables"].keys()],
+            target = os.path.join(ancillary_folder, ancillary_file)
+        )
+        logging.info(" --> Forecast file " + result.datetime.strftime("%Y-%m-%d %H:%M") + " correctly downloaded!")
         logging.info(" --> Download forecast data from ecmwf open data server ... DONE!")
     except HTTPError:
         logging.error(" --> ERROR! File not found on the server!")
         raise FileNotFoundError
 
     logging.info(" --> Convert dataset to netcdf ...")
-    ds = xr.load_dataset(os.path.join(ancillary_folder, time_run.strftime("%Y%m%d%H") + "_fc_ecmwf_.grib2"), engine="cfgrib",
-          backend_kwargs={'filter_by_keys': {'typeOfLevel': 'heightAboveGround', 'level':10}})
+    rename_dict = deepcopy(data_settings["data"]["dynamic"]["variables"])
+    if "10u" in rename_dict.keys():
+        rename_dict["u10"] = "10u"
+        del rename_dict["10u"]
+    if "10v" in rename_dict.keys():
+        rename_dict["v10"] = "10v"
+        del rename_dict["10v"]
+    frc_out = xr.load_dataset(os.path.join(ancillary_folder, ancillary_file), engine="cfgrib").rename_vars(rename_dict).drop_vars("time")
+    frc_out = frc_out.assign_coords({"step":model_time_range}).rename({"step":"time", "latitude":"lat", "longitude":"lon"})
+
+    frc_out = frc_out.where((frc_out.lat <= data_settings['data']['static']['bounding_box']["lat_top"]) &
+                  (frc_out.lat >= data_settings['data']['static']['bounding_box']["lat_bottom"]) &
+                  (frc_out.lon >= data_settings['data']['static']['bounding_box']["lon_left"]) &
+                  (frc_out.lon <= data_settings['data']['static']['bounding_box']["lon_right"]), drop=True)
+    # sistema tempi e dimensionhi
+
+    # backend_kwargs={'filter_by_keys': {'typeOfLevel': 'heightAboveGround', 'level':10}}
     logging.info(" --> Convert dataset to netcdf ... DONE")
 
+    # -------------------------------------------------------------------------------------
+    # Download and compute variables
+    logging.info(" --> Postprocess variables")
+
+    if "tp" in data_settings["data"]["dynamic"]["variables"].keys():
+        # Convert meters to mm
+        logging.info(" ---> Convert meters to mm of rain...")
+        frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = frc_out[data_settings['data']['dynamic']["variables"]["tp"]]*1000
+        if data_settings['data']['dynamic']["vars_standards"]["decumulate_precipitation"] is True:
+            logging.info(" ---> Variable tp is cumulated... Performing decumulation")
+            first_step = deepcopy(frc_out[data_settings['data']['dynamic']["variables"]["tp"]].values[0, :, :])
+            frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = frc_out[data_settings['data']['dynamic']["variables"]["tp"]].diff("time", 1)
+            frc_out[data_settings['data']['dynamic']["variables"]["tp"]].loc[time_range[2], :, :] = first_step
+            frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = xr.where(
+                frc_out[data_settings['data']['dynamic']["variables"]["tp"]] < 0, 0,
+                frc_out[data_settings['data']['dynamic']["variables"]["tp"]]) / model_freq
+
+    if "2t" in data_settings["data"]["dynamic"]["variables"].keys() and \
+            data_settings['data']['dynamic']["vars_standards"]["convert_temperature_to_C"] is True:
+        logging.info(" ---> Convert temperature to °C...")
+        frc_out[data_settings['data']['dynamic']["variables"]["2t"]] = frc_out[data_settings['data']['dynamic'][
+            "variables"]["2t"]] - 273.15
+        frc_out[data_settings['data']['dynamic']["variables"]["2t"]].attrs['long_name'] = '2 metre temperature'
+        frc_out[data_settings['data']['dynamic']["variables"]["2t"]].attrs['units'] = 'C'
+        frc_out[data_settings['data']['dynamic']["variables"]["2t"]].attrs['standard_name'] = "air_temperature"
+        logging.info(" ---> Convert temperature to °C...DONE!")
+
+    if "10u" in data_settings["data"]["dynamic"]["variables"].keys() and "v_10m" in data_settings["data"]["dynamic"]["variables"].keys() and \
+            data_settings['data']['dynamic']["vars_standards"]["aggregate_wind_components"] is True:
+        logging.info(" ---> Aggregate wind components...")
+        frc_out["10wind"] = np.sqrt(frc_out[data_settings['data']['dynamic']["variables"]["10u"]] ** 2 + frc_out[
+            data_settings['data']['dynamic']["variables"]["10v"]] ** 2)
+        frc_out['10wind'].attrs['long_name'] = '10 m wind'
+        frc_out['10wind'].attrs['units'] = 'm s**-1'
+        frc_out['10wind'].attrs['standard_name'] = "wind"
+        logging.info(" ---> Aggregate wind components...DONE!")
+
+    frc_out = frc_out.reindex({'time': time_range}, method='nearest')
+    logging.info(" --> Postprocess variables..DONE")
+    # -------------------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------------------
+    # Save output and clean system
+    logging.info(" --> Save output data...")
+    outcome_file = os.path.join(output_folder, data_settings["data"]["dynamic"]["outcome"]["filename"]).format(**template_filled)
+    frc_out.to_netcdf(outcome_file)
+
+    if data_settings["algorithm"]["flags"]["clean_ancillary"]:
+        os.remove(os.path.join(ancillary_folder, ancillary_file))
+    # -------------------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------------------
     # Info algorithm

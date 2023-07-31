@@ -1,8 +1,9 @@
 {
   "algorithm":{
-    "ancillary": {
-      "domain" : "global"
+    "flags": {
+      "clean_ancillary": true
     },
+    "domain": "africa",
     "general": {
       "title": "NWP GFS 0.25 degree - backup procedure",
       "web-site": "",
@@ -13,38 +14,41 @@
     },
     "template": {
       "outcome_datetime": "%Y/%m/%d/",
-      "ancillary_datetime": "%Y/%m/%d/"
+      "ancillary_datetime": "%Y/%m/%d/",
+      "filename_datetime": "%Y%m%d%H%M"
     }
   },
   "data": {
     "static": {
       "bounding_box": {
-        "lon_right": 90,
-        "lon_left": -90,
-        "lat_bottom": -90,
-        "lat_top": 90
+        "lon_left": -20,
+        "lon_right": 55,
+        "lat_top": 40,
+        "lat_bottom": -40
       }
     },
     "dynamic": {
       "time": {
         "time_forecast_period": 120
       },
+      "__info__": "hmc vars are: tp, 2t, 10u, 10v",
       "variables": {
-        "tp": true,
-        "2t": true,
-        "10u": true,
-        "10v": true
+        "tp": "tp",
+        "10u": "10u",
+        "10v": "10v"
       },
       "vars_standards":{
-          "source_temperature_mesurement_unit": "K",
-          "source_wind_separate_components": true,
-          "convert2standard_continuum_format": true
+        "convert_temperature_to_C": true,
+        "aggregate_wind_components": true,
+        "decumulate_precipitation": true
       },
       "outcome": {
-        "folder": "/home/andrea/Desktop/Working_dir/meteo/ecmwf/outcome/{outcome_datetime}"
+        "folder": "/home/andrea/Desktop/Working_dir/meteo/ecmwf/outcome/{outcome_datetime}",
+        "filename": "{filename_datetime}_ecmwf0p4-{domain}.nc"
       },
       "ancillary": {
-        "folder": "/home/andrea/Desktop/Working_dir/meteo/ecmwf/ancillary/{ancillary_datetime}"
+        "folder": "/home/andrea/Desktop/Working_dir/meteo/ecmwf/ancillary/{ancillary_datetime}",
+        "filename": "{filename_datetime}_ecmwf0p4-{domain}.grib2"
       }
     },
     "log": {

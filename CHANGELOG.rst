@@ -3,6 +3,9 @@ Changelog
 =========
 Version 1.0.5 [2023-06-30]
 **************************
+APP: **door_downloader_ecmwf_opendata_single_hires.py**
+    - Development of new app to download the open data ECMWF 0.4° open data global forecast
+
 APP: **door_downloader_satellite_chirps.py**
     - Development of new app to download CHIRPS at daily or monthly scale
 

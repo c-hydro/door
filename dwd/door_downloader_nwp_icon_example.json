@@ -60,11 +60,11 @@
     },
     "outcome": {
       "folder": "/home/andrea/Desktop/Working_dir/icon/outcome/{folder_datetime}",
-      "filename": "{domain}_icon0p125_{filename_datetime}.nc"
+      "filename": "{filename_datetime}_icon0p125-{domain}.nc"
     },
     "log": {
       "filename": "door_downloader_gfs025_opendap.txt",
-      "folder": "/home/andrea/Desktop/test//log/"
+      "folder": "/home/andrea/Desktop/test/log/"
     }
   }
 }
