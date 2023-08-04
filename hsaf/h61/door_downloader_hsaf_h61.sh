@@ -22,10 +22,10 @@ var_rain_out='rain_rate_accumulated'
 var_quality_in='qind'
 var_quality_out='quality_index'
 
-
+ftp_machine="ftphsaf.meteoam.it"
 ftp_url="ftphsaf.meteoam.it"
-ftp_usr="sgabellani_r" 
-ftp_pwd="gabellaniS334"
+ftp_usr="" 
+ftp_pwd=""
 ftp_folder="/products/h61/h61_cur_mon_data/"
 
 file_name_nc_geo="lat_lon_0.nc"
@@ -76,6 +76,23 @@ time_now=$(date '+%Y-%m-%d')
 echo " ==================================================================================="
 echo " ==> "$script_name" (Version: "$script_version" Release_Date: "$script_date")"
 echo " ==> START ..."
+
+# get credentials from .netrc (if not defined in the bash script)
+if [[ -z ${ftp_usr} || -z ${ftp_pwd} ]]; then
+
+	# check .netrc file availability
+	netrc_file=~/.netrc
+	if [ ! -f "${netrc_file}" ]; then
+	  echo "${netrc_file} does not exist. Please create it to store login and password on your machine"
+	  exit 0
+	fi
+
+	# get information from .netrc file
+	ftp_usr=$(awk '/'${ftp_machine}'/{getline; print $4}' ~/.netrc)
+	ftp_pwd=$(awk '/'${ftp_machine}'/{getline; print $6}' ~/.netrc)
+
+fi
+echo " ===> INFO MACHINE -- URL: ${ftp_url} -- USER: ${ftp_usr}"
 
 # Iterate over days
 for day in $(seq 0 $days); do

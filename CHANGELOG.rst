@@ -1,6 +1,24 @@
 =========
 Changelog
 =========
+
+Version 1.0.6 [2023-08-04]
+**************************
+APP: **door_downloader_hsaf_ecmwf.sh**
+    - Development of new app to download the hsaf data ECMWF (25km, 16km and 10km) from the hsaf ftp
+    
+APP: **door_downloader_hsaf_ascat_dr.sh**
+    - Development of new app to download the hsaf data record ASCAT (25km and 12.5km) from the hsaf ftp
+
+APP: **door_downloader_hsaf_ascat_nrt.sh**
+    - Development of new app to download the hsaf data nrt ASCAT (25km and 12.5km) from the hsaf ftp
+
+APP: **door_downloader_hsaf_h60.sh**
+	- Fix the credential procedure using .netrc file;
+
+APP: **door_downloader_hsaf_h61.sh**
+	- Fix the credential procedure using .netrc file;
+    
 Version 1.0.5 [2023-06-30]
 **************************
 APP: **door_downloader_ecmwf_opendata_single_hires.py**
