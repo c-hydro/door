@@ -38,11 +38,14 @@
       }
     },
     "dynamic": {
-      "__note__": "available resolutions are: daily - monthly",
+      "__note__": "available time resolutions are: daily - monthly; spatial resolutions: p05 - p25",
       "time": {
         "time_observed_period": 120,
         "time_observed_frequency": "D",
         "product_resolution": "daily"
+      },
+      "product": {
+        "spatial_resolution": "p05"
       },
       "ancillary": {
         "folder": "/home/andrea/Desktop/WorkingDir/CHIRPS/ancillary"

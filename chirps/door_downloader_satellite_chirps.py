@@ -11,7 +11,7 @@ __author__ =
 __library__ = 'door'
 
 General command line:
-python3 hyde_downloader_satellite_chirps.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
+python3 door_downloader_satellite_chirps.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
 20220705 (1.0.0) --> Beta release
@@ -114,16 +114,18 @@ def main():
     time_start = time_end - pd.Timedelta(str(data_settings["data"]["dynamic"]["time"]["time_observed_period"]) +
                                          data_settings["data"]["dynamic"]["time"]["time_observed_frequency"])
 
+    spat_res = data_settings["data"]["dynamic"]["product"]["spatial_resolution"]
+
     if data_settings["data"]["dynamic"]["time"]["product_resolution"] == "daily":
         freq = "D"
-        url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p25/{data_daily_year}/chirps-v2.0.{data_daily_time}.tif.gz"
-        url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p25/{data_daily_year}/chirps-v2.0.{data_daily_time}.tif"
+        url_blank = os.path.join("https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs", spat_res, "{data_daily_year}/chirps-v2.0.{data_daily_time}.tif.gz")
+        url_prelim_blank = os.path.join("https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs", spat_res, "{data_daily_year}/chirps-v2.0.{data_daily_time}.tif")
     elif data_settings["data"]["dynamic"]["time"]["product_resolution"] == "monthly":
         freq = "MS"
         url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_monthly/tifs/chirps-v2.0.{data_monthly_time}.tif.gz"
         url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_monthly/tifs/chirps-v2.0.{data_monthly_time}.tif"
     else:
-        logging.error(" ERROR! Only hourly and monthly products have been implemented! Check your settings file!")
+        logging.error(" ERROR! Only daily and monthly products have been implemented! Check your settings file!")
         raise NotImplementedError
     time_range = pd.date_range(time_start, time_end, freq=freq)
 
