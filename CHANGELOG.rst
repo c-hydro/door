@@ -2,6 +2,16 @@
 Changelog
 =========
 
+Version 1.0.8 [2023-08-04]
+**************************
+APP: **downloader_MODIS.py**
+    - Development of new app to download MODIS ET
+
+Version 1.0.7 [2023-08-04]
+**************************
+APP: **door_downloader_satellite_chirps.py**
+    - Update of app to download CHIRPS at daily or monthly scale (add scale to json)
+
 Version 1.0.6 [2023-08-04]
 **************************
 APP: **door_downloader_hsaf_ecmwf.sh**
