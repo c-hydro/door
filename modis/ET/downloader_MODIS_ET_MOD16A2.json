@@ -1,0 +1,67 @@
+{
+  "algorithm": {
+    "flags": {
+      "regrid_with_map": true,
+      "crop_with_bounding_box": false,
+      "clean_data_ancillary_mosaic": true,
+      "clean_data_ancillary_hdf": true
+    },
+    "general": {
+      "title": "MODIS - Satellite Product",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "2.0.0 [20230727]",
+      "project-info": "dryes",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    }
+  },
+  "settings": {
+    "__note1__": "available products: MOD10A1_500m, MOD11A2, MOD13A2, MOD15A2H, MOD16A2, MYD16A2, MOD16A2_500m",
+    "__note2__": "available versions: 006 - 061",
+    "domain": "Volta",
+    "provider": "LPDAAC_ECS",
+    "product" : "MOD16A2",
+    "tested_products" : ["MOD16A2", "MYD16A2"],
+    "version": "061",
+    "subset": [1,3],
+    "valid_range": [[-32767,32700],[-32767,32700]],
+    "scale_factor": [0.1,0.1],
+    "interpmethod": "nearest",
+    "usern": "",
+    "passw": ""
+  },
+  "template": {
+    "folder_datetime_out": "%Y/%m",
+    "file_datetime_out": "%Y%m%d"
+  },
+  "data": {
+    "static": {
+      "grid_raster": "/home/michel/workspace/python/DRYES/data/Volta/static/ET/volta_regrid_2arcmin.tif",
+      "mask": "",
+      "bounding_box": {
+        "lon_right": null,
+        "lon_left": null,
+        "lat_bottom": null,
+        "lat_top": null
+      }
+    },
+    "dynamic": {
+      "ancillary": {
+        "folder": "/home/michel/workspace/python/DRYES/data/Volta/ancillary/ET/"
+      },
+      "output": {
+        "folder": "/home/michel/workspace/python/DRYES/data/Volta/output/ET/MOD16A2/",
+        "output_prefix": ["MODIS-ET","MODIS-PET"]
+      }
+    }
+  },
+  "time": {
+    "start_date": 20220219,
+    "end_date": 20220331,
+    "dayback": 30
+  },
+  "log": {
+    "filename": "door_downloader_MODIS_ET.txt",
+    "folder": "/home/michel/workspace/python/DRYES/log/Italia/ET/"
+  }
+}
