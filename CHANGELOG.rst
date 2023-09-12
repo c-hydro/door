@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 1.0.9 [2023-09-12]
+**************************
+APP: **downloader_MODIS.py**
+    - Fix of downloader MODIS ET
+
 Version 1.0.8 [2023-08-04]
 **************************
 APP: **downloader_MODIS.py**
