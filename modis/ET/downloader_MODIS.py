@@ -1,20 +1,20 @@
 #!/usr/bin/python3
 
 """
-DRYES - Tool MODIS downloader
+DOOR - Tool MODIS downloader
 
 Operative script for MODIS product downloading
 
-__date__ = '20210104'
-__version__ = '1.0.0'
+__date__ = '20230906'
+__version__ = '2.0.1'
 __author__ =
         'Alessandro Masoero' (alessandro.masoero@cimafoundation.org',
         'Michel Isabellon' (michel.isabellon@cimafoundation.org',
 
-__library__ = 'dryes'
+__library__ = 'door'
 
 General command line:
-python get_data_MODIS_op.py -settings_file configuration.json -product=MOD16A2 -time=20210104 -dayback=30
+python downloader_MODIS.py -settings_file configuration.json -time=20210104
 
 Configuration file required (conf_{MODISPRODUCT}.json)
 3 arguments required:
@@ -26,6 +26,7 @@ Version(s):
 20210909 (1.0.1) (clean tmp folder before downloading)
 20230208 (1.0.2) (version 061)
 20230727 (2.0.0) --> New release
+20230906 (2.0.1) --> Update
 """
 # -------------------------------------------------------------------------------------
 
@@ -48,9 +49,9 @@ from lib.lib_convertmodis_gdal import createMosaicGDAL
 
 # -------------------------------------------------------------------------------------
 # Algorithm information
-alg_name = 'DRYES - SATELLITE MODIS'
-alg_version = '1.0.0'
-alg_release = '2022-07-05'
+alg_name = 'DOOR - SATELLITE MODIS'
+alg_version = '2.0.1'
+alg_release = '2023-09-06'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -64,13 +65,10 @@ def main():
     parser = ArgumentParser()
 
     parser.add_argument("-s", "-settings_file", type=str, default=None,
-                    help="json configuration file")
+                        help="json configuration file")
 
     parser.add_argument("-t", "-time", type=str, default=None,
-                    help="End Date in YYYYMMDD format")
-
-    parser.add_argument("-d", "-dayback", type=int, default=15,
-                    help="Number of days back in the past")
+                        help="End Date in YYYYMMDD format")
 
     args = parser.parse_args()
 
@@ -106,6 +104,8 @@ def main():
 
     productName = data_settings['settings']['product']
 
+
+
     if(productName not in data_settings['settings']['tested_products']):
         logging.error(' ==> Product "' + productName + '" is not not implemented yet')
         raise NotImplementedError('Case not implemented yet')
@@ -122,29 +122,36 @@ def main():
     password = data_settings["settings"]["passw"]
     interpmethod = data_settings["settings"]["interpmethod"]
 
+    end = data_settings["time"]["end_date"]
+    start = data_settings["time"]["start_date"]
+    dayback = data_settings["time"]["dayback"]
+
     geotarget = data_settings["data"]["static"]["grid_raster"]
     mask = data_settings["data"]["static"]["mask"]
 
     # -------------------------------------------------------------------------------------
     # Set dates
-    if args.t == None:
-        log_stream.error('No date provided from command line, use json info')
-        end = data_settings["time"]["end_date"]
-        if(end == None):
+    if end == None:
+        log_stream.error('No date provided from json info, use command line argument')
+
+        if(args.t == None):
             log_stream.error(' ==> End date needs to be set in arguments or in json file')
             raise IOError('Variable time not valid')
 
-        oDateTo = datetime.datetime.strptime(str(end),'%Y%m%d')
-        start = data_settings["time"]["start_date"]
-        if(start ==None):
-            oDateFrom = datetime.datetime.strptime(str(start),'%Y%m%d')
         else:
-            dayback = data_settings["time"]["dayback"]
-            log_stream.error(' ==> Start date or dayback needs to be set in arguments or in json file')
-            raise IOError('Variable time not valid')
+            oDateTo = datetime.datetime.strptime(str(args.t),'%Y%m%d')
+
     else:
-        oDateTo = datetime.datetime.strptime(str(args.t),'%Y%m%d')
-        oDateFrom = oDateTo - datetime.timedelta(days=int(args.d))
+        oDateTo = datetime.datetime.strptime(str(end),'%Y%m%d')
+
+        if(start==None):
+            if(dayback==None):
+                log_stream.error(' ==> Start date or dayback needs to be set in arguments or in json file')
+                raise IOError('Variable time not valid')
+            else:
+                oDateFrom = oDateTo - datetime.timedelta(days=int(dayback))
+        else:
+            oDateFrom = datetime.datetime.strptime(str(start),'%Y%m%d')
 
     logging.info(" ==> Downloading data from " + str(oDateFrom) + " to " + str(oDateTo))
     oDate = oDateFrom
