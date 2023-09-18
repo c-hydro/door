@@ -22,7 +22,7 @@ package_folder=$HOME/DRYES/libraries/dryes/
 #-----------------------------------------------------------------------------------------
 # Get file information
 script_file=${script_folder}'downloader_MODIS.py'
-settings_file=${configuration_folder}'downloader_MODIS_ET_MOD16A2.json'
+settings_file=${configuration_folder}'downloader_MODIS_ET_MYD16A2.json'
 
 #-----------------------------------------------------------------------------------------
 # Get time information (-u to get gmt time)
