@@ -52,7 +52,7 @@ def writeGeotiffSingleBand(filename,geotransform,geoprojection,data):
     (x,y) = data.shape
     format = "GTiff"
     driver = gdal.GetDriverByName(format)
-    dst_datatype = gdal.GDT_Byte
+    dst_datatype = gdal.GDT_Float32
     dst_ds = driver.Create(filename,y,x,1,dst_datatype)
     dst_ds.GetRasterBand(1).WriteArray(data)
     dst_ds.SetGeoTransform(geotransform)
