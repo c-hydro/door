@@ -132,21 +132,27 @@ def main():
     # -------------------------------------------------------------------------------------
     # Set dates
     if end == None:
-        log_stream.error('No date provided from json info, use command line argument')
+        logging.info('No date provided from json info, use command line argument')
 
         if(args.t == None):
-            log_stream.error(' ==> End date needs to be set in arguments or in json file')
+            loggging.error(' ==> End date needs to be set in arguments or in json file')
             raise IOError('Variable time not valid')
 
         else:
             oDateTo = datetime.datetime.strptime(str(args.t),'%Y%m%d')
+
+            if (dayback == None):
+                logging.error(' ==> Dayback needs to be set in arguments or in json file')
+                raise IOError('Variable time not valid')
+
+            oDateFrom = oDateTo - datetime.timedelta(days=int(dayback))
 
     else:
         oDateTo = datetime.datetime.strptime(str(end),'%Y%m%d')
 
         if(start==None):
             if(dayback==None):
-                log_stream.error(' ==> Start date or dayback needs to be set in arguments or in json file')
+                logging.error(' ==> Start date or dayback needs to be set in arguments or in json file')
                 raise IOError('Variable time not valid')
             else:
                 oDateFrom = oDateTo - datetime.timedelta(days=int(dayback))
