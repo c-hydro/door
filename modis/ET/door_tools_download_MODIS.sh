@@ -16,7 +16,7 @@ configuration_folder=$script_folder
 package_folder=$HOME/DRYES/libraries/dryes/
 
 # Execution example:
-# ./door_tools_download_MODIS_ET.sh
+# ./door_tools_download_MODIS.sh
 #-----------------------------------------------------------------------------------------
 
 #-----------------------------------------------------------------------------------------
@@ -29,7 +29,7 @@ settings_file=${configuration_folder}'downloader_MODIS_ET_MYD16A2.json'
 # args: -t "%Y-%m-%d"
 # you can assign any hour, forced procedure rounds per day then set time 01:00 of the last day
 # arguments in the configuration file have priority
-time_now=$(date +"%Y-%m-%d 01:00")
+time_now=$(date +"%Y%m%d")
 
 #-----------------------------------------------------------------------------------------
 
