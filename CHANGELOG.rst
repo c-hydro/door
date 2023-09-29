@@ -2,6 +2,21 @@
 Changelog
 =========
 
+Version 1.1.2 [2023-09-29]
+**************************
+APP: **door_downloader_satellite_chirps.py**
+    - Fix of downloader CHIRPS - preliminar p05
+
+Version 1.1.1 [2023-09-25]
+**************************
+APP: **downloader_MODIS.py**
+    - Fix of downloader MODIS
+
+Version 1.1.0 [2023-09-18]
+**************************
+APP: **downloader_MODIS.py**
+    - Fix of downloader MODIS ET
+
 Version 1.0.9 [2023-09-12]
 **************************
 APP: **downloader_MODIS.py**
