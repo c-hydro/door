@@ -119,9 +119,18 @@ def main():
     if data_settings["data"]["dynamic"]["time"]["product_resolution"] == "daily":
         freq = "D"
         url_blank = os.path.join("https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs", spat_res, "{data_daily_year}/chirps-v2.0.{data_daily_time}.tif.gz")
-        url_prelim_blank = os.path.join("https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs", spat_res, "{data_daily_year}/chirps-v2.0.{data_daily_time}.tif")
+        if spat_res == "p25":
+            url_prelim_blank = os.path.join("https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs",
+                                            spat_res, "{data_daily_year}/chirps-v2.0.{data_daily_time}.tif")
+        elif spat_res == "p05":
+            url_prelim_blank = os.path.join("https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs",
+                                            spat_res, "{data_daily_year}/chirps-v2.0.{data_daily_time}.tif.gz")
+        else:
+            logging.error(" ERROR! Only p05 and p25 spatial resolution have been implemented! Check your settings file!")
     elif data_settings["data"]["dynamic"]["time"]["product_resolution"] == "monthly":
         freq = "MS"
+        if spat_res != "p25":
+            logging.error(" ERROR! Only p25 spatial resolution for monthly products! Check your settings file!")
         url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_monthly/tifs/chirps-v2.0.{data_monthly_time}.tif.gz"
         url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_monthly/tifs/chirps-v2.0.{data_monthly_time}.tif"
     else:
@@ -190,6 +199,8 @@ def main():
     if data_settings["algorithm"]["flags"]["fill_with_preliminary_version"]:
         logging.info(" ---> Download preliminar CHIRPS data...")
         ancillary_file_template = os.path.join(downloader_settings["ancillary_path"],data_settings["data"]["dynamic"]["outcome"]["final"]["file_name"])
+        if spat_res == "p05":
+            ancillary_file_template = os.path.join(downloader_settings["ancillary_path"],data_settings["data"]["dynamic"]["outcome"]["final"]["file_name"] + ".gz")
         missing_time = [t for t in time_range if not os.path.isfile(out_file_template.format(**fill_template(downloader_settings, t)))]
         urls = [url_prelim_blank.format(**fill_template(downloader_settings, t)) for t in missing_time]
         out_files = [preliminar_file_template.format(**fill_template(downloader_settings, t)) for t in missing_time]
