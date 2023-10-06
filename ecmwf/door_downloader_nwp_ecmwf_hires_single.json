@@ -1,7 +1,7 @@
 {
   "algorithm":{
     "flags": {
-      "clean_ancillary": true
+      "clean_ancillary": false
     },
     "domain": "africa",
     "general": {

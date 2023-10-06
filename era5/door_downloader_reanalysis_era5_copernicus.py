@@ -215,13 +215,13 @@ def cds_download(month, download_info):
     df_forcing.wind.attrs["units"] = 'm s**-1'
 
     df_forcing['temperature'] = df_forcing['t2m'] - 273.15
-    df_forcing.wind.attrs["units"] = 'C'
+    df_forcing.temperature.attrs["units"] = 'C'
 
     df_forcing['RH'] = relative_humidity_from_dewpoint(df_forcing['temperature'], df_forcing['d2m'] - 273.15)
-    df_forcing.wind.attrs["units"] = '%'
+    df_forcing.RH.attrs["units"] = '%'
 
     df_forcing['rain'] = df_forcing['tp'] * 1000
-    df_forcing.wind.attrs["units"] = 'mm'
+    df_forcing.rain.attrs["units"] = 'mm'
 
     df_forcing = df_forcing.rename({"ssrd": "downward_radiation"})
     df_forcing['downward_radiation'] = df_forcing['downward_radiation']/3600

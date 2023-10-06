@@ -3,8 +3,8 @@
 """
 door - Download ECMWF open data High Resolution (0.4 degree) single run
 
-__date__ = '20230731'
-__version__ = '1.0.0'
+__date__ = '20230923'
+__version__ = '1.1.0'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'door'
@@ -13,6 +13,7 @@ General command line:
 python3 door_downloader_ecmwf_opendata_single_hires.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
+20230923 (1.1.0) --> Fix flipped latitude, removes unused dimensions from output
 20230731 (1.0.0) --> Beta release
 """
 # -------------------------------------------------------------------------------------
@@ -33,15 +34,18 @@ from argparse import ArgumentParser
 from datetime import datetime
 from ecmwf.opendata import Client
 from requests.exceptions import HTTPError
+
 # -------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - ECMWF open data SINGLE RUN 0.4'
-alg_version = '1.0.0'
-alg_release = '2023-07-31'
+alg_version = '1.1.0'
+alg_release = '2023-09-23'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
+
+
 # -------------------------------------------------------------------------------------
 
 
@@ -57,7 +61,8 @@ def main():
 
     # Set algorithm logging
     os.makedirs(data_settings['data']['log']['folder'], exist_ok=True)
-    set_logging(logger_file=os.path.join(data_settings['data']['log']['folder'], data_settings['data']['log']['filename']))
+    set_logging(
+        logger_file=os.path.join(data_settings['data']['log']['folder'], data_settings['data']['log']['filename']))
     # -------------------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------------------
@@ -77,21 +82,23 @@ def main():
     step_end = data_settings["data"]["dynamic"]["time"]["time_forecast_period"]
     model_freq = 3
     model_time_range = pd.date_range(time_run + pd.Timedelta(str(model_freq) + "H"),
-                               time_run + pd.Timedelta(str(step_end) + "H"), freq= str(model_freq) + "H")
+                                     time_run + pd.Timedelta(str(step_end) + "H"), freq=str(model_freq) + "H")
     time_range = pd.date_range(time_run + pd.Timedelta("1H"),
                                time_run + pd.Timedelta(str(step_end - 1) + "H"), freq="H")
-    
+
     # Identify forecast run of interest and its availability
     logging.info(' --> TIME RUN: ' + str(time_run))
-    if time_run.hour not in [0,6,12,18]:
+    if time_run.hour not in [0, 6, 12, 18]:
         logging.error(" --> ERROR! ECMWF forecasts are available only for 0,6,12,18 time steps!")
         raise FileNotFoundError
     if step_end > 144:
-        logging.warning(" --> WARNING! 3-hourly forecasts are available only up to 144 forecast time steps! Forecast period has been consequently limited!")
+        logging.warning(
+            " --> WARNING! 3-hourly forecasts are available only up to 144 forecast time steps! Forecast period has been consequently limited!")
         step_end = 144
     if step_end > 90:
-        if time_run.hour in [6,18]:
-            logging.warning(" --> WARNING! 3-hourly hires forecast are available only up to 90 forecast time steps for 06 an 18 model issues! Forecast period has been consequently limited!")
+        if time_run.hour in [6, 18]:
+            logging.warning(
+                " --> WARNING! 3-hourly hires forecast are available only up to 90 forecast time steps for 06 an 18 model issues! Forecast period has been consequently limited!")
             step_end = 90
 
     # Generate folder structure
@@ -119,12 +126,12 @@ def main():
     # Perform request
     try:
         result = client.retrieve(
-            type = "fc",
-            date = time_run.strftime("%Y%m%d"),
-            time = time_run.hour,
-            step = [i for i in np.arange(3,step_end + 1,model_freq)],
-            param = [var for var in data_settings["data"]["dynamic"]["variables"].keys()],
-            target = os.path.join(ancillary_folder, ancillary_file)
+            type="fc",
+            date=time_run.strftime("%Y%m%d"),
+            time=time_run.hour,
+            step=[i for i in np.arange(3, step_end + 1, model_freq)],
+            param=[var for var in data_settings["data"]["dynamic"]["variables"].keys()],
+            target=os.path.join(ancillary_folder, ancillary_file)
         )
         logging.info(" --> Forecast file " + result.datetime.strftime("%Y-%m-%d %H:%M") + " correctly downloaded!")
         logging.info(" --> Download forecast data from ecmwf open data server ... DONE!")
@@ -140,16 +147,22 @@ def main():
     if "10v" in rename_dict.keys():
         rename_dict["v10"] = "10v"
         del rename_dict["10v"]
-    frc_out = xr.load_dataset(os.path.join(ancillary_folder, ancillary_file), engine="cfgrib").rename_vars(rename_dict).drop_vars("time")
-    frc_out = frc_out.assign_coords({"step":model_time_range}).rename({"step":"time", "latitude":"lat", "longitude":"lon"})
+    frc_out = xr.load_dataset(os.path.join(ancillary_folder, ancillary_file), engine="cfgrib").rename_vars(
+        rename_dict).drop_vars("time")
+    frc_out = frc_out.assign_coords({"step": model_time_range}).rename(
+        {"step": "time", "latitude": "lat", "longitude": "lon"})
 
     frc_out = frc_out.where((frc_out.lat <= data_settings['data']['static']['bounding_box']["lat_top"]) &
-                  (frc_out.lat >= data_settings['data']['static']['bounding_box']["lat_bottom"]) &
-                  (frc_out.lon >= data_settings['data']['static']['bounding_box']["lon_left"]) &
-                  (frc_out.lon <= data_settings['data']['static']['bounding_box']["lon_right"]), drop=True)
-    # sistema tempi e dimensionhi
+                            (frc_out.lat >= data_settings['data']['static']['bounding_box']["lat_bottom"]) &
+                            (frc_out.lon >= data_settings['data']['static']['bounding_box']["lon_left"]) &
+                            (frc_out.lon <= data_settings['data']['static']['bounding_box']["lon_right"]), drop=True)
 
-    # backend_kwargs={'filter_by_keys': {'typeOfLevel': 'heightAboveGround', 'level':10}}
+    # If lat is a decreasing vector, flip it and the associated variables vertically
+    if frc_out.lat.values[0] > frc_out.lat.values[-1]:
+        logging.warning(" --> WARNING! Latitude is decreasing, flip it and the associated variables vertically!")
+        frc_out = frc_out.reindex(lat=frc_out.lat[::-1])
+        for var in frc_out.data_vars:
+            frc_out[var] = frc_out[var].reindex(lat=frc_out.lat[::-1])
     logging.info(" --> Convert dataset to netcdf ... DONE")
 
     # -------------------------------------------------------------------------------------
@@ -159,11 +172,15 @@ def main():
     if "tp" in data_settings["data"]["dynamic"]["variables"].keys():
         # Convert meters to mm
         logging.info(" ---> Convert meters to mm of rain...")
-        frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = frc_out[data_settings['data']['dynamic']["variables"]["tp"]]*1000
+        frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = frc_out[data_settings['data']['dynamic'][
+            "variables"]["tp"]] * 1000
+        frc_out.to_netcdf("/home/andrea/Desktop/Working_dir/meteo/ecmwf/ancillary/2023/09/29/test_intermedio.nc")
+
         if data_settings['data']['dynamic']["vars_standards"]["decumulate_precipitation"] is True:
             logging.info(" ---> Variable tp is cumulated... Performing decumulation")
             first_step = deepcopy(frc_out[data_settings['data']['dynamic']["variables"]["tp"]].values[0, :, :])
-            frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = frc_out[data_settings['data']['dynamic']["variables"]["tp"]].diff("time", 1)
+            frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = frc_out[
+                data_settings['data']['dynamic']["variables"]["tp"]].diff("time", 1)
             frc_out[data_settings['data']['dynamic']["variables"]["tp"]].loc[time_range[2], :, :] = first_step
             frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = xr.where(
                 frc_out[data_settings['data']['dynamic']["variables"]["tp"]] < 0, 0,
@@ -179,7 +196,8 @@ def main():
         frc_out[data_settings['data']['dynamic']["variables"]["2t"]].attrs['standard_name'] = "air_temperature"
         logging.info(" ---> Convert temperature to °C...DONE!")
 
-    if "10u" in data_settings["data"]["dynamic"]["variables"].keys() and "v_10m" in data_settings["data"]["dynamic"]["variables"].keys() and \
+    if "10u" in data_settings["data"]["dynamic"]["variables"].keys() and "10v" in data_settings["data"]["dynamic"][
+        "variables"].keys() and \
             data_settings['data']['dynamic']["vars_standards"]["aggregate_wind_components"] is True:
         logging.info(" ---> Aggregate wind components...")
         frc_out["10wind"] = np.sqrt(frc_out[data_settings['data']['dynamic']["variables"]["10u"]] ** 2 + frc_out[
@@ -189,14 +207,18 @@ def main():
         frc_out['10wind'].attrs['standard_name'] = "wind"
         logging.info(" ---> Aggregate wind components...DONE!")
 
-    frc_out = frc_out.reindex({'time': time_range}, method='nearest')
+    # frc_out = frc_out.reindex({'time': time_range}, method='nearest')
+    frc_out = frc_out.drop(["valid_time","surface","heightAboveGround"]).reindex({'time': time_range}, method='nearest')
+    frc_out["lat"].attrs["units"] = "degrees_north"
+    frc_out["lon"].attrs["units"] = "degrees_east"
     logging.info(" --> Postprocess variables..DONE")
     # -------------------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------------------
     # Save output and clean system
     logging.info(" --> Save output data...")
-    outcome_file = os.path.join(output_folder, data_settings["data"]["dynamic"]["outcome"]["filename"]).format(**template_filled)
+    outcome_file = os.path.join(output_folder, data_settings["data"]["dynamic"]["outcome"]["filename"]).format(
+        **template_filled)
     frc_out.to_netcdf(outcome_file)
 
     if data_settings["algorithm"]["flags"]["clean_ancillary"]:
@@ -215,10 +237,10 @@ def main():
     logging.info(' ============================================================================ ')
     # -------------------------------------------------------------------------------------
 
+
 # -------------------------------------------------------------------------------------
 # Method to read file json
 def read_file_json(file_name):
-
     env_ws = {}
     for env_item, env_value in os.environ.items():
         env_ws[env_item] = env_value
@@ -245,6 +267,8 @@ def read_file_json(file_name):
                 json_block = []
 
     return json_dict
+
+
 # -------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------
@@ -266,13 +290,14 @@ def get_args():
         alg_time = None
 
     return alg_settings, alg_time
+
+
 # -------------------------------------------------------------------------------------
 
 
 # -------------------------------------------------------------------------------------
 # Method to set logging information
 def set_logging(logger_file='log.txt', logger_format=None):
-
     if logger_format is None:
         logger_format = '%(asctime)s %(name)-12s %(levelname)-8s ' \
                         '%(filename)s:[%(lineno)-6s - %(funcName)20s()] %(message)s'
@@ -301,6 +326,7 @@ def set_logging(logger_file='log.txt', logger_format=None):
     # Add handle to logging
     logging.getLogger('').addHandler(logger_handle_1)
     logging.getLogger('').addHandler(logger_handle_2)
+
 
 # -------------------------------------------------------------------------------------
 
