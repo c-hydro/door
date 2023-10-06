@@ -2,8 +2,8 @@
 """
 door - NWP ICON GLOBAL
 
-__date__ = '20230626'
-__version__ = '1.0.0'
+__date__ = '20230920'
+__version__ = '1.0.1'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'DOOR'
@@ -13,6 +13,7 @@ python3 door_downloader_nwp_icon_global.py -settings_file configuration.json -ti
 
 Version(s):
 20230626 (1.0.0) --> Beta release
+20230920 (1.0.1) --> Drop useless dimensions for Continuum compatibility
 """
 # -------------------------------------------------------------------------------------
 
@@ -43,8 +44,8 @@ import glob
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - NWP ICON Global'
-alg_version = '1.0.0'
-alg_release = '2023-06-26'
+alg_version = '1.0.1'
+alg_release = '2023-09-20'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -254,7 +255,7 @@ def main():
         frc_out['10wind'].attrs['standard_name'] = "wind"
         logging.info(" ---> Aggregate wind components...DONE!")
 
-    frc_out = frc_out.reindex({'time': time_range}, method='nearest')
+    frc_out = frc_out.drop(["step","surface","heightAboveGround"]).reindex({'time': time_range}, method='nearest')
     logging.info(" --> Postprocess variables..DONE")
     # -------------------------------------------------------------------------------------
 
