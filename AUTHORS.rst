@@ -10,3 +10,4 @@ Developers
 * Nicola Rebora <nicola.rebora@cimafoundation.org>
 * Francesco Avanzi <francesco.avanzi@cimafoundation.org>
 * Michel Isabellon <michel.isabellon@cimafoundation.org>
+* Luca Trotter <luca.trotter@cimafoundation.org>
