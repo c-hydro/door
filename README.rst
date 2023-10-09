@@ -77,3 +77,4 @@ References
 .. _MODIS: https://modis.gsfc.nasa.gov/about/
 .. _PERSIANN: https://chrsdata.eng.uci.edu/
 .. _SCaMPR: https://www.star.nesdis.noaa.gov/smcd/emb/ff/SCaMPR.php
+.. _VIIRS: https://viirsland.gsfc.nasa.gov/
