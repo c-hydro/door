@@ -23,9 +23,9 @@
     "product" : "VNP15A2H",
     "tested_products" : ["VNP15A2H"],
     "version": "001",
-    "subset": [1],
-    "valid_range": [[0,100]],
-    "scale_factor": [0.01],
+    "subset": [1,2],
+    "valid_range": [[0,100], [0,254]],
+    "scale_factor": [0.01,1],
     "interpmethod": "nearest",
     "usern": "",
     "passw": ""
@@ -51,7 +51,7 @@
       },
       "output": {
         "folder": "/home/michel/workspace/python/DRYES/data/Volta/output/FAPAR/VNP15A2H/",
-        "output_prefix": ["VIIRS-FAPAR"]
+        "output_prefix": ["VIIRS-FAPAR", "VIIRS-FAPAR_QC"]
       }
     }
   },
