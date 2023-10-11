@@ -10,6 +10,7 @@ Door
 - NASA - IMERG_ early, late and final runs (precipitation - 30-mins 0.1°x0.1°)
 - NASA - MODIS_ (several products with several variables and resolutions)
 - NASA - SMAP_ (soil moisture - daily 3kmx3km)
+- NASA - VIIRS_ (FAPAR, 8-days 500mx500m)
 - UCI-CHRS - PERSIANN_ (precipitation - monthly (0.25°x0.25°)
 - NOAA - SCaMPR_ (precipitation - 15-mins 0.1°x0.1°)
 
@@ -76,3 +77,4 @@ References
 .. _MODIS: https://modis.gsfc.nasa.gov/about/
 .. _PERSIANN: https://chrsdata.eng.uci.edu/
 .. _SCaMPR: https://www.star.nesdis.noaa.gov/smcd/emb/ff/SCaMPR.php
+.. _VIIRS: https://viirsland.gsfc.nasa.gov/

@@ -1,0 +1,67 @@
+{
+  "algorithm": {
+    "flags": {
+      "regrid_with_map": true,
+      "crop_with_bounding_box": false,
+      "clean_data_ancillary_mosaic": true,
+      "clean_data_ancillary_hdf": true
+    },
+    "general": {
+      "title": "VIIRS - Satellite Product",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "2.0.1 [20231009]",
+      "project-info": "door",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    }
+  },
+  "settings": {
+    "__note1__": "available products: VNP15A2H",
+    "__note2__": "available versions: 001",
+    "domain": "Volta",
+    "provider": "LPDAAC_ECS",
+    "product" : "VNP15A2H",
+    "tested_products" : ["VNP15A2H"],
+    "version": "001",
+    "subset": [1,2,3],
+    "valid_range": [[0,100], [0,254], [0,254]],
+    "scale_factor": [0.01,1,1],
+    "interpmethod": "nearest",
+    "usern": "",
+    "passw": ""
+  },
+  "template": {
+    "folder_datetime_out": "%Y/%m",
+    "file_datetime_out": "%Y%m%d"
+  },
+  "data": {
+    "static": {
+      "grid_raster": "/home/michel/workspace/python/DRYES/data/Volta/static/FAPAR/volta_regrid_2arcmin.tif",
+      "mask": "",
+      "bounding_box": {
+        "lon_right": null,
+        "lon_left": null,
+        "lat_bottom": null,
+        "lat_top": null
+      }
+    },
+    "dynamic": {
+      "ancillary": {
+        "folder": "/home/michel/workspace/python/DRYES/data/Volta/ancillary/FAPAR/"
+      },
+      "output": {
+        "folder": "/home/michel/workspace/python/DRYES/data/Volta/output/FAPAR/VNP15A2H/",
+        "output_prefix": ["VIIRS-FAPAR", "VIIRS-FAPAR_ExtraQC", "VIIRS-FAPAR_QC"]
+      }
+    }
+  },
+  "time": {
+    "start_date": 20220219,
+    "end_date": 20220331,
+    "dayback": 30
+  },
+  "log": {
+    "filename": "door_downloader_VIIRS_FAPAR.txt",
+    "folder": "/home/michel/workspace/python/DRYES/log/Volta/FAPAR/"
+  }
+}
