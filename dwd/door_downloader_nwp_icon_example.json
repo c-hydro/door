@@ -42,7 +42,7 @@
         "time_forecast_period": 120,
         "time_forecast_frequency": "H"
       },
-      "__info__": "hmc vars are: t_2m, tot_prec, u_10m, v_10m, relhum_2m",
+      "__info__": "hmc vars are: t_2m, tot_prec, u_10m, v_10m, relhum_2m, aswdir_s",
       "variables": {
         "tot_prec": "tp",
         "u_10m": "10u",
@@ -51,7 +51,8 @@
       "vars_standards": {
         "convert_temperature_to_C": true,
         "aggregate_wind_components": true,
-        "decumulate_precipitation": true
+        "decumulate_precipitation": true,
+        "decumulate_radiation": true
       }
     },
     "ancillary": {

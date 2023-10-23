@@ -1,7 +1,7 @@
 {
   "algorithm":{
     "ancillary": {
-      "domain" : "guyana"
+      "domain" : "igad"
     },
     "general": {
       "title": "NWP GFS 0.25 degree - backup procedure",
@@ -20,10 +20,10 @@
   "data": {
     "static": {
       "bounding_box": {
-        "lon_right": -50,
-        "lon_left": -70,
-        "lat_bottom": -5,
-        "lat_top": 15
+        "lon_right": 54,
+        "lon_left": 20,
+        "lat_bottom": -16,
+        "lat_top": 25
       }
     },
     "dynamic": {
@@ -56,7 +56,7 @@
             "height": 0,
             "varName": "tp",
             "freq": "1H",
-            "out_group": "srf_rain"
+            "out_group": "other_variables"
           }
         },
         "wind": {
