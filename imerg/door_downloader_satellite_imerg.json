@@ -5,11 +5,12 @@
       "clean_dynamic_data_ancillary": true,
       "download_final_imerg": true,
       "download_late_imerg": true,
-      "download_early_imerg": false
+      "download_early_imerg": true,
+      "use_early_to_fill_late": true
     },
     "ancillary": {
       "domain": "IGAD_D15",
-      "process_mp": null,
+      "process_mp": 1,
       "note": "If users and passwords are not set they are searched in the .netrc file in the /home directory",
       "gpm_arthurhouhttps_user": null,
       "gpm_arthurhouhttps_pass": null,
@@ -44,7 +45,7 @@
     },
     "dynamic": {
       "time": {
-        "time_observed_period": 4,
+        "time_observed_period": 10,
         "time_observed_frequency": "H",
         "product_frequency": "30min"
       },
