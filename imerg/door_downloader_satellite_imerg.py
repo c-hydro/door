@@ -14,6 +14,7 @@ python3 hyde_downloader_satellite_gsmap_nowcasting.py -settings_file configurati
 
 Version(s):
 20231019 (1.2.0) --> Upgrade imerg versions
+                     Add check on the presence of all the expected data. If not available try to re-download on single core.
 20220308 (1.1.0) --> Fixed accumulation of late IMERG: now all the output maps are in mm/30min
 20211227 (1.0.0) --> Beta release
 """
@@ -73,6 +74,9 @@ def main():
     # -------------------------------------------------------------------------------------
     # Setup downloader
     logging.info(" --> Setup downloader settings")
+    logging.info(" --> Flag use_early_to_fill_late not specified. Early imerg data is used to fill late imerg data in real time")
+    if not "use_early_to_fill_late" in data_settings["algorithm"]["flags"]:
+        data_settings["algorithm"]["flags"]["use_early_to_fill_late"] = True
 
     logging.info(" ---> Multiprocessing setup...")
     if data_settings["algorithm"]["flags"]["downloading_mp"]:
@@ -175,7 +179,7 @@ def main():
     # -------------------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------------------
-    # Process the download of the data
+    # Download imerg final data
     if data_settings["algorithm"]["flags"]["download_final_imerg"]:
         logging.info(' --> Search and download of final imerg products...')
         global missing_steps_final
@@ -189,9 +193,31 @@ def main():
         exec_pool.close()
         exec_pool.join()
         logging.info(' --> Search and download of final imerg products...DONE')
-    else:
-        missing_steps_final = time_range
 
+        # loop trough time range considering only values not in missing_steps_final
+        logging.info(' --> Check presence of all expected files...')
+        for time_now in time_range:
+            if time_now not in list(missing_steps_final):
+                template_filled = fill_template(downloader_settings, time_now)
+                local_filename_domain = downloader_settings["outcome_path"].format(**template_filled)
+                if not os.path.exists(local_filename_domain):
+                    logging.warning(' ---> WARNING! File: ' + time_now.strftime("%Y-%m-%d %H:%M") + "..MISSING! Try to download it again")
+                    dload_final_run(time_now, downloader_settings)
+                    if not os.path.exists(local_filename_domain):
+                        logging.warning(' ---> WARNING! Download failed!')
+                        missing_steps_final.append(time_now)
+        logging.info(' --> Check presence of all expected files...DONE')
+
+        if len(list(missing_steps_final)) > 0:
+            logging.warning(' --> Some time steps are missing on the server: ')
+            for date in missing_steps_final:
+                logging.warning(' ---> Time: ' + date.strftime("%Y-%m-%d %H:%M"))
+        else:
+            logging.info(' --> All data have been downloaded!')
+    # -------------------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------------------
+    # Download imerg late data
     if data_settings["algorithm"]["flags"]["download_late_imerg"]:
         logging.info(' --> Search and download of late imerg products...')
         global missing_steps_late
@@ -205,31 +231,71 @@ def main():
         exec_pool.close()
         exec_pool.join()
         logging.info(' --> Search and download of late imerg products...DONE')
-    else:
-        missing_steps_late = missing_steps_final
 
+        logging.info(' --> Check presence of all expected files...')
+        for time_now in time_range:
+            if time_now not in list(missing_steps_late):
+                template_filled = fill_template(downloader_settings, time_now)
+                local_filename_domain = downloader_settings["outcome_path"].format(**template_filled)
+                if not os.path.exists(local_filename_domain):
+                    logging.warning(' ---> WARNING! File: ' + time_now.strftime("%Y-%m-%d %H:%M") + "..MISSING! Try to download it again")
+                    dload_late_run(time_now, downloader_settings)
+                    if not os.path.exists(local_filename_domain):
+                        logging.warning(' ---> WARNING! Download failed!')
+                        missing_steps_late.append(time_now)
+        logging.info(' --> Check presence of all expected files...DONE')
+
+        if len(list(missing_steps_late)) > 0:
+            logging.warning(' --> Some time steps are missing on the server: ')
+            for date in missing_steps_late:
+                logging.warning(' ---> Time: ' + date.strftime("%Y-%m-%d %H:%M"))
+        else:
+            logging.info(' --> All data have been downloaded!')
+    # -------------------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------------------
+    # Download imerg early data
     if data_settings["algorithm"]["flags"]["download_early_imerg"]:
+        if data_settings["algorithm"]["flags"]["use_early_to_fill_late"] == True:
+            try:
+                time_early = list(missing_steps_late)
+            except:
+                time_early = time_range
+        else:
+            time_early = time_range
         logging.info(' --> Search and download of early imerg products...')
-        global missing_steps
-        missing_steps = manager.list()
+        global missing_steps_early
+        missing_steps_early = manager.list()
         downloader_settings["outcome_path"] = os.path.join(
             data_settings["data"]["dynamic"]["outcome"]["early"]["folder"], \
             data_settings["data"]["dynamic"]["outcome"]["early"]["file_name"])
         exec_pool = Pool(process_max)
-        for time_now in missing_steps_late:
+        for time_now in time_early:
             exec_pool.apply_async(dload_early_run, args=(time_now, downloader_settings))
         exec_pool.close()
         exec_pool.join()
         logging.info(' --> Search and download of early imerg products...DONE')
-    else:
-        missing_steps = missing_steps_late
 
-    if len(list(missing_steps))>0:
-        logging.warning(' --> Some time steps are missing: ')
-        for date in missing_steps:
-            logging.warning(' ---> Time: ' + date.strftime("%Y-%m-%d %H:%M") + "..MISSING!")
-    else:
-        logging.info(' --> All data have been downloaded!')
+        logging.info(' --> Check presence of all expected files...')
+        for time_now in time_range:
+            if time_now in list(missing_steps_early):
+                template_filled = fill_template(downloader_settings, time_now)
+                local_filename_domain = downloader_settings["outcome_path"].format(**template_filled)
+                if not os.path.exists(local_filename_domain):
+                    logging.warning(' ---> WARNING! File: ' + time_now.strftime("%Y-%m-%d %H:%M") + "..MISSING! Try to download it again")
+                    dload_early_run(time_now, downloader_settings)
+                    if not os.path.exists(local_filename_domain):
+                        logging.warning(' ---> WARNING! Download failed!')
+                        missing_steps_late.append(time_now)
+        logging.info(' --> Check presence of all expected files...DONE')
+
+        if len(list(missing_steps_early)) > 0:
+            logging.warning(' --> Some time steps are missing on the server: ')
+            for date in missing_steps_early:
+                logging.warning(' ---> Time: ' + date.strftime("%Y-%m-%d %H:%M"))
+        else:
+            logging.info(' --> All data have been downloaded!')
+    # -------------------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------------------
     # Info algorithm
@@ -246,7 +312,7 @@ def main():
 # -------------------------------------------------------------------------------------
 # Function for download IMERG Early Run
 def dload_early_run(time_now, downloader_settings):
-    global missing_steps
+    global missing_steps_early
     # versioning of 06 imerg final
     if time_now <= dt.datetime(2022,5,9,1,30,0):
         vers = "B"
@@ -265,7 +331,7 @@ def dload_early_run(time_now, downloader_settings):
     with requests.get(url, auth=(downloader_settings["early_late_user"], downloader_settings["early_late_pwd"])) as r:
         if r.status_code == 404:
             logging.warning(" WARNING! " + time_now.strftime("%Y-%m-%d %H:%M") + "... File not found! SKIP")
-            missing_steps.append(time_now)
+            missing_steps_early.append(time_now)
         else:
             with open(ancillary_filename, 'wb') as f:
                 f.write(r.content)
