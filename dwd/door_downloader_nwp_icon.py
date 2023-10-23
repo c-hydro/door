@@ -2,8 +2,8 @@
 """
 door - NWP ICON GLOBAL
 
-__date__ = '20230920'
-__version__ = '1.0.1'
+__date__ = '20231023'
+__version__ = '1.0.2'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'DOOR'
@@ -14,6 +14,7 @@ python3 door_downloader_nwp_icon_global.py -settings_file configuration.json -ti
 Version(s):
 20230626 (1.0.0) --> Beta release
 20230920 (1.0.1) --> Drop useless dimensions for Continuum compatibility
+20231023 (1.0.2) --> Add radiation computing
 """
 # -------------------------------------------------------------------------------------
 
@@ -44,8 +45,8 @@ import glob
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - NWP ICON Global'
-alg_version = '1.0.1'
-alg_release = '2023-09-20'
+alg_version = '1.0.2'
+alg_release = '2023-10-23'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -232,8 +233,7 @@ def main():
         frc_out[data_settings['data']['dynamic']["variables"]["tot_prec"]].loc[time_range[0], :, :] = first_step
 
         if len(frc_out[data_settings['data']['dynamic']["variables"]["tot_prec"]].time) >= 78:
-            logging.info(
-                " ---> More than 77 time steps are available. Last steps are considered with 3-hourly resolution")
+            logging.info(" ---> More than 77 time steps are available. Last steps are considered with 3-hourly resolution")
             frc_out[data_settings['data']['dynamic']["variables"]["tot_prec"]][78:, :, :] = frc_out[data_settings['data']['dynamic']["variables"]["tot_prec"]][78:, :, :]  / 3
         frc_out[data_settings['data']['dynamic']["variables"]["tot_prec"]] = xr.where(frc_out[data_settings['data']['dynamic']["variables"]["tot_prec"]]<0,0,frc_out[data_settings['data']['dynamic']["variables"]["tot_prec"]])
 
@@ -255,7 +255,24 @@ def main():
         frc_out['10wind'].attrs['standard_name'] = "wind"
         logging.info(" ---> Aggregate wind components...DONE!")
 
-    frc_out = frc_out.drop(["step","surface","heightAboveGround"]).reindex({'time': time_range}, method='nearest')
+    if "aswdir_s" in variables and \
+            data_settings['data']['dynamic']["vars_standards"]["decumulate_radiation"] is True:
+        logging.info(" ---> Decumulate radiation...")
+        # the variable frc_out["aswdir_s"] for each step is the average in all the previous time steps. After the step 78 the time step is 3 hours.
+        first_step = deepcopy(frc_out[data_settings['data']['dynamic']["variables"]["aswdir_s"]].values[0, :, :])
+        var = frc_out[data_settings['data']['dynamic']["variables"]["aswdir_s"]]
+        for step, step_t in enumerate(forecast_steps, start=1):
+            var[step -1,:,:] = var[step-1,:,:] * step_t
+        frc_out[data_settings['data']['dynamic']["variables"]["aswdir_s"]] = var.diff("time", 1)
+        frc_out[data_settings['data']['dynamic']["variables"]["aswdir_s"]].loc[time_range[0], :, :] = first_step
+        frc_out[data_settings['data']['dynamic']["variables"]["aswdir_s"]][78:, :, :] = frc_out[data_settings['data'][
+            'dynamic']["variables"]["aswdir_s"]][78:, :, :] / 3
+        logging.info(" ---> Decumulate radiation...DONE!")
+        frc_out[data_settings['data']['dynamic']["variables"]["aswdir_s"]] = xr.where(
+            frc_out[data_settings['data']['dynamic']["variables"]["aswdir_s"]] < 1, 0,
+            frc_out[data_settings['data']['dynamic']["variables"]["aswdir_s"]])
+
+    frc_out = frc_out.drop(["step","surface","heightAboveGround"], errors="ignore").reindex({'time': time_range}, method='nearest')
     logging.info(" --> Postprocess variables..DONE")
     # -------------------------------------------------------------------------------------
 

@@ -3,8 +3,8 @@
 """
 door Tool - SATELLITE IMERG
 
-__date__ = '20220803'
-__version__ = '1.1.0'
+__date__ = '20231019'
+__version__ = '1.2.0'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'door'
@@ -13,6 +13,7 @@ General command line:
 python3 hyde_downloader_satellite_gsmap_nowcasting.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
+20231019 (1.2.0) --> Upgrade imerg versions
 20220308 (1.1.0) --> Fixed accumulation of late IMERG: now all the output maps are in mm/30min
 20211227 (1.0.0) --> Beta release
 """
@@ -34,8 +35,8 @@ import datetime as dt
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - SATELLITE IMERG'
-alg_version = '1.1.0'
-alg_release = '2022-03-08'
+alg_version = '1.2.0'
+alg_release = '2023-10-19'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -246,12 +247,20 @@ def main():
 # Function for download IMERG Early Run
 def dload_early_run(time_now, downloader_settings):
     global missing_steps
+    # versioning of 06 imerg final
+    if time_now <= dt.datetime(2022,5,9,1,30,0):
+        vers = "B"
+    elif time_now <= dt.datetime(2023,7,1,23,30,0):
+        vers = "C"
+    else:
+        vers = "D"
+
     url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/early/' + time_now.strftime("%Y/%m") + '/' + \
           '3B-HHR-E.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
           '-S' + time_now.strftime("%H%M%S") + \
           '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
           '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(
-        4) + '.V06D.30min.tif'
+        4) + '.V06' + vers + '.30min.tif'
     ancillary_filename = os.path.join(downloader_settings["ancillary_path"], url.split('/')[-1])
     with requests.get(url, auth=(downloader_settings["early_late_user"], downloader_settings["early_late_pwd"])) as r:
         if r.status_code == 404:
@@ -274,12 +283,21 @@ def dload_early_run(time_now, downloader_settings):
 # Function for download IMERG Late Run
 def dload_late_run(time_now,downloader_settings):
     global missing_steps_late
+
+    # versioning of 06 imerg late
+    if time_now <= dt.datetime(2022,5,8,15,30,0):
+        vers = "B"
+    elif time_now <= dt.datetime(2023,7,1,13,30,0):
+        vers = "C"
+    else:
+        vers = "D"
+
     url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/' + time_now.strftime("%Y/%m") + '/' + \
           '3B-HHR-L.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
           '-S' + time_now.strftime("%H%M%S") + \
           '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
           '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(
-        4) + '.V06D.30min.tif'
+        4) + '.V06' + vers  + '.30min.tif'
     ancillary_filename = os.path.join(downloader_settings["ancillary_path"], url.split('/')[-1])
     with requests.get(url, auth=(downloader_settings["early_late_user"], downloader_settings["early_late_pwd"])) as r:
         if r.status_code == 404:
@@ -306,7 +324,7 @@ def dload_final_run(time_now, downloader_settings):
           '3B-HHR-GIS.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
           '-S' + time_now.strftime("%H%M%S") + \
           '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
-          '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(4) + '.V06D.tif'
+          '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(4) + '.V07A.tif'
     ancillary_filename = os.path.join(downloader_settings["ancillary_path"], url.split('/')[-1])
     with requests.get(url, auth=(downloader_settings["final_user"], downloader_settings["final_pwd"])) as r:
         if r.status_code == 404:
