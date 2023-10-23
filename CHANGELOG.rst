@@ -6,6 +6,14 @@ Version 1.1.2 [2023-09-29]
 **************************
 APP: **door_downloader_satellite_chirps.py**
     - Fix of downloader CHIRPS - preliminar p05
+    
+APP: **door_downloader_nwp_icon.py**
+    - Add postprocessing for solar radiation
+    
+APP: **door_downloader_satellite_imerg.py**
+    - Add support to IMERG Final V07 
+    - Add automatic switch between IMERG Late/Early V06B, V06C and V06D
+    - Add check for presence of expected data (to fix missing data in muiltiprocessing)
 
 Version 1.1.1 [2023-09-25]
 **************************
