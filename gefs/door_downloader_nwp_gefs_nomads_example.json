@@ -1,7 +1,7 @@
 {
   "algorithm":{
     "flags": {
-      "downloading_mp": true,
+      "downloading_mp": false,
       "cleaning_dynamic_data_ancillary": true,
       "cleaning_dynamic_data_global": true,
       "cleaning_dynamic_data_domain": true,
@@ -11,13 +11,13 @@
       "domain" : "mozambique",
       "process_mp": 1,
       "remote_server_hit_per_min": 100,
-      "ens_members": 30,
+      "ens_members": 1,
       "type": [
         "surface_rain",
         "other_variables"],
-      "vars_in": ["tp","2r","dswrf","10u","10v"],
-      "cdo_exec": "/home/fp/library/fp_apps_system/cdo-1.9.8_nc-4.6.0_hdf-1.8.17_eccodes-2.17.0/bin/cdo",
-      "cdo_deps": ["/home/fp/library/fp_libs_system/eccodes2.17.0/"]
+      "vars_in": ["tp","2r"],
+      "cdo_exec": "/home/andrea/FP/fp_libs_system_cdo/cdo-1.9.8_nc-4.6.0_hdf-1.8.17_eccodes-2.17.0/bin/cdo",
+      "cdo_deps": ["/home/andrea/FP/fp_libs_system_cdo/eccodes2.17.0/lib"]
     },
     "general": {
       "title": "NWP GEFS 0.25 degree NOMADS",
@@ -94,7 +94,7 @@
         "vars_standards":{
           "source_temperature_mesurement_unit": "K",
           "source_wind_separate_components": true,
-          "source_precipitation_is_cumulated": true,
+          "source_precipitation_is_cumulated": false,
           "convert2standard_continuum_format": true
         }
       },
@@ -127,8 +127,8 @@
             "{domain}_gep0{ens_member}.t{run_hour}z.0p25.{outcome_datetime}_other_variables.nc"
           ],
           "folder": [
-            "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/domain/{outcome_sub_path_time}",
-            "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/domain/{outcome_sub_path_time}"
+            "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/domain_cum/{outcome_sub_path_time}",
+            "/home/andrea/Desktop/test/fp_mozambique/data/data_dynamic/outcome/nwp/gefs025/domain_cum/{outcome_sub_path_time}"
           ]
         }
       }

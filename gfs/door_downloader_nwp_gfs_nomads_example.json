@@ -1,7 +1,7 @@
 {
   "algorithm":{
     "flags": {
-      "downloading_mp": true,
+      "downloading_mp": false,
       "cleaning_dynamic_data_ancillary": true,
       "cleaning_dynamic_data_global": true,
       "cleaning_dynamic_data_domain": true,

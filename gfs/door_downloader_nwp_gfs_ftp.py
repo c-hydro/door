@@ -3,8 +3,8 @@
 """
 HyDE Downloading Tool - NWP GFS 0.25 backup procedure UCAR server
 
-__date__ = '20221205'
-__version__ = '2.0.2'
+__date__ = '20231109'
+__version__ = '2.0.3'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
         'Fabio Delogu (fabio.delogu@cimafoundation.org',
@@ -15,6 +15,7 @@ General command line:
 python3 hyde_downloader_nwp_gfs_ftp.py -settings_file configuration.json -time YYYY-MM-DD HH:MM
 
 Version(s):
+20231109 (2.0.3) --> Add possibility to choose output name for compatibility with opendap downaloader
 20221205 (2.0.2) --> Bug fixes
 20210609 (2.0.1) --> Add shifting of longitudes from [0,360] to [-180,180]
 20200428 (2.0.0) --> Change output format according to Nomads update.
@@ -46,9 +47,9 @@ import numpy as np
 
 # -------------------------------------------------------------------------------------
 # Algorithm information
-alg_name = 'HYDE DOWNLOADING TOOL - NWP GFS BACKUP PROCEDURE'
-alg_version = '2.0.2'
-alg_release = '2022-12-05'
+alg_name = 'DOOR DOWNLOADING TOOL - NWP GFS BACKUP PROCEDURE'
+alg_version = '2.0.3'
+alg_release = '2023-11-09'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -87,10 +88,15 @@ def main():
     var_dic = deepcopy(data_settings["algorithm"]["template"])
     for keys in data_settings["algorithm"]["template"].keys():
         var_dic[keys] = timeRun.strftime(data_settings["algorithm"]["template"][keys])
+    var_dic["domain"] = data_settings["algorithm"]["ancillary"]["domain"]
 
     outFolder=outFolder.format(**var_dic)
     os.makedirs(outFolder, exist_ok=True)
-    os.system("rm " + os.path.join(outFolder, data_settings["algorithm"]["ancillary"]["domain"] + "_gfs.t" + timeRun.strftime('%H') + "z.0p25." + timeRun.strftime('%Y%m%d') + "_*.nc") + " | True")
+
+    if not "name" in data_settings["data"]["dynamic"]["outcome"].keys():
+        outNameTemplate = data_settings["algorithm"]["ancillary"]["domain"] + "_gfs.t" + timeRun.strftime('%H') + "z.0p25." + timeRun.strftime('%Y%m%d') + "_{out_group}.nc"
+    else:
+        outNameTemplate = data_settings["data"]["dynamic"]["outcome"]["name"].format(**var_dic, out_group="{out_group}")
 
     # Starting info
     logging.info(' --> TIME RUN: ' + str(timeRun))
@@ -164,7 +170,7 @@ def main():
             if "height" in [i for i in varIn.dims]:
                 varFilled = varFilled.squeeze(dim="height", drop=True)
 
-            outName = data_settings["algorithm"]["ancillary"]["domain"] + "_gfs.t" + timeRun.strftime('%H') + "z.0p25." + timeRun.strftime('%Y%m%d') + "_" + variables[varHMC][varGFS]["out_group"] + ".nc"
+            outName = outNameTemplate.format(out_group=variables[varHMC][varGFS]["out_group"])
 
             if not os.path.isfile(os.path.join(outFolder, outName)):
                 varFilled.to_dataset(name=variables[varHMC][varGFS]["varName"]).to_netcdf(
