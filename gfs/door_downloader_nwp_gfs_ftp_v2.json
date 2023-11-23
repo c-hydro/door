@@ -14,7 +14,8 @@
     "template": {
       "outcome_filename": "%Y%m%d",
       "outcome_datetime": "%Y/%m/%d/",
-      "outcome_timerun": "%H"
+      "outcome_timerun": "%H",
+      "filename_datetime": "%Y%m%d%H"
     }
   },
   "data": {
@@ -40,7 +41,7 @@
             "height": 2,
             "varName": "2t",
             "freq": "1H",
-            "out_group": "other_variables"
+            "out_group": ""
           }
         },
         "relative_humidity": {
@@ -48,7 +49,7 @@
             "height": 2,
             "varName": "2r",
             "freq": "1H",
-            "out_group": "other_variables"
+            "out_group": ""
           }
         },
         "rain": {
@@ -56,7 +57,7 @@
             "height": 0,
             "varName": "tp",
             "freq": "1H",
-            "out_group": "other_variables"
+            "out_group": ""
           }
         },
         "wind": {
@@ -64,13 +65,13 @@
             "height": 10,
             "varName": "10u",
             "freq": "1H",
-            "out_group": "other_variables"
+            "out_group": ""
           },
           "v-component_of_wind_height_above_ground": {
             "height": 10,
             "varName": "10v",
             "freq": "1H",
-            "out_group": "other_variables"
+            "out_group": ""
           }
         },
         "radiation": {
@@ -78,19 +79,19 @@
             "height": 0,
             "varName": "dswrf",
             "freq": "1H",
-            "out_group": "other_variables"
+            "out_group": ""
           },
           "Downward_Long-Wave_Radp_Flux_surface_Mixed_intervals_Average": {
             "height": 0,
             "varName": "dlwrf",
             "freq": "1H",
-            "out_group": "other_variables"
+            "out_group": ""
           },
           "Albedo_surface_Mixed_intervals_Average": {
             "height": 0,
             "varName": "al",
             "freq": "1H",
-            "out_group": "other_variables"
+            "out_group": ""
           }
         }
       },

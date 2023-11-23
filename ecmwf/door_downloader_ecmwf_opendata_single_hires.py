@@ -174,7 +174,6 @@ def main():
         logging.info(" ---> Convert meters to mm of rain...")
         frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = frc_out[data_settings['data']['dynamic'][
             "variables"]["tp"]] * 1000
-        frc_out.to_netcdf("/home/andrea/Desktop/Working_dir/meteo/ecmwf/ancillary/2023/09/29/test_intermedio.nc")
 
         if data_settings['data']['dynamic']["vars_standards"]["decumulate_precipitation"] is True:
             logging.info(" ---> Variable tp is cumulated... Performing decumulation")

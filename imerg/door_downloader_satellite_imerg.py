@@ -318,8 +318,10 @@ def dload_early_run(time_now, downloader_settings):
         vers = "B"
     elif time_now <= dt.datetime(2023,7,1,23,30,0):
         vers = "C"
-    else:
+    elif time_now <= dt.datetime(2023, 11, 8, 12, 30, 0):
         vers = "D"
+    else:
+        vers = "E"
 
     url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/early/' + time_now.strftime("%Y/%m") + '/' + \
           '3B-HHR-E.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
@@ -355,8 +357,10 @@ def dload_late_run(time_now,downloader_settings):
         vers = "B"
     elif time_now <= dt.datetime(2023,7,1,13,30,0):
         vers = "C"
-    else:
+    elif time_now <= dt.datetime(2023, 11, 8, 1, 30, 0):
         vers = "D"
+    else:
+        vers = "E"
 
     url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/' + time_now.strftime("%Y/%m") + '/' + \
           '3B-HHR-L.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
