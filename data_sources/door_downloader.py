@@ -27,6 +27,7 @@ class DOORDownloader():
         Gathers all the data from the remote source in the TimeRange,
         also checks that the data is not available yet before gathering it
         """
-
         source = self.data_source
         source_name = source.__class__.__name__
+        variable_name = source.variable
+
