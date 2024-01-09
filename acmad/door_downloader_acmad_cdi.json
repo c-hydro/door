@@ -1,0 +1,33 @@
+{
+  "algorithm": {
+    "flags": {
+      "realtime_use": true,
+      "historical_use": false,
+      "overwrite_output": true,
+      "fill_with_preliminary_version": true
+    },
+    "ancillary": {
+      "domain": "acmad",
+      "credentials": {
+        "username": null,
+        "password": null
+      }
+    },
+    "template": {
+      "folder_datetime_out": "%Y/%m/",
+      "file_datetime_out": "%Y%m%d"
+    }
+  },
+  "data": {
+    "dynamic": {
+      "outcome": {
+          "folder": "/home/andrea/Desktop/WorkingDir/ACMAD/outcome/final/{folder_datetime_out}",
+          "filename": "{domain}_cdi_{file_datetime_out}.tif"
+        }
+    },
+    "log": {
+      "filename": "door_downloader_ACMAD_CDI.txt",
+      "folder": "/home/andrea/Desktop/WorkingDir/ACMAD/"
+    }
+  }
+}

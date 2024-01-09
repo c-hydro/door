@@ -1,7 +1,7 @@
 {
   "algorithm": {
     "flags": {
-      "downloading_mp": true,
+      "downloading_mp": false,
       "clean_ancillary": true
     },
     "domain": "africa",

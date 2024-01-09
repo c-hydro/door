@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 1.1.3 [2024-01-09]
+**************************
+APP: **door_downloader_acmad_cdi.py**
+    - Beta release for door package
+        
 Version 1.1.2 [2023-09-29]
 **************************
 APP: **door_downloader_satellite_chirps.py**
