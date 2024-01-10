@@ -1,8 +1,6 @@
 {
   "algorithm": {
     "flags": {
-      "realtime_use": true,
-      "historical_use": false,
       "overwrite_output": true,
       "fill_with_preliminary_version": true
     },
