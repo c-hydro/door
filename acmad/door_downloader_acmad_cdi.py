@@ -69,11 +69,6 @@ def main():
 
     # -------------------------------------------------------------------------------------
     product = 'cdi'
-    
-    # Check compatibility of flags
-    if data_settings['algorithm']['flags']["realtime_use"] == data_settings['algorithm']['flags']["historical_use"]:
-        logging.error(' ==> REALTIME and HISTORICAL flags cannot be both active or not active! Choose if use historical mode or realtime')
-        raise NotImplementedError()
 
     # Check server availability
     base_url = "https://ada.acmad.org/"
@@ -87,11 +82,13 @@ def main():
 
     # -------------------------------------------------------------------------------------
     # Set reference time
+    # Real-time mode
+    if alg_time is None:
+        logging.info(" --> Reference time not provided, check last vailable map")
+        date_ref = datetime.datetime(available_datasets["latest_year"], available_datasets["latest_month"],
+                                     available_datasets["latest_dekad"])
     # Historical mode
-    if data_settings['algorithm']['flags']["historical_use"]:
-        if alg_time is None:
-            logging.error(' --> ERROR! Historical mode active, but no time specified!')
-            raise NotImplementedError()
+    else:
         date_run = datetime.datetime.strptime(alg_time, "%Y-%m-%d %H:%M")
         logging.info(" --> Historical mode active, delayed time is " + alg_time)
         if date_run.day < 11:
@@ -101,12 +98,6 @@ def main():
         else:
             day_ref = 21
         date_ref = datetime.datetime(date_run.year, date_run.month, day_ref)
-
-    # Realtime mode
-    if data_settings['algorithm']['flags']["realtime_use"]:
-        logging.info(" --> Realtime mode active, check last vailable map")
-        date_ref = datetime.datetime(available_datasets["latest_year"], available_datasets["latest_month"],
-                                     available_datasets["latest_dekad"])
 
     if date_ref.day == 1:
         dekad = "1st"
@@ -145,8 +136,8 @@ def main():
         netrc_handle = netrc.netrc()
         username, _, password = netrc_handle.authenticators('http://ada.acmad.org:5000/')
     else:
-        username = data_settings["data"]["credential_historical_ucar_archive"]["username"]
-        password = data_settings["data"]["credential_historical_ucar_archive"]["password"]
+        username = data_settings["algorithm"]["ancillary"]["credentials"]["username"]
+        password = data_settings["algorithm"]["ancillary"]["credentials"]["password"]
     logging.info(" --> Connection established")
 
     
@@ -170,7 +161,8 @@ def main():
             f.write(response.content)
         logging.info("File downloaded successfully and saved to " + output_filename)
     else:
-        logging.info("Error:", response.status_code, response.text)
+        logging.error("Error:", response.status_code, response.text)
+        raise FileNotFoundError()
 
     # Info algorithm
     time_elapsed = round(time.time() - start_time, 1)
