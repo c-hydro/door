@@ -68,3 +68,10 @@ def fill_template(templates, time_now):
 # -------------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------------
+def format_string(string, filled_dict):
+    class SafeDict(dict):
+        def __missing__(self, key):
+            return '{' + key + '}'
+
+    formatted_string = string.format_map(SafeDict(**filled_dict))
+    return formatted_string
