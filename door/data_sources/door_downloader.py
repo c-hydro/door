@@ -6,7 +6,7 @@ import logging
 import datetime as dt
 
 from typing import Optional
-from ..lib.time import TimeRange
+from ..utils.time import TimeRange
 
 class DOORDownloader():
     def __init__(self,

@@ -10,7 +10,7 @@ import datetime as dt
 
 from osgeo import gdal
 from ..downloader_http import downloaderHTTP
-from ...lib.basic import fill_template, format_string
+from ...utils.basic import fill_template, format_string
 
 class CHIRPS_Downloader(downloaderHTTP):
     def __init__(self, product: str, start_time: dt.datetime, end_time: dt.datetime, bbox: list, output, tmp_path, time_template) -> None:
