@@ -1,5 +1,6 @@
 import os
 import json
+import datetime
 
 from argparse import ArgumentParser
 from copy import deepcopy
@@ -75,3 +76,14 @@ def format_string(string, filled_dict):
 
     formatted_string = string.format_map(SafeDict(**filled_dict))
     return formatted_string
+
+def format_dict(dict):
+    str_list = []
+    for key, value in dict.items():
+        if type(value) == float:
+            str_list.append(f'{key}={value:.2f}')
+        elif type(value) == datetime.datetime:
+            str_list.append(f'{key}={value:%Y-%m-%d}')
+        else:
+            str_list.append(f'{key}={value}')
+    return ', '.join(str_list)
