@@ -2,7 +2,7 @@
 
 # ----------------------------------------------------------------------------------------
 # Script information
-script_name='DOOR DOWNLOADER - HSAF PRODUCT PRECIPITATION H60 - REALTIME'
+script_name='DOOR DOWNLOADER - HSAF PRODUCT PRECIPITATION H60'
 script_version="2.3.0"
 script_date='2024/01/24'
 
