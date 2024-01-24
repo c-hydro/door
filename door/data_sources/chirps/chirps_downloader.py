@@ -50,7 +50,7 @@ class CHIRPSDownloader(HTTPDownloader):
         options = self.check_options(options)
 
         # Get the timesteps to download
-        timesteps = time_range.get_regular_timesteps(self.ts_per_year)
+        timesteps = time_range.get_timesteps_from_tsnumber(self.ts_per_year)
         missing_times = []
         
         # Do all of this inside a temporary folder

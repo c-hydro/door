@@ -6,7 +6,7 @@ import os
 import xarray as xr
 import requests
 
-from .utils.basic import format_dict
+from .utils.parse import format_dict
 from .utils.time import TimeRange
 from .utils.space import SpatialReference
 
@@ -20,20 +20,6 @@ class DOORDownloader():
 
     def __init__(self) -> None:
         pass
-
-    # def setup_product_time(self, start_time: dt.datetime, end: dt.datetime) -> pd.date_range:
-    #     """
-    #     Set the product time features for the data source.
-    #     This is a mandatory method for all subclasses.
-    #     """
-    #     if self.freq is None:
-    #         logging.error(" --> ERROR! Frequency for the product must be defined!")
-    #     return [i for i in pd.date_range(start=start_time, end=end, freq=self.freq)]
-
-    # def setup_io(self, time_range: list, template: dict) -> dict:
-    #     """
-    #     For each time step define the output name and the url to download the data.
-    #     """
 
     def get_data(self,
                  time_range: TimeRange,
