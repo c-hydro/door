@@ -3,30 +3,30 @@
 # ----------------------------------------------------------------------------------------
 # Script information
 script_name='DOOR DOWNLOADER - HSAF PRODUCT PRECIPITATION H61'
-script_version="2.2.0"
-script_date='2024/01/15'
+script_version="2.3.0"
+script_date='2024/01/24'
 
 # script mode
-script_mode='history' # 'history' or 'realtime' 
+script_mode='realtime' # 'history' or 'realtime' 
 # script period
-days=5
+days=30
 
 # Script argument(s)
 data_folder_static_geo="/home/hsaf/hsaf_datasets/static/precipitation/geo/h61/"
-data_folder_static_geo="/home/fabio/Desktop/Door_Workspace/door-ws/hsaf/data_static/h61/"
+#data_folder_static_geo="/home/fabio/Desktop/Door_Workspace/door-ws/hsaf/data_static/h61/"
 
 data_folder_static_grid="/home/hsaf/hsaf_datasets/static/precipitation/gridded/"
-data_folder_static_grid="/home/fabio/Desktop/Door_Workspace/door-dev/hsaf/h61/"
+#data_folder_static_grid="/home/fabio/Desktop/Door_Workspace/door-dev/hsaf/h61/"
 
-data_folder_dynamic_src_raw="/home/hsaf/hsaf_datasets/dynamic/source/h61/%YYYY/%MM/%DD/%HH/"
-data_folder_dynamic_src_raw="/home/fabio/Desktop/Door_Workspace/door-ws/hsaf/data_dynamic/source/h60/%YYYY/%MM/%DD/%HH/"
+data_folder_dynamic_src_raw="/home/hsaf/hsaf_datasets/dynamic/source/h61/%YYYY/%MM/%DD/"
+#data_folder_dynamic_src_raw="/home/fabio/Desktop/Door_Workspace/door-ws/hsaf/data_dynamic/source/h61/%YYYY/%MM/%DD/%HH/"
 
 data_folder_dynamic_dst_raw="/home/hsaf/hsaf_datasets/dynamic/outcome/h61/%YYYY/%MM/%DD/%HH00/"
-data_folder_dynamic_dst_raw="/home/fabio/Desktop/Door_Workspace/door-ws/hsaf/data_dynamic/destination/h61/%YYYY/%MM/%DD/%HH00/"
+#data_folder_dynamic_dst_raw="/home/fabio/Desktop/Door_Workspace/door-ws/hsaf/data_dynamic/destination/h61/%YYYY/%MM/%DD/%HH00/"
 
 # script ftp settings
 proxy="http://130.251.104.8:3128"
-proxy=""
+#proxy=""
 
 var_rain_in='acc_rr'
 var_rain_out='rain_rate_accumulated'
@@ -70,7 +70,8 @@ var_geo_rename_y='latg,lat'
 domain_bb='-15,30,30,60'
 
 file_out_reinit=0
-file_out_compression=0
+file_out_compression=1
+file_out_zip=0
 
 # server command-line
 ncks_exec="/home/hsaf/library/nco-4.6.0/bin/ncks"
@@ -79,10 +80,10 @@ ncpdq_exec="/home/hsaf/library/nco-4.6.0/bin/ncpdq"
 cdo_exec="/home/hsaf/library/cdo-1.7.2rc3_NC-4.1.2_HDF-1.8.17/bin/cdo"
 
 # local command-line
-ncks_exec="/home/fabio/Desktop/Apps/nco-4.8.0_nc-4.6.0/bin/ncks"
-ncrename_exec="/home/fabio/Desktop/Apps/nco-4.8.0_nc-4.6.0/bin/ncrename"
-ncpdq_exec="/home/fabio/Desktop/Apps/nco-4.8.0_nc-4.6.0/bin/ncpdq"
-cdo_exec="/home/fabio/Desktop/Apps/cdo-2.0.0_nc-4.6.0_hdf-1.8.17_eccodes-2.20.0/bin/cdo"
+#ncks_exec="/home/fabio/Desktop/Apps/nco-4.8.0_nc-4.6.0/bin/ncks"
+#ncrename_exec="/home/fabio/Desktop/Apps/nco-4.8.0_nc-4.6.0/bin/ncrename"
+#ncpdq_exec="/home/fabio/Desktop/Apps/nco-4.8.0_nc-4.6.0/bin/ncpdq"
+#cdo_exec="/home/fabio/Desktop/Apps/cdo-2.0.0_nc-4.6.0_hdf-1.8.17_eccodes-2.20.0/bin/cdo"
 
 # Export library path dependecies
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/hsaf/library/grib_api-1.15.0/lib/
@@ -95,7 +96,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/hsaf/library/grib_api-1.15.0/lib/
 # ----------------------------------------------------------------------------------------
 # Get time
 time_now=$(date '+%Y-%m-%d')
-#time_now='2023-04-23'
+time_now='2022-05-12'
 # ----------------------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------------
@@ -140,15 +141,28 @@ for day in $(seq 0 $days); do
     year_get=$(date -u -d "$date_step" +"%Y")
     month_get=$(date -u -d "$date_step" +"%m")
     day_get=$(date -u -d "$date_step" +"%d")
+    hour_get=$(date -u -d "$date_step" +"%H")
     # ----------------------------------------------------------------------------------------
 	
 	# ----------------------------------------------------------------------------------------
 	# Iterate over hour(s)
-	for hour in $(seq 23 -1 0); do
+	if [ "$script_mode" == 'realtime' ]; then
+		count_start=${hour_get}
+		count_end=${hour_get}
+	elif [ "$script_mode" == 'history' ]; then 
+		count_start=23
+		count_end=0
+	fi 
+	
+	for hour in $(seq ${count_start} -1 ${count_end}); do
 		
 		# ----------------------------------------------------------------------------------------
 		# get hour 
-		hour_get=$(printf "%02d" ${hour})
+		if [ "$script_mode" == 'realtime' ]; then
+			hour_get=$(printf $(date '+%H'))
+		elif [ "$script_mode" == 'history' ]; then 
+			hour_get=$(printf "%02d" ${hour})
+		fi
 		# ----------------------------------------------------------------------------------------
 		
     	# ----------------------------------------------------------------------------------------
@@ -160,12 +174,16 @@ for day in $(seq 0 $days); do
 		ftp_folder_def=${ftp_folder_def/'%MM'/$month_get}
 		ftp_folder_def=${ftp_folder_def/'%DD'/$day_get}
 		ftp_folder_def=${ftp_folder_def/'%HH'/$hour_get}
-		
+
 		# Define dynamic folder(s)
     	data_folder_dynamic_src_def=${data_folder_dynamic_src_raw/'%YYYY'/$year_get}
     	data_folder_dynamic_src_def=${data_folder_dynamic_src_def/'%MM'/$month_get}
-    	data_folder_dynamic_src_def=${data_folder_dynamic_src_def/'%DD'/$day_get}
-		data_folder_dynamic_src_def=${data_folder_dynamic_src_def/'%HH'/$hour_get}
+    	data_folder_dynamic_src_def=${data_folder_dynamic_src_def/'%DD'/$day_get}    
+    	if [ "$script_mode" == 'realtime' ]; then	
+			data_folder_dynamic_src_def=${data_folder_dynamic_src_def/'%HH'/'realtime'}
+		elif [ "$script_mode" == 'history' ]; then 
+			data_folder_dynamic_src_def=${data_folder_dynamic_src_def/'%HH'/$hour_get}
+		fi
 		# ----------------------------------------------------------------------------------------
 
 		# ----------------------------------------------------------------------------------------	
@@ -179,7 +197,7 @@ for day in $(seq 0 $days); do
 		# Get file list from ftp
 		# Example
 		# open -u "sgabellani_r","gabellaniS334" "ftphsaf.meteoam.it"
-		# cd "/products/h60/h60_cur_mon_data/"
+		# cd "/products/h61/h61_cur_mon_data/"
 		# cls -1 | sort -r | grep "20230515" | sed -e "s/@//"
 		
 		ftp_file_list=`lftp << EOF
@@ -191,6 +209,7 @@ for day in $(seq 0 $days); do
 		quit
 EOF`
 	   	#echo " ===> LIST FILES: $ftp_file_list "
+	   	#exit
 		# ----------------------------------------------------------------------------------------
 
 		# ----------------------------------------------------------------------------------------
@@ -262,7 +281,7 @@ ftprem`
 		    file_name_nc_tmp_step2=${file_name_nc_generic/'%DOMAIN'/$str_nc_tmp_step2}'.nc'
 		    file_name_nc_tmp_step3=${file_name_nc_generic/'%DOMAIN'/$str_nc_tmp_step3}'.nc'
 		    
-		    file_name_nc_pattern='hsaf_h60_'${file_date_part1_nc_in}${file_date_part2_nc_in}'_'${str_nc_out}
+		    file_name_nc_pattern='hsaf_h61_'${file_date_part1_nc_in}${file_date_part2_nc_in}'_'${str_nc_out}
 		    
 		    #file_name_nc_out=${file_name_nc_generic/'%DOMAIN'/$str_nc_out}'.nc'
 		    #file_name_zip_out=${file_name_nc_generic/'%DOMAIN'/$str_nc_out}'.nc.gz'
@@ -287,7 +306,7 @@ ftprem`
 		    create_nc=true
 
 			# Define file check
-		    if [ "$file_out_compression" -eq "1" ]; then
+		    if [ "$file_out_zip" -eq "1" ]; then
 				file_path_check_out=${file_path_zip_out}
 			else
 				file_path_check_out=${file_path_nc_out}
@@ -422,23 +441,36 @@ ftprem`
 			    echo -n " =====> REGRID FILE VARIABLE(S) OVER REGULAR GRID: ${file_path_nc_tmp_step3} to ${file_path_nc_out} ..."
 			    if ! [ -e ${file_path_nc_out} ]; then
 			    	
-			        if ${cdo_exec} remapnn,${file_path_nc_grid} ${file_path_nc_tmp_step3} ${file_path_nc_out} > /dev/null 2>&1; then
-		                echo " DONE!"
-		            else
-		                echo " FAILED! Error in command execution!"
-		                create_nc=false
-		            fi
+			    	if [ "$file_out_compression" -eq "1" ]; then
+			    		echo -n " ZIP COMPRESSION ACTIVATED ... " 
+					    if ${cdo_exec} -z zip_9 remapnn,${file_path_nc_grid} ${file_path_nc_tmp_step3} ${file_path_nc_out} > /dev/null 2>&1; then
+				            echo " DONE!"
+				        else
+				            echo " FAILED! Error in command execution!"
+				            create_nc=false
+				        fi
+				        
+				    else
+		        
+				    	echo -n " ZIP COMPRESSION NOT ACTIVATED ... "
+					    if ${cdo_exec} remapnn,${file_path_nc_grid} ${file_path_nc_tmp_step3} ${file_path_nc_out} > /dev/null 2>&1; then
+				            echo " DONE!"
+				        else
+				            echo " FAILED! Error in command execution!"
+				            create_nc=false
+		            	fi
+		        
+		        	fi
 			        
 				else
 					echo " SKIPPED! File variable(s) previously regridded on regular grid!"
 				fi
 			    # ----------------------------------------------------------------------------------------
 				
-
 			    # ----------------------------------------------------------------------------------------
 			    # Check file nc 
 			    echo -n " =====> CHECK AND COMPRESS FILE NC: ${file_path_nc_out} ..."
-			    if [ "$file_out_compression" -eq "1" ]; then
+			    if [ "$file_out_zip" -eq "1" ]; then
 					if [ "$create_nc" = true ] ; then
 					    gzip ${file_path_nc_out}
 					    echo " PASS!"
@@ -481,7 +513,7 @@ ftprem`
 			    rm ${file_path_nc_tmp_step3} 
 		    fi
 		    
-		    if [ "$file_out_compression" -eq "1" ]; then
+		    if [ "$file_out_zip" -eq "1" ]; then
 				if [ -e ${file_path_nc_out} ]; then
 			    	rm ${file_path_nc_out} 
 		    	fi
