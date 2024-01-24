@@ -96,7 +96,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/hsaf/library/grib_api-1.15.0/lib/
 # ----------------------------------------------------------------------------------------
 # Get time
 time_now=$(date '+%Y-%m-%d')
-time_now='2022-05-12'
+# time_now='2022-05-12'
 # ----------------------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------------
@@ -254,8 +254,9 @@ ftprem`
 		    
 		    file_name_nc_in="${file_name_tmp%.*}"
 		    
-		    file_date_part1_nc_in=${file_name_nc_in:4:8}
-		    file_date_part2_nc_in=${file_name_nc_in:13:4}
+        	file_date_part1_nc_in=${file_name_nc_in:4:8}
+        	file_date_part2_nc_in=${file_name_nc_in:13:4}
+        	file_date_part3_nc_in=${file_name_nc_in:18:2}
 		    
 		    file_year=${file_date_part1_nc_in:0:4}
 		    file_month=${file_date_part1_nc_in:4:2}
@@ -281,7 +282,8 @@ ftprem`
 		    file_name_nc_tmp_step2=${file_name_nc_generic/'%DOMAIN'/$str_nc_tmp_step2}'.nc'
 		    file_name_nc_tmp_step3=${file_name_nc_generic/'%DOMAIN'/$str_nc_tmp_step3}'.nc'
 		    
-		    file_name_nc_pattern='hsaf_h61_'${file_date_part1_nc_in}${file_date_part2_nc_in}'_'${str_nc_out}
+		    #file_name_nc_pattern='hsaf_h61_'${file_date_part1_nc_in}${file_date_part2_nc_in}'_'${str_nc_out}
+            file_name_nc_pattern='hsaf_h61_'${file_date_part1_nc_in}${file_date_part2_nc_in}'_'${file_date_part3_nc_in}'_'${str_nc_out}
 		    
 		    #file_name_nc_out=${file_name_nc_generic/'%DOMAIN'/$str_nc_out}'.nc'
 		    #file_name_zip_out=${file_name_nc_generic/'%DOMAIN'/$str_nc_out}'.nc.gz'
