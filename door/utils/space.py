@@ -8,7 +8,7 @@ from osgeo import gdal, gdalconst
 
 class SpatialReference():
 
-    _resampling_methods = ['NearestNeighbor', 'Bilinear',
+    _resampling_methods = ['NearestNeighbour', 'Bilinear',
                            'Cubic', 'CubicSpline',
                            'Lanczos',
                            'Average', 'Mode',
@@ -28,6 +28,19 @@ class SpatialReference():
         If mask_values is specified, data values equal to mask_values will be masked (set to NaN).
         """
         self.check_inputs(grid_file, resampling_method, mask_values)
+
+    @property
+    def resampling_method(self) -> str:
+        return self._resampling_method
+
+    @resampling_method.setter
+    def resampling_method(self, resampling_method: str) -> None:
+        for method in self._resampling_methods:
+            if resampling_method.lower() == method.lower():
+                self._resampling_method = method
+                break
+        else:
+            raise ValueError("resampling_method must be one of the following: " + ", ".join(self._resampling_methods) + ".")
 
     def check_inputs(self, grid_file, resampling_method, mask_values):
 
@@ -49,13 +62,9 @@ class SpatialReference():
             if not os.path.exists(grid_file):
                 raise ValueError('grid_file does not exist')
         self.get_attrs_from_grid(grid_file)
-        
-        for method in self._resampling_methods:
-            if resampling_method.lower() == method.lower():
-                self.resampling_method = method
-                break
-        else:
-            raise ValueError("resampling_method must be one of the following: " + ", ".join(self._resampling_methods) + ".")
+
+        self.resampling_method = resampling_method
+
     
     def get_attrs_from_grid(self, grid_file):
         """
@@ -92,44 +101,3 @@ class SpatialReference():
 
         del grid_data
 
-    def regrid_raster(self, input_file: str, output_file: str, nodata_value: Optional[float] = None):
-        # Open the input and reference raster files
-        input_raster = gdal.Open(input_file, gdalconst.GA_ReadOnly)
-        if nodata_value is not None:
-            input_raster.GetRasterBand(1).SetNoDataValue(nodata_value)
-
-        # Get the resampling method
-        resampling = getattr(gdalconst, f'GRA_{self.resampling_method.capitalize()}')
-
-        # Create an output raster file with the same properties as the reference raster
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        output_raster = gdal.GetDriverByName('GTiff').Create(
-            output_file, 
-            self.shape[1],
-            self.shape[0], 
-            input_raster.RasterCount, 
-            input_raster.GetRasterBand(1).DataType,
-            ['COMPRESS=LZW']
-            #see https://gdal.org/drivers/raster/gtiff.html for creation options.
-        )
-        output_raster.SetGeoTransform(self.transform)
-        output_raster.SetProjection(self.crs)
-
-        # Perform the projection & resampling 
-        gdal.ReprojectImage(
-            input_raster, 
-            output_raster, 
-            input_raster.GetProjection(),
-            self.crs, 
-            resampling
-        )
-
-        # Apply mask if specified by setting to NaN all values where the mask is True
-        if self.apply_mask:
-            data = output_raster.GetRasterBand(1).ReadAsArray()
-            data[self.mask == 0] = np.nan
-            output_raster.GetRasterBand(1).WriteArray(data)
-
-        # Close the files
-        del input_raster
-        del output_raster

@@ -8,7 +8,7 @@ import numpy as np
 GRID_FILE = '/home/luca/Documents/CIMA_code/DOOR/workflow_examples/sample_grid_IT.tif'
 
 time_range = TimeRange(start='2023-12-25', end='2024-01-03')
-space_ref  = SpatialReference(grid_file=GRID_FILE, resampling_method='Bilinear', mask_values = np.nan)
+space_ref  = SpatialReference(grid_file=GRID_FILE, resampling_method='NearestNeighbour', mask_values = np.nan)
 
 test_downloader = VIIRSDownloader('FAPAR')
 test_downloader.get_data(time_range, space_ref,

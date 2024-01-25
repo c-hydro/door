@@ -19,7 +19,8 @@ setup(
     keywords='data retrieval, meteorological data, satellite data, climatological data, environmental data, raster data,\
         xarray, netcdf, hdf5, grib, hdf4, hdf-eos, hdf-eos5, geotiff',
     install_requires=[
-        'gdal[numpy] >= 3.4.3'
+        'gdal[numpy] >= 3.4.3',
+        'h5py >= 3.4.0'
     ],
     python_requires='>=3.10',
     test_suite='tests',

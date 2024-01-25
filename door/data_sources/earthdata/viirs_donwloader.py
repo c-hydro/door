@@ -2,9 +2,10 @@ from datetime import datetime, timedelta
 from tempfile import TemporaryDirectory
 from typing import Optional
 
+import h5py
+import numpy as np
+
 from .cmr_downloader import CMRDownloader
-from ...utils.time import TimeRange
-from ...utils.space import SpatialReference
 
 
 class VIIRSDownloader(CMRDownloader):
@@ -16,17 +17,30 @@ class VIIRSDownloader(CMRDownloader):
     # ]
     available_variables = {
         'fapar': ['LPDAAC_ECS', 'VNP15A2H', '001', 'viirs',
-                  [[1, 'FAPAR',         (0,100), 0.01],
-                   [2, 'FAPAR_QC',      (0,254), 1   ],
-                   [3, 'FAPAR_ExtraQC', (0,254), 1   ]]],
+                  [[0, 'FAPAR',         (0,100), 0.01, 'cont'],
+                   [1, 'FAPAR_QC',      (0,254), 1   , '8bit'],
+                   [2, 'FAPAR_ExtraQC', (0,254), 1   , '8bit']]],
         'phenology': ['LPDAAC_ECS', 'VNP22Q2', '001', 'annual',
-                      [[6,  'GLSP_QC1',      (0,254),   1],
-                       [10, 'GLSP_GSStart1', (1,32766), 1],
-                       [12, 'GLSP_GSEnd1',   (1,32766), 1],
-                       [25, 'GLSP_QC2',      (0,254),   1],
-                       [29, 'GLSP_GSStart2', (1,32766), 1],
-                       [31, 'GLSP_GSEnd2',   (1,32766), 1]]]
+                      [[6,  'GLSP_QC1',      (0,254),   1, '8bit'],
+                       [10, 'GLSP_GSStart1', (1,32766), 1, 'cat'],
+                       [12, 'GLSP_GSEnd1',   (1,32766), 1, 'cat'],
+                       [25, 'GLSP_QC2',      (0,254),   1, '8bit'],
+                       [29, 'GLSP_GSStart2', (1,32766), 1, 'cat'],
+                       [31, 'GLSP_GSEnd2',   (1,32766), 1, 'cat'],]]
     }
+
+    # source: http://spatialreference.org/ref/sr-org/modis-sinusoidal/
+    projection = 'PROJCS["unnamed",\
+                  GEOGCS["Unknown datum based upon the custom spheroid", \
+                  DATUM["Not specified (based on custom spheroid)", \
+                  SPHEROID["Custom spheroid",6371007.181,0]], \
+                  PRIMEM["Greenwich",0],\
+                  UNIT["degree",0.0174532925199433]],\
+                  PROJECTION["Sinusoidal"], \
+                  PARAMETER["longitude_of_center",0], \
+                  PARAMETER["false_easting",0], \
+                  PARAMETER["false_northing",0], \
+                  UNIT["Meter",1]]'
 
     def __init__(self, variable) -> None:
         """
@@ -69,25 +83,31 @@ class VIIRSDownloader(CMRDownloader):
             self.timesteps_doy = [1]
         self.layers = varopts['layers']
     
-    def get_data(self,
-                 time_range: TimeRange,
-                 space_ref: SpatialReference,
-                 destination: str,
-                 options: Optional[dict] = None) -> None:
+    # this is specific to VIIRS, different from MODIS!
+    def get_geotransform(self, filename):
         """
-        Get VIIRS data from the CMR.
+        Get geotransform from dataset.
         """
-        timesteps = time_range.get_timesteps_from_DOY(self.timesteps_doy)
-        with TemporaryDirectory() as tmpdir:
-            for time in timesteps:
-                # get the data from the CMR
-                url_list = self.cmr_search(time, space_ref.bbox)
-            
-                file_list = self.download(url_list, tmpdir)
-                for layer in self.layers:
-                    mosaic = self.build_mosaic_from_hdf5(file_list, layer['id'])
-                breakpoint()
-    
+        # get the filename of the metadata containing the geolocation
+        metadata_filename = filename.split('"')[1]
+        with h5py.File(metadata_filename, 'r') as f:
+            metadata = f['HDFEOS INFORMATION']['StructMetadata.0'][()].split()
+            metadata_list = [s.decode('utf-8').split('=') for s in metadata]
+
+            # get the coordinates of the upper left and lower right corners
+            self.ulx, self.uly  = eval([s[1] for s in metadata_list if s[0] == 'UpperLeftPointMtrs'][0])
+            self.lrx, self.lry = eval([s[1] for s in metadata_list if s[0] == 'LowerRightMtrs'][0])
+
+            # get the size of the dataset (in pixels)
+              # these lines are super hacky, but they work
+            self.xsize = eval([s[1] for s in metadata_list if s[0] == 'XDim'][0])
+            self.ysize = eval([s[1] for s in metadata_list if s[0] == 'YDim'][0])
+
+        
+        geotransform = (self.ulx, (self.lrx - self.ulx) / self.xsize, 0,
+                                self.uly, 0, (self.lry - self.uly) / self.ysize)
+        return geotransform
+
     def get_start(self):
         start = datetime(2012, 1, 17)
         if self.timesteps == 'viirs':

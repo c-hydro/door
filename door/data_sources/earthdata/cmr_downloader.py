@@ -1,19 +1,22 @@
-import netrc
-from typing import Optional
-from urllib.request import Request, HTTPCookieProcessor, build_opener, urlopen
+from urllib.request import Request, urlopen, build_opener, HTTPCookieProcessor
 from urllib.error import URLError, HTTPError
 import ssl
+
 import json
 import itertools
 import sys
+import numpy as np
 from datetime import datetime
+from typing import Optional
+from tempfile import TemporaryDirectory
 
-
+from osgeo import gdal
 
 from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
 from ...utils.time import TimeRange
 from ...utils.space import SpatialReference
+from ...utils.geotiff import regrid_raster, keep_valid_range, apply_scale_factor
 
 class CMRDownloader(DOORDownloader):
     """
@@ -66,18 +69,17 @@ class CMRDownloader(DOORDownloader):
             filename = url.split('/')[-1]
 
             try:
-                # In Python 3 we could eliminate the opener and just do 2 lines:
-                # resp = requests.get(url, auth=(username, password))
-                # open(filename, 'wb').write(resp.content)
-                breakpoint()
                 req = Request(url)
                 if credentials:
                     req.add_header('Authorization', 'Basic {0}'.format(credentials))
                 opener = build_opener(HTTPCookieProcessor())
                 data = opener.open(req).read()
+
                 filename_save = destination + '/' + filename
+                with open(filename_save, 'wb') as f:
+                    f.write(data)
                 
-                open(filename_save, 'wb').write(data)
+                #open(filename_save, 'wb').write(data)
                 
                 if filename_save.find('.xml') > 0:
                     continue
@@ -196,14 +198,87 @@ class CMRDownloader(DOORDownloader):
         """
         filename_filter = time.strftime('*A%Y%j*')
         return f'&producer_granule_id[]={filename_filter}&options[producer_granule_id][pattern]=true'
-
-    @staticmethod
-    def build_mosaic_from_hdf5(file_list: list[str], layer_id: int):
+    def get_data(self,
+                 time_range: TimeRange,
+                 space_ref: SpatialReference,
+                 destination: str,
+                 options: Optional[dict] = None) -> None:
         """
-        Build a mosaic from a list of HDF5 files.
+        Get data from the CMR.
         """
-        breakpoint()
+        timesteps = time_range.get_timesteps_from_DOY(self.timesteps_doy)
+        with TemporaryDirectory() as tmpdir:
+            for time in timesteps:
 
+                # get the data from the CMR
+                url_list = self.cmr_search(time, space_ref.bbox)
+                file_list = self.download(url_list, tmpdir)
+
+                # build the mosaic (one for each layer)
+                # this is better to do all at once, so that we open the HDF5 file only once
+                lnames = [layer['name'] for layer in self.layers]
+                mosaic_dest = [f'{tmpdir}/mosaic_{name}.tif' for name in lnames]
+                self.build_mosaics_from_hdf5(file_list, self.layers,
+                                             destinations = mosaic_dest)
+
+                # from here on, we work on layers individually
+                for layer, mosaic_file in zip(self.layers, mosaic_dest):
+                    lname = layer['name']
+
+                    # keep values in the valid range only
+                    valid_range = layer['range']
+                    valid_out = f'{tmpdir}/valid_{lname}.tif'
+                    keep_valid_range(mosaic_file, valid_out, valid_range)
+
+                    # regrid to the target grid (and mask if requested)
+                    regridded_out = f'{tmpdir}/regridded_{lname}.tif'
+                        # this line is a hack to make sure categorical data is not interpolated
+                    resampling_method = 'NearestNeighbour' if layer['type'] != 'cont' else None
+                    regrid_raster(valid_out, regridded_out, space_ref,
+                                  nodata_value=np.nan,
+                                  resampling_method=resampling_method)
+
+                    # apply the scale factor
+                    scale_factor = layer['scale']
+                    scaled_out = time.strftime(destination.format(layer=lname))
+                    apply_scale_factor(regridded_out, scaled_out, scale_factor)
+    
+    def build_mosaics_from_hdf5(self,
+                                file_list: list[str],
+                                layer_list: list[dict],
+                                destinations: list[str]) -> None:
+        """
+        Build a mosaic for each layer from a list of HDF5 files.
+        """
+
+        # Create a dict to hold the HDF5 datasets, one for each layer
+        hdf5_datasets = {l['id']: [] for l in layer_list}
+
+        # Open each HDF5 file and add to the list
+        for file in file_list:
+            src_ds = gdal.Open(file)
+            layers = src_ds.GetSubDatasets()
+            for tl in layer_list:
+                lid = tl['id']
+                src_layer = gdal.Open(layers[lid][0])
+                geotranform = self.get_geotransform(layers[lid][0])
+                projection = self.projection
+                src_layer.SetGeoTransform(geotranform)
+                src_layer.SetProjection(projection)
+                hdf5_datasets[lid].append(src_layer)
+
+        # Create virtual mosaics of the HDF5 datasets and save to disk
+        for tl in layer_list:
+            lid = tl['id']
+            vrt_ds = gdal.BuildVRT('', hdf5_datasets[lid])
+            output_tif = destinations[lid]
+            new_dataset = gdal.Translate(output_tif, vrt_ds, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
+
+        # Close the datasets
+        for ds in hdf5_datasets:
+            ds = None
+        vrt_ds = None
+    
     @classmethod
     def get_available_variables(cls) -> dict:
         available_variables = cls.available_variables
@@ -214,7 +289,8 @@ class CMRDownloader(DOORDownloader):
                     'layers'   : [{'id'   : l[0],
                                    'name' : l[1],
                                    'range': l[2],
-                                   'scale': l[3]} for l in available_variables[v][4]]}\
+                                   'scale': l[3],
+                                   'type' : l[4]} for l in available_variables[v][4]]}\
                 for v in available_variables}
 
 def cmr_filter_urls(search_results):
