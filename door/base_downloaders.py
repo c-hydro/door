@@ -8,7 +8,7 @@ import requests
 
 from .utils.parse import format_dict
 from .utils.time import TimeRange
-from .utils.space import SpatialReference
+from .utils.space import BoundingBox
 
 class DOORDownloader():
     """
@@ -23,7 +23,7 @@ class DOORDownloader():
 
     def get_data(self,
                  time_range: TimeRange,
-                 space_ref:  SpatialReference,
+                 space_bounds:  BoundingBox,
                  destination: str,
                  options:  Optional[dict] = None) -> xr.Dataset:
         """

@@ -15,8 +15,7 @@ from osgeo import gdal
 from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
 from ...utils.time import TimeRange
-from ...utils.space import SpatialReference
-from ...utils.geotiff import regrid_raster, keep_valid_range, apply_scale_factor
+from ...utils.space import BoundingBox
 
 class CMRDownloader(DOORDownloader):
     """
@@ -47,13 +46,6 @@ class CMRDownloader(DOORDownloader):
             self.credentials = get_credentials(self.urs_url, test_url = url)
         
         return self.credentials
-
-    def get_data(self,
-                 time_range: TimeRange,
-                 space_ref: SpatialReference,
-                 destination: str,
-                 options: Optional[dict] = None) -> None:
-        pass
 
     def download(self, url_list: list[str], destination: str) -> list[str]:
         """
@@ -114,10 +106,12 @@ class CMRDownloader(DOORDownloader):
 
         return cmr_base_url + product_query + version_query + temporal_query + spatial_query + filter_query
 
-    def cmr_search(self, time: datetime, bounding_box) -> dict:
+    def cmr_search(self, time: datetime, space_bounds: BoundingBox) -> dict:
         """
         Search CMR for files matching the query.
         """
+
+        bounding_box = space_bounds.bbox
 
         cmr_query_url = self.build_cmr_query(time, bounding_box)
         cmr_scroll_id = None
@@ -198,9 +192,10 @@ class CMRDownloader(DOORDownloader):
         """
         filename_filter = time.strftime('*A%Y%j*')
         return f'&producer_granule_id[]={filename_filter}&options[producer_granule_id][pattern]=true'
+    
     def get_data(self,
                  time_range: TimeRange,
-                 space_ref: SpatialReference,
+                 space_bounds: BoundingBox,
                  destination: str,
                  options: Optional[dict] = None) -> None:
         """
@@ -211,7 +206,7 @@ class CMRDownloader(DOORDownloader):
             for time in timesteps:
 
                 # get the data from the CMR
-                url_list = self.cmr_search(time, space_ref.bbox)
+                url_list = self.cmr_search(time, space_bounds)
                 file_list = self.download(url_list, tmpdir)
 
                 # build the mosaic (one for each layer)
@@ -224,24 +219,9 @@ class CMRDownloader(DOORDownloader):
                 # from here on, we work on layers individually
                 for layer, mosaic_file in zip(self.layers, mosaic_dest):
                     lname = layer['name']
-
-                    # keep values in the valid range only
-                    valid_range = layer['range']
-                    valid_out = f'{tmpdir}/valid_{lname}.tif'
-                    keep_valid_range(mosaic_file, valid_out, valid_range)
-
-                    # regrid to the target grid (and mask if requested)
-                    regridded_out = f'{tmpdir}/regridded_{lname}.tif'
-                        # this line is a hack to make sure categorical data is not interpolated
-                    resampling_method = 'NearestNeighbour' if layer['type'] != 'cont' else None
-                    regrid_raster(valid_out, regridded_out, space_ref,
-                                  nodata_value=np.nan,
-                                  resampling_method=resampling_method)
-
-                    # apply the scale factor
-                    scale_factor = layer['scale']
-                    scaled_out = time.strftime(destination.format(layer=lname))
-                    apply_scale_factor(regridded_out, scaled_out, scale_factor)
+                    # crop out the requested area
+                    file_out = time.strftime(destination.format(layer=lname))
+                    space_bounds.crop_raster(mosaic_file, file_out)
     
     def build_mosaics_from_hdf5(self,
                                 file_list: list[str],
@@ -288,9 +268,10 @@ class CMRDownloader(DOORDownloader):
                     'timesteps': available_variables[v][3],
                     'layers'   : [{'id'   : l[0],
                                    'name' : l[1],
-                                   'range': l[2],
-                                   'scale': l[3],
-                                   'type' : l[4]} for l in available_variables[v][4]]}\
+                                   #'range': l[2],
+                                   #'scale': l[3],
+                                   #'type' : l[4]
+                                   } for l in available_variables[v][4]]}\
                 for v in available_variables}
 
 def cmr_filter_urls(search_results):

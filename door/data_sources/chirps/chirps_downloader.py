@@ -8,8 +8,7 @@ import shutil
 
 from ...base_downloaders import HTTPDownloader
 from ...utils.time import TimeRange
-from ...utils.space import SpatialReference
-from ...utils.geotiff import regrid_raster
+from ...utils.space import BoundingBox
 
 class CHIRPSDownloader(HTTPDownloader):
     
@@ -43,7 +42,7 @@ class CHIRPSDownloader(HTTPDownloader):
             
     def get_data(self,
                  time_range: TimeRange,
-                 space_ref: SpatialReference,
+                 space_bounds: BoundingBox,
                  destination: str,
                  options: Optional[dict] = None) -> None:
 
@@ -74,7 +73,7 @@ class CHIRPSDownloader(HTTPDownloader):
                     self.extract(tmp_destination)
                     # Regrid the data
                     destination_now = time_now.strftime(destination)
-                    regrid_raster(tmp_destination[:-3], destination_now, space_ref, nodata_value = self.nodata)
+                    space_bounds.crop_raster(tmp_destination[:-3], destination_now)
                     logging.info(f' --> SUCCESS! Downloaded and regridded data for {time_now:%Y-%m-%d}')
 
             # Fill with prelimnary data
@@ -88,7 +87,7 @@ class CHIRPSDownloader(HTTPDownloader):
                     if success:
                         # Regrid the data
                         destination_now = time_now.strftime(destination)
-                        regrid_raster(tmp_destination, destination_now, space_ref, nodata_value = self.prelim_nodata)
+                        space_bounds.crop_raster(tmp_destination, destination_now)
                         logging.info(f' --> SUCCESS! Downloaded and regridded data for {time_now:%Y-%m-%d}')
 
     def extract(self, filename: str):
