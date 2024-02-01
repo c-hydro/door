@@ -74,8 +74,20 @@ class TimeRange():
             for doy in doy_list:
                 date = datetime(year, 1, 1) + timedelta(days=doy-1)
                 if date >= self.start and date <= self.end:
-                    yield date      
-
+                    yield date
+    def get_timesteps_from_issue_hour(self, issue_hours: list) -> datetime:
+        """
+        This will yield the timesteps to download oa product issued daily at given hours
+        """
+        now = self.start
+        while now <= self.end:
+            for issue_hour in issue_hours:
+                issue_time = datetime(now.year, now.month, now.day, issue_hour)
+                if issue_time >= now:
+                    now = issue_time
+                    yield now
+            day_after = now + timedelta(days=1)
+            now = datetime(day_after.year, day_after.month, day_after.day, issue_hours[0])
 def get_time_from_str(string: str, name = None) -> datetime:
     available_formats = ['%Y-%m-%d', '%Y-%m-%d %H:%M:%S']
     for format in available_formats:
