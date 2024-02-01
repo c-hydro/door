@@ -1,4 +1,6 @@
 import os
+from typing import Optional
+
 import numpy as np
 
 from osgeo import gdal, gdalconst, osr
@@ -8,20 +10,29 @@ from osgeo import gdal, gdalconst, osr
 class BoundingBox():
 
     def __init__(self,
-                 grid_file: str,
-                 buffer: int = 0,):
+                 coords: Optional[list[float]] = None,
+                 grid_file: Optional[str] = None,
+                 buffer: float = 0.0,):
         """
         Gets the CRS and bounding box of the grid file, this will be used to cut the data.
         No reprojection or resampling is done in DOOR.
         """
-        # make sure grid_file is specified and it exists
-        if grid_file is None:
-            raise ValueError('grid_file must be specified')
-        else:
+        # make sure either grid_file or coords is specified
+        if grid_file is None and coords is None:
+            raise ValueError('Either grid_file or coords must be specified')
+        elif grid_file is not None and coords is not None:
+            raise ValueError('Only one of grid_file or coords can be specified')
+        elif grid_file is not None:
             if not os.path.exists(grid_file):
                 raise ValueError('grid_file does not exist')
-        self.buffer = np.ceil(buffer)
-        self.get_attrs_from_grid(grid_file)
+            self.get_attrs_from_grid(grid_file)
+        else:
+            if len(coords) != 4:
+                raise ValueError('coords must be a list of 4 values: left, bottom, top, right')
+            self.get_attrs_from_coords(coords)
+
+        # buffer the bounding box
+        self.buffer_bbox(buffer)
     
     def get_attrs_from_grid(self, grid_file):
         """
@@ -37,15 +48,39 @@ class BoundingBox():
         #bbox in the form (min_lon, min_lat, max_lon, max_lat)
         self.xresolution = self.transform[1]
         self.yresolution = self.transform[5]
-        left   = self.transform[0] - self.buffer * self.xresolution
-        top    = self.transform[3] + self.buffer * self.yresolution
-        right  = self.transform[0] + self.shape[1]*self.transform[1] + self.buffer * self.xresolution
-        bottom = self.transform[3] + self.shape[0]*self.transform[5] - self.buffer * self.yresolution
+        left   = self.transform[0] 
+        top    = self.transform[3]
+        right  = self.transform[0] + self.shape[1]*self.transform[1]
+        bottom = self.transform[3] + self.shape[0]*self.transform[5]
         self.bbox = (left, bottom, right, top)
 
-        self.crs  = grid_data.GetProjection()
+        self.proj  = grid_data.GetProjection()
 
         del grid_data
+
+    def get_attrs_from_coords(self, coords):
+        """
+        Get attributes from coords
+        We leave all the oterh attributes as None.
+        """
+        self.grid_file = None
+        self.transform = None
+        self.shape = None
+        self.xresolution = None
+        self.yresolution = None
+        self.bbox = coords
+        self.proj = None
+
+    def buffer_bbox(self, buffer: int) -> None:
+        """
+        Buffer the bounding box, the buffer is in units of coordinates
+        """
+        self.buffer = buffer
+        left, bottom, right, top = self.bbox
+        self.bbox = (left - self.buffer,
+                     bottom - self.buffer,
+                     right + self.buffer,
+                     top + self.buffer)
 
     def crop_raster(self, input_file: str, output_file: str) -> None:
         """
@@ -59,10 +94,13 @@ class BoundingBox():
         input_srs = osr.SpatialReference()
         input_srs.ImportFromWkt(geoprojection)
         
+        if self.proj is None:
+            # if the crs is not specified, use the crs of the input file
+            self.proj = geoprojection
 
         # Create a spatial reference object for the bounding box projection
         bbox_srs = osr.SpatialReference()
-        bbox_srs.ImportFromWkt(self.crs)
+        bbox_srs.ImportFromWkt(self.proj)
         
         # this is needed to make sure that the axis are in the same order i.e. (lon, lat) or (x, y)
         # see https://gdal.org/tutorials/osr_api_tut.html#coordinate-systems-in-gdal
@@ -87,7 +125,7 @@ class BoundingBox():
             min_y = min(bl_y, br_y)
             max_y = max(tl_y, tr_y)
         else:
-            min_x, min_y, max_x, max_y = bbox_obj.bbox
+            min_x, min_y, max_x, max_y = self.bbox
 
         # in order to not change the grid, we need to make sure that the new bounds were also in the old grid
         xcoords_in = np.arange(geotransform[0], geotransform[0] + src_ds.RasterXSize * geotransform[1], geotransform[1])
