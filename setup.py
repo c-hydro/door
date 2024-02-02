@@ -20,7 +20,10 @@ setup(
         xarray, netcdf, hdf5, grib, hdf4, hdf-eos, hdf-eos5, geotiff',
     install_requires=[
         'gdal[numpy] >= 3.4.3',
-        'h5py >= 3.4.0'
+        'h5py >= 3.4.0',
+        'cfgrib >= 0.9.9',
+        'dask',
+        'scipy'
     ],
     python_requires='>=3.10',
     test_suite='tests',
