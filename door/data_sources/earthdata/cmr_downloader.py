@@ -31,6 +31,10 @@ class CMRDownloader(DOORDownloader):
     cmr_url='https://cmr.earthdata.nasa.gov'
 
     cmr_page_size = 200 #TODO: check if true
+
+    default_options = {
+        'layers': None,
+    }
     
     def __init__(self) -> None:
         # credentials should be saved in a .netrc file in the user's home directory
@@ -201,6 +205,16 @@ class CMRDownloader(DOORDownloader):
         """
         Get data from the CMR.
         """
+
+        # Check options
+        options = self.check_options(options)
+
+        # Check if all the layers are requested (e.g. we might not need both QC layers for FAPAR, depending on the project)
+        if options['layers'] is not None:
+            for layer in self.layers:
+                if layer['id'] not in options['layers']:
+                    self.layers.remove(layer)
+
         timesteps = time_range.get_timesteps_from_DOY(self.timesteps_doy)
         with TemporaryDirectory() as tmpdir:
             for time in timesteps:
@@ -213,6 +227,7 @@ class CMRDownloader(DOORDownloader):
                 # this is better to do all at once, so that we open the HDF5 file only once
                 lnames = [layer['name'] for layer in self.layers]
                 mosaic_dest = [f'{tmpdir}/mosaic_{name}.tif' for name in lnames]
+
                 self.build_mosaics_from_hdf5(file_list, self.layers,
                                              destinations = mosaic_dest)
 
@@ -247,11 +262,12 @@ class CMRDownloader(DOORDownloader):
                 src_layer.SetProjection(projection)
                 hdf5_datasets[lid].append(src_layer)
 
+        dest_dict = {l['id']: dest for l, dest in zip(layer_list, destinations)}
         # Create virtual mosaics of the HDF5 datasets and save to disk
         for tl in layer_list:
             lid = tl['id']
             vrt_ds = gdal.BuildVRT('', hdf5_datasets[lid])
-            output_tif = destinations[lid]
+            output_tif = dest_dict[lid]
             new_dataset = gdal.Translate(output_tif, vrt_ds, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
 
         # Close the datasets

@@ -33,7 +33,7 @@ class TimeRange():
                     end = get_time_from_str(end, 'end')
                 else:
                     raise ValueError('Invalid end time')
-            if start < end:
+            if start <= end:
                 self.start = start
                 self.end = end
             else:

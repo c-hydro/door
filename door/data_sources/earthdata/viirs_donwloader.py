@@ -18,8 +18,8 @@ class VIIRSDownloader(CMRDownloader):
     available_variables = {
         'fapar': ['LPDAAC_ECS', 'VNP15A2H', '001', 'viirs',
                   [[0, 'FAPAR',         (0,100), 0.01, 'cont'],
-                   [1, 'FAPAR_QC',      (0,254), 1   , '8bit'],
-                   [2, 'FAPAR_ExtraQC', (0,254), 1   , '8bit']]],
+                   [2, 'FAPAR_QC',      (0,254), 1   , '8bit'],
+                   [3, 'FAPAR_ExtraQC', (0,254), 1   , '8bit']]],
         'phenology': ['LPDAAC_ECS', 'VNP22Q2', '001', 'annual',
                       [[6,  'GLSP_QC1',      (0,254),   1, '8bit'],
                        [10, 'GLSP_GSStart1', (1,32766), 1, 'cat'],
@@ -81,6 +81,7 @@ class VIIRSDownloader(CMRDownloader):
         elif varopts['timesteps'] == 'annual':
             self.timesteps = 'annual'
             self.timesteps_doy = [1]
+
         self.layers = varopts['layers']
     
     # this is specific to VIIRS, different from MODIS!
@@ -103,7 +104,6 @@ class VIIRSDownloader(CMRDownloader):
             self.xsize = eval([s[1] for s in metadata_list if s[0] == 'XDim'][0])
             self.ysize = eval([s[1] for s in metadata_list if s[0] == 'YDim'][0])
 
-        
         geotransform = (self.ulx, (self.lrx - self.ulx) / self.xsize, 0,
                                 self.uly, 0, (self.lry - self.uly) / self.ysize)
         return geotransform
