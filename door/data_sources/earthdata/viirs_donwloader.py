@@ -96,7 +96,7 @@ class VIIRSDownloader(CMRDownloader):
             metadata_list = [s.decode('utf-8').split('=') for s in metadata]
 
             # get the coordinates of the upper left and lower right corners
-            self.ulx, self.uly  = eval([s[1] for s in metadata_list if s[0] == 'UpperLeftPointMtrs'][0])
+            self.ulx, self.uly = eval([s[1] for s in metadata_list if s[0] == 'UpperLeftPointMtrs'][0])
             self.lrx, self.lry = eval([s[1] for s in metadata_list if s[0] == 'LowerRightMtrs'][0])
 
             # get the size of the dataset (in pixels)

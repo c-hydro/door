@@ -34,6 +34,8 @@ class CMRDownloader(DOORDownloader):
 
     default_options = {
         'layers': None,
+        'make_mosaic': True,
+        'crop_to_bounds': True
     }
     
     def __init__(self) -> None:
@@ -223,58 +225,86 @@ class CMRDownloader(DOORDownloader):
                 url_list = self.cmr_search(time, space_bounds)
                 file_list = self.download(url_list, tmpdir)
 
-                # build the mosaic (one for each layer)
-                # this is better to do all at once, so that we open the HDF5 file only once
+                
                 lnames = [layer['name'] for layer in self.layers]
-                mosaic_dest = [f'{tmpdir}/mosaic_{name}.tif' for name in lnames]
 
-                self.build_mosaics_from_hdf5(file_list, self.layers,
-                                             destinations = mosaic_dest)
+                if options['make_mosaic']:
+                    # build the mosaic (one for each layer)
+                    # this is better to do all at once, so that we open the HDF5 file only once
+                    dest = [f'{tmpdir}/mosaic_{name}.tif' for name in lnames]
+                    mosaics = self.build_mosaics_from_hdf5(file_list, self.layers)#,
+                                                #destinations = dest)
+                                    # from here on, we work on layers individually
+                    for layer in self.layers:
+                        lname = layer['name']
+                        dataset = mosaics[layer['id']]
+                        file_out = time.strftime(destination.format(layer=lname))
+                        if options['crop_to_bounds']:
+                            space_bounds.crop_raster(dataset, file_out)
+                        else:
+                            gdal.Translate(file_out, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
+                        dataset = None
+                else:
+                    for tile, file in enumerate(file_list):
+                        these_hdf5_datasets = self.get_layers_from_hdf5(file, self.layers)
+                        for layer in self.layers:
+                            lname = layer['name']
+                            ds = these_hdf5_datasets[layer['id']]
+                            file_out = time.strftime(destination.format(layer=lname, tile=tile))
+                            if options['crop_to_bounds']:
+                                space_bounds.crop_raster(ds, file_out)
+                            else:
+                                gdal.Translate(file_out, ds, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
+                            ds = None
 
-                # from here on, we work on layers individually
-                for layer, mosaic_file in zip(self.layers, mosaic_dest):
-                    lname = layer['name']
-                    # crop out the requested area
-                    file_out = time.strftime(destination.format(layer=lname))
-                    space_bounds.crop_raster(mosaic_file, file_out)
-    
     def build_mosaics_from_hdf5(self,
                                 file_list: list[str],
-                                layer_list: list[dict],
-                                destinations: list[str]) -> None:
+                                layer_list: list[dict]) -> None:
         """
         Build a mosaic for each layer from a list of HDF5 files.
         """
 
-        # Create a dict to hold the HDF5 datasets, one for each layer
+        # Get the layers from the HDF5 files
         hdf5_datasets = {l['id']: [] for l in layer_list}
-
-        # Open each HDF5 file and add to the list
         for file in file_list:
-            src_ds = gdal.Open(file)
-            layers = src_ds.GetSubDatasets()
-            for tl in layer_list:
-                lid = tl['id']
-                src_layer = gdal.Open(layers[lid][0])
-                geotranform = self.get_geotransform(layers[lid][0])
-                projection = self.projection
-                src_layer.SetGeoTransform(geotranform)
-                src_layer.SetProjection(projection)
-                hdf5_datasets[lid].append(src_layer)
+            these_hdf5_datasets = self.get_layers_from_hdf5(file, layer_list)
+            for lid in these_hdf5_datasets:
+                hdf5_datasets[lid].append(these_hdf5_datasets[lid])
 
-        dest_dict = {l['id']: dest for l, dest in zip(layer_list, destinations)}
         # Create virtual mosaics of the HDF5 datasets and save to disk
+        mosaics = {l['id']: None for l in layer_list}
         for tl in layer_list:
             lid = tl['id']
             vrt_ds = gdal.BuildVRT('', hdf5_datasets[lid])
-            output_tif = dest_dict[lid]
-            new_dataset = gdal.Translate(output_tif, vrt_ds, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
+            mosaics[lid] = vrt_ds
+            #output_tif = dest_dict[lid]
+            #new_dataset = gdal.Translate(output_tif, vrt_ds, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
 
-        # Close the datasets
-        for ds in hdf5_datasets:
-            ds = None
-        vrt_ds = None
+        return mosaics
     
+    def get_layers_from_hdf5(self,
+                             hdf5_file: str,
+                             layer_list: list[dict]) -> dict[gdal.Dataset]:
+        """
+        Get the layers from an HDF5 file.
+        """
+        # Create a dict to hold the HDF5 datasets, one for each layer
+        hdf5_datasets = {l['id']: [] for l in layer_list}
+
+        # Open the HDF5 file and add to the list
+        src_ds = gdal.Open(hdf5_file)
+        layers = src_ds.GetSubDatasets()
+        for tl in layer_list:
+            lid = tl['id']
+            src_layer = gdal.Open(layers[lid][0])
+            geotranform = self.get_geotransform(layers[lid][0])
+            projection = self.projection
+            src_layer.SetGeoTransform(geotranform)
+            src_layer.SetProjection(projection)
+            hdf5_datasets[lid] = src_layer
+
+        return hdf5_datasets
+
     @classmethod
     def get_available_variables(cls) -> dict:
         available_variables = cls.available_variables
