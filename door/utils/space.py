@@ -9,67 +9,53 @@ from osgeo import gdal, gdalconst, osr
 
 class BoundingBox():
 
+    default_projection = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]]'
+
     def __init__(self,
-                 coords: Optional[list[float]] = None,
-                 grid_file: Optional[str] = None,
+                 left: float, bottom: float, right: float, top: float,
+                 projection: Optional[str] = None,
                  buffer: float = 0.0,):
         """
         Gets the CRS and bounding box of the grid file, this will be used to cut the data.
         No reprojection or resampling is done in DOOR.
         """
-        # make sure either grid_file or coords is specified
-        if grid_file is None and coords is None:
-            raise ValueError('Either grid_file or coords must be specified')
-        elif grid_file is not None and coords is not None:
-            raise ValueError('Only one of grid_file or coords can be specified')
-        elif grid_file is not None:
-            if not os.path.exists(grid_file):
-                raise ValueError('grid_file does not exist')
-            self.get_attrs_from_grid(grid_file)
+        # default to WGS84
+        if projection is None:
+            projection = self.default_projection
         else:
-            if len(coords) != 4:
-                raise ValueError('coords must be a list of 4 values: left, bottom, top, right')
-            self.get_attrs_from_coords(coords)
+            projection = get_wkt(projection)
+
+        # set the projection
+        self.proj = projection
+
+        # set the bounding box
+        self.bbox = (left, bottom, right, top)
 
         # buffer the bounding box
         self.buffer_bbox(buffer)
     
-    def get_attrs_from_grid(self, grid_file):
+    @staticmethod
+    def from_file(grid_file, buffer: float = 0.0):
         """
         Get attributes from grid_file
         We get the bounding box, crs, resolution, shape and transform of the grid.
         """
-        self.grid_file = grid_file
+
         grid_data = gdal.Open(grid_file, gdalconst.GA_ReadOnly)
 
-        self.transform = grid_data.GetGeoTransform()
-        self.shape = (grid_data.RasterYSize, grid_data.RasterXSize)
+        transform = grid_data.GetGeoTransform()
+        shape = (grid_data.RasterYSize, grid_data.RasterXSize)
 
         #bbox in the form (min_lon, min_lat, max_lon, max_lat)
-        self.xresolution = self.transform[1]
-        self.yresolution = self.transform[5]
-        left   = self.transform[0] 
-        top    = self.transform[3]
-        right  = self.transform[0] + self.shape[1]*self.transform[1]
-        bottom = self.transform[3] + self.shape[0]*self.transform[5]
-        self.bbox = (left, bottom, right, top)
+        left   = transform[0] 
+        top    = transform[3]
+        right  = transform[0] + shape[1]*transform[1]
+        bottom = transform[3] + shape[0]*transform[5]
 
-        self.proj  = grid_data.GetProjection()
+        proj  = grid_data.GetProjection()
 
-        del grid_data
-
-    def get_attrs_from_coords(self, coords):
-        """
-        Get attributes from coords
-        We leave all the oterh attributes as None.
-        """
-        self.grid_file = None
-        self.transform = None
-        self.shape = None
-        self.xresolution = None
-        self.yresolution = None
-        self.bbox = coords
-        self.proj = None
+        grid_data = None
+        return BoundingBox(left, bottom, right, top, projection = proj, buffer = buffer)
 
     def buffer_bbox(self, buffer: int) -> None:
         """
@@ -82,11 +68,16 @@ class BoundingBox():
                      right + self.buffer,
                      top + self.buffer)
 
-    def crop_raster(self, input_file: str, output_file: str) -> None:
+    def crop_raster(self, src: str|gdal.Dataset, output_file: str) -> None:
         """
         Cut a geotiff to a bounding box.
         """
-        src_ds = gdal.Open(input_file)
+        
+        if isinstance(src, str):
+            src_ds = gdal.Open(src, gdalconst.GA_ReadOnly)
+        else:
+            src_ds = src
+        
         geoprojection = src_ds.GetProjection()
         geotransform = src_ds.GetGeoTransform()
 
@@ -128,13 +119,20 @@ class BoundingBox():
             min_x, min_y, max_x, max_y = self.bbox
 
         # in order to not change the grid, we need to make sure that the new bounds were also in the old grid
-        xcoords_in = np.arange(geotransform[0], geotransform[0] + src_ds.RasterXSize * geotransform[1], geotransform[1])
-        ycoords_in = np.arange(geotransform[3], geotransform[3] + src_ds.RasterYSize * geotransform[5], geotransform[5])
+        in_min_x = geotransform[0]
+        in_res_x = geotransform[1]
+        in_num_x = src_ds.RasterXSize
+        in_min_y = geotransform[3]
+        in_res_y = geotransform[5]
+        in_num_y = src_ds.RasterYSize
+        xcoords_in = np.arange(in_min_x, in_min_x + (in_num_x +1) * in_res_x, in_res_x)
+        ycoords_in = np.arange(in_min_y, in_min_y + (in_num_y +1) * in_res_y, in_res_y)
 
-        min_x_real = max(xcoords_in[xcoords_in <= min_x])
-        max_x_real = min(xcoords_in[xcoords_in >= max_x])
-        min_y_real = max(ycoords_in[ycoords_in <= min_y])
-        max_y_real = min(ycoords_in[ycoords_in >= max_y])
+        # the if else statements are used to make sure that the new bounds are not larger than the original ones
+        min_x_real = max(xcoords_in[xcoords_in <= min_x]) if any(xcoords_in <= min_x) else min(xcoords_in)
+        max_x_real = min(xcoords_in[xcoords_in >= max_x]) if any(xcoords_in >= max_x) else max(xcoords_in)
+        min_y_real = max(ycoords_in[ycoords_in <= min_y]) if any(ycoords_in <= min_y) else min(ycoords_in)
+        max_y_real = min(ycoords_in[ycoords_in >= max_y]) if any(ycoords_in >= max_y) else max(ycoords_in)
 
         # Create the output file
         gdal.Warp(output_file, src_ds, outputBounds=(min_x_real, min_y_real, max_x_real, max_y_real),
@@ -142,3 +140,18 @@ class BoundingBox():
 
         # Close the datasets
         src_ds = None
+
+def get_wkt(proj_string: str) -> str:
+    # Create a spatial reference object
+    srs = osr.SpatialReference()
+
+    # Import the EPSG code into the spatial reference object
+    try:
+        srs.ImportFromEPSG(int(proj_string.split(':')[1]))
+    except:
+        srs.ImportFromWkt(proj_string)
+
+    # Get the WKT string
+    wkt_string = srs.ExportToWkt()
+
+    return wkt_string

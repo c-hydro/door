@@ -8,7 +8,7 @@ import numpy as np
 GRID_FILE = '/home/andrea/Workspace/pyCharm/door/workflow_examples/sample_grid_IT.tif'
 
 time_range = TimeRange(start='2024-02-01 00:00:00', end='2024-02-01 03:00:00')
-space_ref  = BoundingBox(grid_file=GRID_FILE)
+space_ref  = BoundingBox.from_file(GRID_FILE)
 
 test_downloader = ICONDownloader(product='ICON0p125')
 test_downloader.get_data(time_range, space_ref,

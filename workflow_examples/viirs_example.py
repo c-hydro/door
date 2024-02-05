@@ -5,12 +5,13 @@ from door.utils.space import BoundingBox
 
 import numpy as np
 
-GRID_FILE = '/home/luca/Documents/CIMA_code/DOOR/workflow_examples/sample_grid_IT.tif'
-
 time_range = TimeRange(start='2017-02-02', end='2017-02-02')
-space_ref  = BoundingBox(grid_file=GRID_FILE)
+space_ref  = BoundingBox(-180, -90, 180, 90, projection = 'EPSG:4326')
 
 test_downloader = VIIRSDownloader('FAPAR')
 test_downloader.get_data(time_range, space_ref,
-                         destination='/home/luca/Documents/CIMA_code/tests/VIIRS_dwl/VIIRS-{layer}_ITA_%Y%m%d.tif',
-                         options={'layers': [0,2]}) # we don't need the extra QC layer
+                         destination='/home/luca/Documents/CIMA_code/tests/VIIRS_dwl/global_raw/%Y/%m/%d/VIIRS-{layer}_wld-tile{tile}_%Y%m%d.tif',
+                         options={'layers': [0,2],         # we don't need the extra QC layer
+                                  'make_mosaic': False,    # we don't want to make a mosaic, we keep the original tiles
+                                  'crop_to_bounds': False, # we don't want to crop the data to the grid file bounds
+                                  })
