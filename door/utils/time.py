@@ -41,7 +41,10 @@ class TimeRange():
                 self.start = end
                 self.end = start
 
-    def get_timesteps_from_tsnumber(self, timesteps_per_year: int) -> datetime:
+    def get_timesteps_from_tsnumber(self, timesteps_per_year: int) -> list[datetime]:
+        return list(self.gen_timesteps_from_tsnumber(timesteps_per_year))
+    
+    def gen_timesteps_from_tsnumber(self, timesteps_per_year: int) -> datetime:
         """
         This will yield the timesteps to download on a regular frequency by the number of timesteps per year.
         timesteps_per_year is expressed as an integer indicating the number of times per year (e.g. 12 for monthly data, 365 for daily data, etc.).
@@ -62,7 +65,10 @@ class TimeRange():
                 # dekads are not implemented here, because no data is available at this frequency to download
                 raise ValueError(f'Invalid data frequency: {timesteps_per_year} times per year is not supported')
 
-    def get_timesteps_from_DOY(self, doy_list: list[int]) -> datetime:
+    def get_timesteps_from_DOY(self, doy_list: list[int]) -> list[datetime]:
+        return list(self.gen_timesteps_from_DOY(doy_list))
+    
+    def gen_timesteps_from_DOY(self, doy_list: list[int]) -> datetime:
         """
         This will yield the timesteps to download on a given list of days of the year.
         This is useful for MODIS and VIIRS data that are available at preset DOYs.
@@ -75,7 +81,11 @@ class TimeRange():
                 date = datetime(year, 1, 1) + timedelta(days=doy-1)
                 if date >= self.start and date <= self.end:
                     yield date
-    def get_timesteps_from_issue_hour(self, issue_hours: list) -> datetime:
+
+    def get_timesteps_from_issue_hour(self, issue_hours: list[int]) -> list[datetime]:
+        return list(self.gen_timesteps_from_issue_hour(issue_hours))
+    
+    def gen_timesteps_from_issue_hour(self, issue_hours: list) -> datetime:
         """
         This will yield the timesteps to download oa product issued daily at given hours
         """
@@ -88,6 +98,7 @@ class TimeRange():
                     yield now
             day_after = now + timedelta(days=1)
             now = datetime(day_after.year, day_after.month, day_after.day, issue_hours[0])
+
 def get_time_from_str(string: str, name = None) -> datetime:
     available_formats = ['%Y-%m-%d', '%Y-%m-%d %H:%M:%S']
     for format in available_formats:

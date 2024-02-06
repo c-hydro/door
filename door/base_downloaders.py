@@ -1,6 +1,5 @@
 from typing import Optional
 import datetime as dt
-import logging
 import os
 
 import pandas as pd
@@ -12,6 +11,9 @@ from .utils.parse import format_dict
 from .utils.time import TimeRange
 from .utils.space import BoundingBox
 from .utils.io import download_http
+
+import logging
+logger = logging.getLogger(__name__)
 
 class DOORDownloader():
     """
@@ -66,7 +68,7 @@ class DOORDownloader():
         if level.lower() in ['e', 'error']:
             raise FileNotFoundError(f'ERROR! {self.name} data not available: {options}')
         elif level.lower() in ['w', 'warn', 'warning']:
-            logging.warning(f'{self.name} data not available: {options}')
+            logger.warning(f'{self.name} data not available: {options}')
         elif level.lower() in ['i', 'ignore']:
             pass
         else:

@@ -17,6 +17,9 @@ from ...utils.auth import get_credentials
 from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 
+import logging
+logger = logging.getLogger(__name__)
+
 class CMRDownloader(DOORDownloader):
     """
     This class is a downloader for through the Common Metadata Repository (CMR).
@@ -62,7 +65,11 @@ class CMRDownloader(DOORDownloader):
 
         filename_ls = []
 
-        for url in url_list:
+        max_log_step = 20
+        log_step_percentage = 10
+        log_step = min(max_log_step, np.ceil(len(url_list)/log_step_percentage))
+
+        for n, url in enumerate(url_list):
             credentials = self.get_credentials(url)
             filename = url.split('/')[-1]
 
@@ -83,6 +90,9 @@ class CMRDownloader(DOORDownloader):
                     continue
                 if filename_save.find('s3credentials') < 0:
                     filename_ls.append(filename_save)
+
+                if n % log_step == 0 or n == len(url_list)-1:
+                    logger.info(f'  -> Downloaded {n+1} of {len(url_list)} files')
 
             except HTTPError as e:
                 print('HTTP error {0}, {1}'.format(e.code, e.reason))
@@ -217,17 +227,25 @@ class CMRDownloader(DOORDownloader):
                 if layer['id'] not in options['layers']:
                     self.layers.remove(layer)
 
+        logger.info(f'------------------------------------------')
+        logger.info(f'Starting download of {self.source}-{self.variable} data')
+        logger.info(f'{len(self.layers)} layers requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
+        logger.info(f'Bounding box: {space_bounds.bbox}')
+        logger.info(f'------------------------------------------')
+
         timesteps = time_range.get_timesteps_from_DOY(self.timesteps_doy)
+        logger.info(f'Found {len(timesteps)} timesteps to download.')
+
+        #TODO: bring tmp folder inside the loop, better for memory management (for all downloaders)
         with TemporaryDirectory() as tmpdir:
-            for time in timesteps:
+            for i,time in enumerate(timesteps):
+                logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
 
                 # get the data from the CMR
                 url_list = self.cmr_search(time, space_bounds)
                 file_list = self.download(url_list, tmpdir)
 
-                
                 lnames = [layer['name'] for layer in self.layers]
-
                 if options['make_mosaic']:
                     # build the mosaic (one for each layer)
                     # this is better to do all at once, so that we open the HDF5 file only once
@@ -242,8 +260,10 @@ class CMRDownloader(DOORDownloader):
                         if options['crop_to_bounds']:
                             space_bounds.crop_raster(dataset, file_out)
                         else:
+                            #TODO: combine all gdal io operations in a single module/function
                             gdal.Translate(file_out, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
                         dataset = None
+                    logger.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded and combined into a single mosaic per layer')
                 else:
                     for tile, file in enumerate(file_list):
                         these_hdf5_datasets = self.get_layers_from_hdf5(file, self.layers)
@@ -256,6 +276,9 @@ class CMRDownloader(DOORDownloader):
                             else:
                                 gdal.Translate(file_out, ds, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
                             ds = None
+                    logger.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded, {len(file_list)} tiles per layer')
+                
+            
 
     def build_mosaics_from_hdf5(self,
                                 file_list: list[str],

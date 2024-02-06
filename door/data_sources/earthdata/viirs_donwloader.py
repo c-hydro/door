@@ -10,6 +10,8 @@ from .cmr_downloader import CMRDownloader
 
 class VIIRSDownloader(CMRDownloader):
 
+    source = 'VIIRS'
+
     # list of available variables -> those not implementeed/tested yet are commented out
     # for each variable the list indicates
     # [provider, product_name, version, timesteps, (timesteps is 'viirs' for 8-day data following the VIIRS/MODIS calendar and 'annual' for annual data)
