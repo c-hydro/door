@@ -138,3 +138,32 @@ class APIDownloader(DOORDownloader):
     This typer of downloader is useful for data that can be downloaded from an API.
     Once and API client is specified, it uses a dict to send a request.
     """
+
+    def __init__(self, client) -> None:
+        self.client = client
+        pass
+        #self.cds = cdsapi.Client(progress=False)#, quiet=True)
+
+    def download(self, destination: str, min_size: float = None, missing_action: str = 'error', **kwargs) -> bool:
+        """
+        Downloads data from the CDS API based on the request.
+        dataset: the name of the dataset to download from
+        request: a dictionary with the request parameters
+        output: the name of the output file
+        """
+        # send request to the client (this works for ecmwf and cdsapi, not sure how generalisable it is)
+        try:
+            output = self.client.retrieve(**kwargs)
+            logger.debug(f'Output: {output}')
+        except Exception as e:
+            handle_missing(missing_action, kwargs)
+            logger.debug(f'Error downloading data: {e}')
+            return False
+
+        success_flag, success_msg = check_download(destination, min_size, missing_action)
+        if success_flag > 0:
+            handle_missing(missing_action, kwargs)
+            logger.debug(f'Error downloading data: {success_msg}')
+            return False
+
+        return True

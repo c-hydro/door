@@ -1,5 +1,4 @@
 import xarray as xr
-import rioxarray as rxr
 import os
 
 from .space import BoundingBox
@@ -7,12 +6,13 @@ from .space import BoundingBox
 import logging
 logger = logging.getLogger(__name__)
 
-def crop_netcdf(src: str|xr.DataArray, BBox: BoundingBox) -> xr.DataArray:
+def crop_netcdf(src: str|xr.Dataset, BBox: BoundingBox) -> xr.DataArray:
     """
     Cut a geotiff to a bounding box.
     """
     if isinstance(src, str):
-        src_ds = rxr.open_rasterio(src)
+        engine = "necdf4" if src.endswith(".nc") else "cfgrib"
+        src_ds = xr.load_dataset(src, engine=engine)
     else:
         src_ds = src
 
@@ -20,7 +20,7 @@ def crop_netcdf(src: str|xr.DataArray, BBox: BoundingBox) -> xr.DataArray:
     if src_ds.rio.crs is not None:
         BBox.transform(src_ds.rio.crs)
     else:
-        logger.warning(" --> WARNING! No CRS found in the raster, assuming it is in {BBox.epsg_code}")
+        logger.warning(f' --> WARNING! No CRS found in the raster, assuming it is in {BBox.epsg_code}')
         src_ds = src_ds.rio.write_crs(BBox.proj, inplace=True)
     # otherwise, let's assume that the bounding box is already in the right projection
     #TODO: eventually fix this...

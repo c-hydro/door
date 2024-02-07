@@ -27,7 +27,8 @@ setup(
         'requests',
         'dask',
         'scipy',
-        'ecmwf-opendata >= 0.2.0'
+        'ecmwf-opendata >= 0.2.0',
+        'cdsapi'
     ],
     python_requires='>=3.10',
     test_suite='tests',

@@ -5,18 +5,19 @@ import xarray as xr
 from ecmwf.opendata import Client
 from requests.exceptions import HTTPError
 
-from ...base_downloaders import FRCdownloader
-from ...utils.time import TimeRange
+from ...base_downloaders import APIDownloader
+from ...utils.time import TimeRange, get_regular_steps
 from ...utils.space import BoundingBox
+from ...utils.netcdf import save_netcdf
 
 import logging
 logger = logging.getLogger(__name__)
 
-class ECMWFOpenDataDownloader(FRCdownloader):
+class ECMWFOpenDataDownloader(APIDownloader):
     name = "ECMWF-OpenData"
     default_options = {
         'frc_max_step': 144,
-        'variables': ["10u", "10v"],
+        'variables': ["10u", "10v"]
     }
 
     def __init__(self, product: str) -> None:
@@ -34,6 +35,13 @@ class ECMWFOpenDataDownloader(FRCdownloader):
         self.frc_time_range = None              ##### QUESTI E' BENE DICHIARARLI QUA ANCHE SE SONO COSE CHE COMPILO DOPO?
         self.variables = None
 
+        client = Client(
+            source="ecmwf",
+            beta=True,
+            preserve_request_order=False,
+            infer_stream_keyword=True)
+        super().__init__(client)
+
     def get_data(self,
                  time_range: TimeRange,
                  space_bounds: BoundingBox,
@@ -42,6 +50,8 @@ class ECMWFOpenDataDownloader(FRCdownloader):
 
         # Check options
         options = self.check_options(options)
+
+        self.variables = options['variables']
         
         logger.info(f'------------------------------------------')
         logger.info(f'Starting download of {self.product} data from {self.name}')
@@ -51,7 +61,6 @@ class ECMWFOpenDataDownloader(FRCdownloader):
 
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_issue_hour(self.issue_hours)
-        missing_times = []
 
         # Do all of this inside a temporary folder
         with tempfile.TemporaryDirectory() as tmp_path:
@@ -65,68 +74,46 @@ class ECMWFOpenDataDownloader(FRCdownloader):
                 logger.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
                 # Set forecast steps
                 logger.debug(" ----> Set forecast steps")
-                self.max_steps = options['frc_max_step']
+
+                # at 0 and 12, we have 144 steps max, at 6 and 18, we have 90 steps max
                 if run_time.hour == 0 or run_time.hour == 12:
-                    self.check_max_steps(144)
+                    max_steps = min(options['frc_max_step'], 144)
                 else:
-                    self.check_max_steps(90)
-                self.frc_time_range, self.frc_steps = self.compute_model_steps(time_range.start)
-                tmp_destination = os.path.join(tmp_path, "")
-                os.makedirs(tmp_destination, exist_ok=True)
+                    max_steps = min(options['frc_max_step'], 90)
+                self.frc_time_range, self.frc_steps = get_regular_steps(run_time, self.freq_hours, max_steps)
 
                 logger.debug(f' ----> Downloading data')
-                self.variables = options['variables']
+                
                 tmp_filename = f'temp_frc{self.product}_{run_time:%Y%m%d%H}.grib2'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
-                self.download(tmp_destination, min_size=200, missing_action='warn', run_time=run_time)
+                request = self.build_request(run_time, tmp_destination)
+                self.download(tmp_destination, min_size = 200,  missing_action = 'w', **request)
+            
                 logger.debug(' ----> SUCCESS! Downloaded forecast data')
 
                 logger.debug(f' ----> Postprocess data')
                 frc_out = xr.load_dataset(tmp_destination, engine="cfgrib")
-                frc_out = self.postprocess_forecast(frc_out, space_bounds)                  #### QUESTA COSA PUO ESSERE FATTA IN MANIERA PIU PULITA?
+                frc_out = self.postprocess_forecast(frc_out, space_bounds)
                 logger.debug(' ----> SUCCESS! Postprocessed forecast data')
 
                 out_name = run_time.strftime(destination)
-                os.makedirs(os.path.dirname(out_name), exist_ok=True)
-                frc_out.to_netcdf(out_name)
+                save_netcdf(frc_out, out_name)
+                #os.makedirs(os.path.dirname(out_name), exist_ok=True)
+                #frc_out.to_netcdf(out_name)
                 logger.info(f'  -> SUCCESS! Data for {len(self.variables)} variables dowloaded and cropped to bounds.')
 
         logger.info(f'------------------------------------------')
 
-
-    def download(self, destination: str, min_size: float = None, missing_action: str = 'error',
-                 protocol: str = 'http', **kwargs) -> bool:
+    def build_request(self, run_time, destination):
         """
-        Downloads data with ecmwf-opendata client
+        Build the request to download the data
         """
-        client: Client = Client(
-            source="ecmwf",
-            beta=True,
-            preserve_request_order=False,
-            infer_stream_keyword=True,
+        request = dict(
+            type=self.prod_code,
+            date=run_time.strftime("%Y%m%d"),
+            time=run_time.hour,
+            step=[i for i in self.frc_steps],
+            param=self.variables,
+            target=destination
         )
-        # Perform request
-        try:
-            result = client.retrieve(
-                type=self.prod_code,
-                date=kwargs["run_time"].strftime("%Y%m%d"),
-                time=kwargs["run_time"].hour,
-                step=[i for i in self.frc_steps],
-                param=self.variables,
-                target=destination
-            )
-            logger.debug(" --> Forecast file " + result.datetime.strftime("%Y-%m-%d %H:%M") + " correctly downloaded!")
-        except HTTPError:
-            self.handle_missing(missing_action, kwargs)
-
-        # check if file has been actually downloaded
-        if not os.path.isfile(destination):
-            self.handle_missing(missing_action, kwargs)
-            return False
-
-        # check if file is empty
-        if min_size is not None and os.path.getsize(destination) < min_size:
-            self.handle_missing(missing_action, kwargs)
-            return False
-
-        return True
+        return request
