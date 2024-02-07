@@ -1,6 +1,5 @@
 from typing import Optional
 import datetime as dt
-import logging
 import os
 
 import pandas as pd
@@ -12,6 +11,9 @@ from .utils.parse import format_dict
 from .utils.time import TimeRange
 from .utils.space import BoundingBox
 from .utils.io import download_http
+
+import logging
+logger = logging.getLogger(__name__)
 
 class DOORDownloader():
     """
@@ -66,7 +68,7 @@ class DOORDownloader():
         if level.lower() in ['e', 'error']:
             raise FileNotFoundError(f'ERROR! {self.name} data not available: {options}')
         elif level.lower() in ['w', 'warn', 'warning']:
-            logging.warning(f'{self.name} data not available: {options}')
+            logger.warning(f'{self.name} data not available: {options}')
         elif level.lower() in ['i', 'ignore']:
             pass
         else:
@@ -83,6 +85,7 @@ class DOORDownloader():
                 download_http(url, destination)
             except Exception as e:
                 self.handle_missing(missing_action, kwargs)
+                logger.debug(f'Error downloading {url}: {e}')
                 return False
         else:
             raise ValueError(f'Protocol {protocol} not supported')
@@ -90,11 +93,14 @@ class DOORDownloader():
         # check if file has been actually downloaded
         if not os.path.isfile(destination):
             self.handle_missing(missing_action, kwargs)
+            logger.debug(f'File dowloaded from {url} not found in {destination}')
             return False
 
         # check if file is empty
         if min_size is not None and os.path.getsize(destination) < min_size:
             self.handle_missing(missing_action, kwargs)
+            logger.debug(f'File dowloaded from {url} saved in {destination} is too small ({os.path.getsize(destination)} bytes)')
+            breakpoint()
             return False
 
         return True
@@ -113,7 +119,7 @@ class FRCdownloader(DOORDownloader):
         step_h = self.freq_hours
         max_step = self.max_steps + step_h
         forecast_steps = np.arange(step_h, max_step, step_h)
-        time_range = [start + pd.Timedelta(str(i) + "H") for i in forecast_steps]
+        time_range = [start + pd.Timedelta(str(i) + "h") for i in forecast_steps]
         return time_range, forecast_steps
 
     def check_max_steps(self, max_steps_model: int) -> None:

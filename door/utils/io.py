@@ -17,6 +17,7 @@ def move_to_root_folder(folder):
     for root, dirs, files in os.walk(base, topdown=False):
         for name in dirs:
             os.rmdir(os.path.join(root, name))
+
 def untar_file(file_name, out_folder = None, mode = "r:bz2", move_to_root= False):
     tar = tarfile.open(file_name, mode)
     if out_folder is None:

@@ -22,6 +22,8 @@ setup(
         'gdal[numpy] >= 3.4.3',
         'h5py >= 3.4.0',
         'cfgrib >= 0.9.9',
+        'xarray>=2023.9.0',
+        'requests',
         'dask',
         'scipy',
         'ecmwf-opendata >= 0.2.0'
