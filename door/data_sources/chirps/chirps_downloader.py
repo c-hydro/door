@@ -6,11 +6,11 @@ import tempfile
 import gzip
 import shutil
 
-from ...base_downloaders import HTTPDownloader
+from ...base_downloaders import DOORDownloader
 from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 
-class CHIRPSDownloader(HTTPDownloader):
+class CHIRPSDownloader(DOORDownloader):
     
     name = "CHIRPS"
     default_options = {

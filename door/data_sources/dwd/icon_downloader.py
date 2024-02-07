@@ -11,21 +11,20 @@ import requests
 import shutil
 import subprocess
 
-from ...base_downloaders import HTTPDownloader
+from ...base_downloaders import FRCdownloader
 from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.io import untar_file, decompress_bz2
 
-class ICONDownloader(HTTPDownloader):
-    
+
+class ICONDownloader(FRCdownloader):
     name = "ICON"
     default_options = {
-        'frc_max_step' : 180,
-        'variables' : {"tp": "tot_prec",
-                       "temp": "t_2m"},
-        'cdo_path' : "/usr/bin/"
+        'frc_max_step': 180,
+        'variables': ["tp", "t_2m"],
+        'cdo_path': "/usr/bin/"
     }
- 
+
     def __init__(self, product: str) -> None:
         self.cdo_path = None
         self.working_path = None
@@ -36,12 +35,15 @@ class ICONDownloader(HTTPDownloader):
             self.ancillary_remote_file = "ICON_GLOBAL2WORLD_0125_EASY.tar.bz2"
             self.grid_file = "target_grid_world_0125.txt"
             self.weight_file = "weights_icogl2world_0125.nc"
-            self.issue_hours = [0,6,12,18]
-            self.prelim_nodata = -1
+            self.issue_hours = [0, 6, 12, 18]
+            self.frc_dims = {"time": "valid_time", "lat": "latitude", "lon": "longitude"}
         else:
             logging.error(" --> ERROR! Only ICON0p125 has been implemented until now!")
             raise NotImplementedError()
-            
+
+        self.frc_steps = None
+        self.frc_time_range = None
+
     def get_data(self,
                  time_range: TimeRange,
                  space_bounds: BoundingBox,
@@ -55,14 +57,15 @@ class ICONDownloader(HTTPDownloader):
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_issue_hour(self.issue_hours)
         missing_times = []
-        
+
         # Do all of this inside a temporary folder
         with tempfile.TemporaryDirectory() as tmp_path:
 
             self.working_path = tmp_path
 
             # Download preliminary files for file conversion if not available
-            if not os.path.isfile(os.path.join(tmp_path, self.grid_file)) or not os.path.isfile(os.path.join(tmp_path, self.weight_file)):
+            if not os.path.isfile(os.path.join(tmp_path, self.grid_file)) or not os.path.isfile(
+                    os.path.join(tmp_path, self.weight_file)):
                 print(" ---> Download binary decodification table")
                 r = requests.get(self.ancillary_remote_path + self.ancillary_remote_file)
                 with open(os.path.join(tmp_path, "binary_grids.tar.bz2"), 'wb') as f:
@@ -76,20 +79,21 @@ class ICONDownloader(HTTPDownloader):
                 # Set forecast steps
                 print(" ----> Set forecast steps")
                 self.max_steps = options['frc_max_step']
-                frc_time_range, frc_steps = self.compute_model_steps(time_range.start)
+                self.check_max_steps(180)
+                self.frc_time_range, self.frc_steps = self.compute_model_steps(time_range.start)
 
-                for var_out in options['variables'].keys():
+                for var_out in options['variables']:
                     print(f' ----> Downloading data for {var_out}')
                     tmp_destination = os.path.join(tmp_path, var_out, "")
                     os.makedirs(tmp_destination, exist_ok=True)
 
                     temp_files = []
-                    for step_time, step in zip(frc_time_range, frc_steps):
+                    for step_time, step in zip(self.frc_time_range, self.frc_steps):
                         print(f' ----> Downloading {var_out} data for +{step}h')
                         tmp_filename = f'temp_frc{self.product}_{run_time:%Y%m%d%H}_{step}_{var_out}.grib2.bz2'
                         tmp_destination = os.path.join(tmp_path, var_out, tmp_filename)
-                        var_in = options['variables'][var_out]
-                        success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', run_time = run_time, step = str(step).zfill(3), VAR = var_in.upper(), var = var_in)
+                        success = self.download(tmp_destination, min_size=200, missing_action='warn', run_time=run_time,
+                                                step=str(step).zfill(3), VAR=var_out.upper(), var=var_out)
                         if success:
                             temp_files.append(self.project_bin_file(tmp_destination))
                             print(f' ----> SUCCESS! Downloaded and regridded {var_out} data for +{step}h')
@@ -98,30 +102,26 @@ class ICONDownloader(HTTPDownloader):
                             break
 
                     if len(temp_files) > 0:
+                        print(f' ----> Merging {var_out} data')
                         with xr.open_mfdataset(temp_files, concat_dim='valid_time', data_vars='minimal',
-                                                   combine='nested', coords='minimal',
-                                                   compat='override', engine="cfgrib") as ds:
-                                ds = ds.where((ds.latitude <= space_bounds.bbox[3]) &
-                                              (ds.latitude >= space_bounds.bbox[1]) &
-                                              (ds.longitude >= space_bounds.bbox[0]) &
-                                              (ds.longitude <= space_bounds.bbox[2]), drop=True)
-
-                                var_names = [vars for vars in ds.data_vars.variables.mapping]
-                                if len(var_names) > 1:
-                                    logging.error("ERROR! Only one variable should be in the grib file, check file integrity!")
-                                    raise TypeError
-                                var_name = var_names[0]
-
-                                ds = ds[var_name].drop("time").rename({"longitude": "lon", "latitude": "lat", "valid_time": "time"})
-                                out_name = run_time.strftime(destination).format(var = var_name)
-                                os.makedirs(os.path.dirname(out_name), exist_ok=True)
+                                               combine='nested', coords='minimal',
+                                               compat='override', engine="cfgrib") as ds:
+                            var_names = [vars for vars in ds.data_vars.variables.mapping]
+                            if len(var_names) > 1:
+                                logging.error(
+                                    "ERROR! Only one variable should be in the grib file, check file integrity!")
+                                raise TypeError
+                            else:
+                                ds = self.postprocess_forecast(ds[var_names[0]], space_bounds)
 
                         if not 'frc_out' in locals():
-                            frc_out = xr.Dataset({var_out:ds})
+                            frc_out = xr.Dataset({var_out: ds})
                         else:
                             frc_out[var_out] = ds
 
-                        frc_out.drop(["valid_time","step","surface","heightAboveGround"], errors='ignore').to_netcdf(out_name)
+                        out_name = run_time.strftime(destination)
+                        os.makedirs(os.path.dirname(out_name), exist_ok=True)
+                        frc_out.to_netcdf(out_name)
 
     def compute_model_steps(self, time_run: datetime):
         """
@@ -144,7 +144,9 @@ class ICONDownloader(HTTPDownloader):
         """
         decompress_bz2(file_in)
         os.remove(file_in)
-        subprocess.check_output([self.cdo_path + "cdo -O remap," + os.path.join(self.working_path, self.grid_file) + "," + os.path.join(self.working_path, self.weight_file) + " " + file_in[:-4] + " " + file_in[:-4].replace("frc", "regr_frc")],
-                       stderr=subprocess.STDOUT, shell=True)
+        subprocess.check_output([self.cdo_path + "cdo -O remap," + os.path.join(self.working_path,
+                                                                                self.grid_file) + "," + os.path.join(
+            self.working_path, self.weight_file) + " " + file_in[:-4] + " " + file_in[:-4].replace("frc", "regr_frc")],
+                                stderr=subprocess.STDOUT, shell=True)
         os.remove(file_in[:-4])
         return file_in[:-4].replace("frc", "regr_frc")
