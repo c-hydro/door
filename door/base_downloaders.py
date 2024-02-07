@@ -85,6 +85,7 @@ class DOORDownloader():
                 download_http(url, destination)
             except Exception as e:
                 self.handle_missing(missing_action, kwargs)
+                logger.debug(f'Error downloading {url}: {e}')
                 return False
         else:
             raise ValueError(f'Protocol {protocol} not supported')
@@ -92,11 +93,14 @@ class DOORDownloader():
         # check if file has been actually downloaded
         if not os.path.isfile(destination):
             self.handle_missing(missing_action, kwargs)
+            logger.debug(f'File dowloaded from {url} not found in {destination}')
             return False
 
         # check if file is empty
         if min_size is not None and os.path.getsize(destination) < min_size:
             self.handle_missing(missing_action, kwargs)
+            logger.debug(f'File dowloaded from {url} saved in {destination} is too small ({os.path.getsize(destination)} bytes)')
+            breakpoint()
             return False
 
         return True

@@ -17,7 +17,11 @@ from ...utils.space import BoundingBox
 from ...utils.io import untar_file, decompress_bz2
 
 
+import logging
+logger = logging.getLogger(__name__)
+
 class ICONDownloader(FRCdownloader):
+    
     name = "ICON"
     default_options = {
         'frc_max_step': 180,
@@ -54,6 +58,12 @@ class ICONDownloader(FRCdownloader):
         options = self.check_options(options)
         self.cdo_path = options['cdo_path']
 
+        logger.info(f'------------------------------------------')
+        logger.info(f'Starting download of {self.product} data')
+        logger.info(f'Data requested between {time_range.start:%Y-%m-%d %H:%M} and {time_range.end:%Y-%m-%d %H:%m}')
+        logger.info(f'Bounding box: {space_bounds.bbox}')
+        logger.info(f'------------------------------------------')
+
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_issue_hour(self.issue_hours)
         missing_times = []
@@ -64,52 +74,50 @@ class ICONDownloader(FRCdownloader):
             self.working_path = tmp_path
 
             # Download preliminary files for file conversion if not available
-            if not os.path.isfile(os.path.join(tmp_path, self.grid_file)) or not os.path.isfile(
-                    os.path.join(tmp_path, self.weight_file)):
-                print(" ---> Download binary decodification table")
+            if not os.path.isfile(os.path.join(tmp_path, self.grid_file)) or not os.path.isfile(os.path.join(tmp_path, self.weight_file)):
                 r = requests.get(self.ancillary_remote_path + self.ancillary_remote_file)
                 with open(os.path.join(tmp_path, "binary_grids.tar.bz2"), 'wb') as f:
                     f.write(r.content)
                 untar_file(os.path.join(tmp_path, "binary_grids.tar.bz2"), move_to_root=True)
+                logger.info("Binary decodification table downloaded and extracted")
 
+            logger.info(f'Found {len(timesteps)} model issues to download.')
             # Download the data for the specified issue times
-            for run_time in timesteps:
-
-                print(f' ---> Downloading data for model issue: {run_time:%Y-%m-%d_%H}')
+            for i, run_time in enumerate(timesteps):
+                logger.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
                 # Set forecast steps
-                print(" ----> Set forecast steps")
+                #print(" ----> Set forecast steps")
                 self.max_steps = options['frc_max_step']
                 self.check_max_steps(180)
                 self.frc_time_range, self.frc_steps = self.compute_model_steps(time_range.start)
 
-                for var_out in options['variables']:
-                    print(f' ----> Downloading data for {var_out}')
-                    tmp_destination = os.path.join(tmp_path, var_out, "")
-                    os.makedirs(tmp_destination, exist_ok=True)
+                variables = options['variables']
+                for var_out in variables:
+                    logger.info(f'  - Variable {var_out}: {i+1}/{len(variables)}')
 
                     temp_files = []
                     for step_time, step in zip(self.frc_time_range, self.frc_steps):
-                        print(f' ----> Downloading {var_out} data for +{step}h')
+                        logger.debug(f' ----> Downloading {var_out} data for +{step}h')
+     
                         tmp_filename = f'temp_frc{self.product}_{run_time:%Y%m%d%H}_{step}_{var_out}.grib2.bz2'
                         tmp_destination = os.path.join(tmp_path, var_out, tmp_filename)
                         success = self.download(tmp_destination, min_size=200, missing_action='warn', run_time=run_time,
                                                 step=str(step).zfill(3), VAR=var_out.upper(), var=var_out)
                         if success:
                             temp_files.append(self.project_bin_file(tmp_destination))
-                            print(f' ----> SUCCESS! Downloaded and regridded {var_out} data for +{step}h')
+                            logger.debug(f'  ---> SUCCESS! Downloaded {var_out} data for +{step}h')
                         else:
-                            print(f' ----> ERROR! {var_out} for forecast step {step}h not available, skipping')
+                            logger.error(f'  ---> ERROR! {var_out} for forecast step {step}h not available, skipping this variable!')
                             break
-
+                    
                     if len(temp_files) > 0:
-                        print(f' ----> Merging {var_out} data')
+                        logger.debug(f' ----> Merging {var_out} data')
                         with xr.open_mfdataset(temp_files, concat_dim='valid_time', data_vars='minimal',
                                                combine='nested', coords='minimal',
                                                compat='override', engine="cfgrib") as ds:
                             var_names = [vars for vars in ds.data_vars.variables.mapping]
                             if len(var_names) > 1:
-                                logging.error(
-                                    "ERROR! Only one variable should be in the grib file, check file integrity!")
+                                logger.error("ERROR! Only one variable should be in the grib file, check file integrity!")
                                 raise TypeError
                             else:
                                 ds = self.postprocess_forecast(ds[var_names[0]], space_bounds)
@@ -122,6 +130,7 @@ class ICONDownloader(FRCdownloader):
                         out_name = run_time.strftime(destination)
                         os.makedirs(os.path.dirname(out_name), exist_ok=True)
                         frc_out.to_netcdf(out_name)
+                        logger.info(f'  -> SUCCESS! Data for {var_out} ({len(temp_files)} forecast steps) dowloaded and cropped to bounds.')
 
     def compute_model_steps(self, time_run: datetime):
         """
@@ -129,13 +138,13 @@ class ICONDownloader(FRCdownloader):
         """
         max_step = self.max_steps + 1
         if max_step > 181:
-            logging.error(" ERROR! Only the first 180 forecast hours are available on the dwd website!")
+            logger.error(" ERROR! Only the first 180 forecast hours are available on the dwd website!")
             raise NotImplementedError()
         if max_step > 78:
             forecast_steps = np.concatenate((np.arange(1, 78, 1), np.arange(78, np.min((max_step + 2, 180)), 3)))
         else:
             forecast_steps = np.arange(1, max_step, 1)
-        time_range = [time_run + pd.Timedelta(str(i) + "H") for i in forecast_steps]
+        time_range = [time_run + pd.Timedelta(str(i) + "h") for i in forecast_steps]
         return time_range, forecast_steps
 
     def project_bin_file(self, file_in: str):

@@ -1,5 +1,5 @@
 import logging
-import sys
+import os
 
 # -------------------------------------------------------------------------------------
 # Method to set logging information
@@ -23,6 +23,7 @@ def set_logging(log_file   = 'log.txt',
     #logging.basicConfig(level=level, format=log_format, filename=log_file, filemode='a')
 
     # Set logger handlers (console and file) 
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
     file_handler = logging.FileHandler(log_file, 'a')
     file_handler.setLevel(level)
     file_handler.setFormatter(formatter)
