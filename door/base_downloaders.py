@@ -7,10 +7,9 @@ import numpy as np
 import xarray as xr
 import requests
 
-from .utils.parse import format_dict
 from .utils.time import TimeRange
 from .utils.space import BoundingBox
-from .utils.io import download_http
+from .utils.io import download_http, check_download, handle_missing
 
 import logging
 logger = logging.getLogger(__name__)
@@ -22,7 +21,6 @@ class DOORDownloader():
 
     name = "DOOR Downloader"
     default_options = {}
-    url_blank = None
 
     def __init__(self) -> None:
         pass
@@ -59,51 +57,57 @@ class DOORDownloader():
     
         return options
 
-    def handle_missing(self, level: str, specs: dict = {}):
-        """
-        Handle missing data.
-        Level can be 'error', 'warn' or 'ignore'.
-        """
-        options = format_dict(specs)
-        if level.lower() in ['e', 'error']:
-            raise FileNotFoundError(f'ERROR! {self.name} data not available: {options}')
-        elif level.lower() in ['w', 'warn', 'warning']:
-            logger.warning(f'{self.name} data not available: {options}')
-        elif level.lower() in ['i', 'ignore']:
-            pass
+class URLDownloader(DOORDownloader):
+    """
+    Downloader for data from a URL.
+    This typer of downloader is useful for data that can be downloaded from a URL.
+    It allows to specify a URL template with placeholders for various parameters (as keyword arguments).
+    """
+
+    def __init__(self, url_blank: str, protocol: str = 'http') -> None:
+        
+        self.url_blank = url_blank
+        if protocol.lower() != 'http':
+            raise ValueError(f'Protocol {protocol} not supported')
         else:
-            raise ValueError(f'Invalid missing data error level: {level}')
+            self.protocol = protocol
+
+    def format_url(self, **kwargs) -> str:
+        """
+        Format the URL with the specified parameters.
+        """
+        return self.url_blank.format(**kwargs)
+
     def download(self, destination: str, min_size: float = None, missing_action: str = 'error',
-                 protocol: str = 'http', **kwargs) -> bool:
+                 **kwargs) -> bool:
         """
         Downloads data from url
         Eventually check file size to avoid empty files
         """
-        if protocol.lower() == 'http':
-            url = self.url_blank.format(**kwargs)
+
+        url = self.format_url(**kwargs)
+        if self.protocol == 'http':
             try:
                 download_http(url, destination)
             except Exception as e:
-                self.handle_missing(missing_action, kwargs)
+                handle_missing(missing_action, kwargs)
                 logger.debug(f'Error downloading {url}: {e}')
                 return False
-        else:
-            raise ValueError(f'Protocol {protocol} not supported')
 
-        # check if file has been actually downloaded
-        if not os.path.isfile(destination):
-            self.handle_missing(missing_action, kwargs)
-            logger.debug(f'File dowloaded from {url} not found in {destination}')
-            return False
-
-        # check if file is empty
-        if min_size is not None and os.path.getsize(destination) < min_size:
-            self.handle_missing(missing_action, kwargs)
-            logger.debug(f'File dowloaded from {url} saved in {destination} is too small ({os.path.getsize(destination)} bytes)')
-            breakpoint()
+        success_flag, success_msg = check_download(destination, min_size, missing_action)
+        if success_flag > 0:
+            handle_missing(missing_action, kwargs)
+            logger.debug(f'Error downloading file from {url}: {success_msg}')
             return False
 
         return True
+
+class APIDownloader(DOORDownloader):
+    """
+    Downloader for data from an API.
+    This typer of downloader is useful for data that can be downloaded from an API.
+    Once and API client is specified, it uses a dict to send a request.
+    """
 
 class FRCdownloader(DOORDownloader):
 

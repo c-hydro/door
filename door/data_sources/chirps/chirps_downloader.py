@@ -5,20 +5,22 @@ import tempfile
 import gzip
 import shutil
 
-from ...base_downloaders import DOORDownloader
+from ...base_downloaders import URLDownloader
 from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 
 import logging
 logger = logging.getLogger(__name__)
 
-class CHIRPSDownloader(DOORDownloader):
+class CHIRPSDownloader(URLDownloader):
     
     name = "CHIRPS"
     default_options = {
         'get_prelim' : True, # if True, will also download preliminary data if available
     }
- 
+
+    protocol = "http"
+    
     def __init__(self, product: str) -> None:
         self.product = product
         if self.product == "CHIRPSp25-daily":
