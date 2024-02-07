@@ -11,6 +11,8 @@ from .utils.time import TimeRange
 from .utils.space import BoundingBox
 from .utils.io import download_http, check_download, handle_missing
 
+from .utils.netcdf import crop_netcdf
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,34 @@ class DOORDownloader():
             del options[key]
     
         return options
+    
+    #TODO: this is a bit of an akward spot to put this, but it is used by all forecast downloaders, so it makes some sense to have it here
+    def postprocess_forecast(self, ds: xr.Dataset, space_bounds: BoundingBox) -> None:
+        """
+        Postprocess the forecast data.
+        """
+        # Drop existing time dimension (it refers to issue forecast time)
+        ds = ds.drop_vars("time", errors='ignore')
+
+        # Assign new time dimension and rename spatial coordinates
+        ds = ds.assign_coords({self.frc_dims["time"]: self.frc_time_range}).rename({v: k for k, v in self.frc_dims.items()})
+
+        # Crop with bounding box
+        ds = crop_netcdf(ds, space_bounds)
+
+        # If lat is a decreasing vector, flip it and the associated variables vertically
+        if ds.lat.values[0] > ds.lat.values[-1]:
+            print(" --> WARNING! Latitude is decreasing, flip it and the associated variables vertically!")
+            ds = ds.reindex(lat=ds.lat[::-1])
+            for var in ds.data_vars:
+                ds[var] = ds[var].reindex(lat=ds.lat[::-1])
+
+        # Drop unused variables
+        ds = ds.drop(["valid_time", "step", "surface", "heightAboveGround"], errors='ignore')
+        ds["lat"].attrs["units"] = "degrees_north"
+        ds["lon"].attrs["units"] = "degrees_east"
+
+        return ds
 
 class URLDownloader(DOORDownloader):
     """
@@ -108,58 +138,3 @@ class APIDownloader(DOORDownloader):
     This typer of downloader is useful for data that can be downloaded from an API.
     Once and API client is specified, it uses a dict to send a request.
     """
-
-class FRCdownloader(DOORDownloader):
-
-    def __init__(self, product: str, max_steps: int) -> None:
-        self.product = product
-        self.max_steps = max_steps
-        self.freq_hours = None
-
-    def compute_model_steps(self, start: dt.datetime) -> (list, list):
-        """
-        Compute the forecast steps for the model with regular n-hourly time frequency
-        """
-        step_h = self.freq_hours
-        max_step = self.max_steps + step_h
-        forecast_steps = np.arange(step_h, max_step, step_h)
-        time_range = [start + pd.Timedelta(str(i) + "h") for i in forecast_steps]
-        return time_range, forecast_steps
-
-    def check_max_steps(self, max_steps_model: int) -> None:
-        """
-        Check if selected max_steps is available for the model
-        """
-        if self.max_steps >= max_steps_model:
-            print(f'ERROR! Only the first {max_steps_model} forecast hours are available!')
-            self.max_steps = max_steps_model
-
-    def postprocess_forecast(self, frc_out: xr.Dataset, space_bounds: BoundingBox) -> None:
-        """
-        Postprocess the forecast data.
-        """
-        # Drop existing time dimension (it refers to issue forecast time)
-        frc_out = frc_out.drop_vars("time", errors='ignore')
-
-        # Assign new time dimension and rename spatial coordinates
-        frc_out = frc_out.assign_coords({self.frc_dims["time"]: self.frc_time_range}).rename({v: k for k, v in self.frc_dims.items()})
-
-        # Crop with bounding box
-        frc_out = frc_out.where((frc_out.lat <= space_bounds.bbox[3]) &
-                 (frc_out.lat >= space_bounds.bbox[1]) &
-                 (frc_out.lon >= space_bounds.bbox[0]) &
-                 (frc_out.lon <= space_bounds.bbox[2]), drop=True)
-
-        # If lat is a decreasing vector, flip it and the associated variables vertically
-        if frc_out.lat.values[0] > frc_out.lat.values[-1]:
-            print(" --> WARNING! Latitude is decreasing, flip it and the associated variables vertically!")
-            frc_out = frc_out.reindex(lat=frc_out.lat[::-1])
-            for var in frc_out.data_vars:
-                frc_out[var] = frc_out[var].reindex(lat=frc_out.lat[::-1])
-
-        # Drop unused variables
-        frc_out = frc_out.drop(["valid_time", "step", "surface", "heightAboveGround"], errors='ignore')
-        frc_out["lat"].attrs["units"] = "degrees_north"
-        frc_out["lon"].attrs["units"] = "degrees_east"
-
-        return frc_out

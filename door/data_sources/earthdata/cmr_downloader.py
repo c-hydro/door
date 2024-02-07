@@ -16,6 +16,7 @@ from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
 from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
+from ...utils.geotiff import crop_raster, save_raster
 
 import logging
 logger = logging.getLogger(__name__)
@@ -258,10 +259,9 @@ class CMRDownloader(DOORDownloader):
                         dataset = mosaics[layer['id']]
                         file_out = time.strftime(destination.format(layer=lname))
                         if options['crop_to_bounds']:
-                            space_bounds.crop_raster(dataset, file_out)
+                            crop_raster(dataset, space_bounds, file_out)
                         else:
-                            #TODO: combine all gdal io operations in a single module/function
-                            gdal.Translate(file_out, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
+                            save_raster(dataset, file_out)
                         dataset = None
                     logger.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded and combined into a single mosaic per layer')
                 else:
@@ -272,9 +272,9 @@ class CMRDownloader(DOORDownloader):
                             ds = these_hdf5_datasets[layer['id']]
                             file_out = time.strftime(destination.format(layer=lname, tile=tile))
                             if options['crop_to_bounds']:
-                                space_bounds.crop_raster(ds, file_out)
+                                crop_raster(ds, space_bounds, file_out)
                             else:
-                                gdal.Translate(file_out, ds, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
+                                save_raster(ds, file_out)
                             ds = None
                     logger.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded, {len(file_list)} tiles per layer')
         logger.info(f'------------------------------------------')                

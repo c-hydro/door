@@ -9,7 +9,8 @@ from osgeo import gdal, gdalconst, osr
 
 class BoundingBox():
 
-    default_projection = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]]'
+    default_projection = 'EPSG:4326'
+    #'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]]'
 
     def __init__(self,
                  left: float, bottom: float, right: float, top: float,
@@ -21,12 +22,12 @@ class BoundingBox():
         """
         # default to WGS84
         if projection is None:
-            projection = self.default_projection
+            self.epsg_code = self.default_projection
         else:
-            projection = get_wkt(projection)
+            self.epsg_code = projection
 
         # set the projection
-        self.proj = projection
+        self.proj = get_wkt(self.epsg_code)
 
         # set the bounding box
         self.bbox = (left, bottom, right, top)
@@ -68,26 +69,13 @@ class BoundingBox():
                      right + self.buffer,
                      top + self.buffer)
 
-    def crop_raster(self, src: str|gdal.Dataset, output_file: str) -> None:
+    def transform(self, new_proj: str) -> None:
         """
-        Cut a geotiff to a bounding box.
+        Transform the bounding box to a new projection
         """
-        
-        if isinstance(src, str):
-            src_ds = gdal.Open(src, gdalconst.GA_ReadOnly)
-        else:
-            src_ds = src
-        
-        geoprojection = src_ds.GetProjection()
-        geotransform = src_ds.GetGeoTransform()
-
         # Create a spatial reference object for the GeoTIFF projection
-        input_srs = osr.SpatialReference()
-        input_srs.ImportFromWkt(geoprojection)
-        
-        if self.proj is None:
-            # if the crs is not specified, use the crs of the input file
-            self.proj = geoprojection
+        new_srs = osr.SpatialReference()
+        new_srs.ImportFromWkt(get_wkt(new_proj))
 
         # Create a spatial reference object for the bounding box projection
         bbox_srs = osr.SpatialReference()
@@ -95,14 +83,14 @@ class BoundingBox():
         
         # this is needed to make sure that the axis are in the same order i.e. (lon, lat) or (x, y)
         # see https://gdal.org/tutorials/osr_api_tut.html#coordinate-systems-in-gdal
-        input_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+        new_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
         bbox_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
         # make sure that the projection is the same, if it is not, update the 4 corners of the bbox
-        if not input_srs.IsSame(bbox_srs):
+        if not new_srs.IsSame(bbox_srs):
 
             # Create a transformer to convert coordinates
-            transformer = osr.CoordinateTransformation(bbox_srs, input_srs)
+            transformer = osr.CoordinateTransformation(bbox_srs, new_srs)
 
             # Transform the bounding box coordinates - because the image might be warped, we need to transform all 4 corners
             bl_x, bl_y, _ = transformer.TransformPoint(self.bbox[0], self.bbox[1])
@@ -118,28 +106,9 @@ class BoundingBox():
         else:
             min_x, min_y, max_x, max_y = self.bbox
 
-        # in order to not change the grid, we need to make sure that the new bounds were also in the old grid
-        in_min_x = geotransform[0]
-        in_res_x = geotransform[1]
-        in_num_x = src_ds.RasterXSize
-        in_min_y = geotransform[3]
-        in_res_y = geotransform[5]
-        in_num_y = src_ds.RasterYSize
-        xcoords_in = np.arange(in_min_x, in_min_x + (in_num_x +1) * in_res_x, in_res_x)
-        ycoords_in = np.arange(in_min_y, in_min_y + (in_num_y +1) * in_res_y, in_res_y)
+        self.bbox = (min_x, min_y, max_x, max_y)
+        self.proj = new_proj
 
-        # the if else statements are used to make sure that the new bounds are not larger than the original ones
-        min_x_real = max(xcoords_in[xcoords_in <= min_x]) if any(xcoords_in <= min_x) else min(xcoords_in)
-        max_x_real = min(xcoords_in[xcoords_in >= max_x]) if any(xcoords_in >= max_x) else max(xcoords_in)
-        min_y_real = max(ycoords_in[ycoords_in <= min_y]) if any(ycoords_in <= min_y) else min(ycoords_in)
-        max_y_real = min(ycoords_in[ycoords_in >= max_y]) if any(ycoords_in >= max_y) else max(ycoords_in)
-
-        # Create the output file
-        gdal.Warp(output_file, src_ds, outputBounds=(min_x_real, min_y_real, max_x_real, max_y_real),
-                outputType = src_ds.GetRasterBand(1).DataType, creationOptions = ['COMPRESS=LZW'])
-
-        # Close the datasets
-        src_ds = None
 
 def get_wkt(proj_string: str) -> str:
     # Create a spatial reference object
