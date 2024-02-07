@@ -1,1 +1,1 @@
-from .base_downloaders import DOORDownloader, HTTPDownloader
+from .base_downloaders import DOORDownloader, FRCdownloader

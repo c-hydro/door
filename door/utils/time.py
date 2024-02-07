@@ -83,7 +83,7 @@ class TimeRange():
         while now <= self.end:
             for issue_hour in issue_hours:
                 issue_time = datetime(now.year, now.month, now.day, issue_hour)
-                if issue_time >= now:
+                if now <= issue_time <= self.end:
                     now = issue_time
                     yield now
             day_after = now + timedelta(days=1)

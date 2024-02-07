@@ -23,7 +23,8 @@ setup(
         'h5py >= 3.4.0',
         'cfgrib >= 0.9.9',
         'dask',
-        'scipy'
+        'scipy',
+        'ecmwf-opendata >= 0.2.0'
     ],
     python_requires='>=3.10',
     test_suite='tests',
