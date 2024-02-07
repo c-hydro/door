@@ -131,7 +131,8 @@ class ICONDownloader(FRCdownloader):
                         os.makedirs(os.path.dirname(out_name), exist_ok=True)
                         frc_out.to_netcdf(out_name)
                         logger.info(f'  -> SUCCESS! Data for {var_out} ({len(temp_files)} forecast steps) dowloaded and cropped to bounds.')
-
+        logger.info(f'------------------------------------------')
+        
     def compute_model_steps(self, time_run: datetime):
         """
         extracts from a .gz file

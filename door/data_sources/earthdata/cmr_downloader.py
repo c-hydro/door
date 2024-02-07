@@ -277,7 +277,7 @@ class CMRDownloader(DOORDownloader):
                                 gdal.Translate(file_out, ds, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
                             ds = None
                     logger.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded, {len(file_list)} tiles per layer')
-                
+        logger.info(f'------------------------------------------')                
             
 
     def build_mosaics_from_hdf5(self,

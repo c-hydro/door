@@ -119,7 +119,7 @@ class FRCdownloader(DOORDownloader):
         step_h = self.freq_hours
         max_step = self.max_steps + step_h
         forecast_steps = np.arange(step_h, max_step, step_h)
-        time_range = [start + pd.Timedelta(str(i) + "H") for i in forecast_steps]
+        time_range = [start + pd.Timedelta(str(i) + "h") for i in forecast_steps]
         return time_range, forecast_steps
 
     def check_max_steps(self, max_steps_model: int) -> None:

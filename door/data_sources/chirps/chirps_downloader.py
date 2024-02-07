@@ -101,6 +101,8 @@ class CHIRPSDownloader(DOORDownloader):
                         destination_now = time_now.strftime(destination)
                         space_bounds.crop_raster(tmp_destination, destination_now)
                         logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
+        
+        logger.info(f'------------------------------------------')
 
     def extract(self, filename: str):
         """
