@@ -1,13 +1,15 @@
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-from typing import Optional
+import datetime as dt
+import dateutil.relativedelta as dtr
+import numpy as np
+import pandas as pd
+
 import logging
 
 class TimeRange():
 
     def __init__(self, 
-                 start: datetime|str,
-                 end: datetime|str):
+                 start: dt.datetime|str,
+                 end: dt.datetime|str):
         """
         Object useful to define a time range to download data.
         """
@@ -23,12 +25,12 @@ class TimeRange():
         if start is None or end is None:
             raise ValueError('Both start and end time must be specified')
         else:
-            if not isinstance(start, datetime):
+            if not isinstance(start, dt.datetime):
                 if isinstance(start, str):
                     start = get_time_from_str(start, 'start')
                 else:
                     raise ValueError('Invalid start time')
-            if not isinstance(end, datetime):
+            if not isinstance(end, dt.datetime):
                 if isinstance(end, str):
                     end = get_time_from_str(end, 'end')
                 else:
@@ -41,10 +43,10 @@ class TimeRange():
                 self.start = end
                 self.end = start
 
-    def get_timesteps_from_tsnumber(self, timesteps_per_year: int) -> list[datetime]:
+    def get_timesteps_from_tsnumber(self, timesteps_per_year: int) -> list[dt.datetime]:
         return list(self.gen_timesteps_from_tsnumber(timesteps_per_year))
     
-    def gen_timesteps_from_tsnumber(self, timesteps_per_year: int) -> datetime:
+    def gen_timesteps_from_tsnumber(self, timesteps_per_year: int) -> dt.datetime:
         """
         This will yield the timesteps to download on a regular frequency by the number of timesteps per year.
         timesteps_per_year is expressed as an integer indicating the number of times per year (e.g. 12 for monthly data, 365 for daily data, etc.).
@@ -54,21 +56,21 @@ class TimeRange():
         while now <= self.end:
             yield now
             if timesteps_per_year == 8760:
-                now += timedelta(hours = 1)
+                now += dt.timedelta(hours = 1)
             elif timesteps_per_year == 365:
-                now += timedelta(days = 1)
+                now += dt.timedelta(days = 1)
             elif timesteps_per_year == 12:
-                now += relativedelta(months = 1)
+                now += dtr.relativedelta(months = 1)
             elif timesteps_per_year == 1:
-                now += relativedelta(years = 1)
+                now += dtr.relativedelta(years = 1)
             else:
                 # dekads are not implemented here, because no data is available at this frequency to download
                 raise ValueError(f'Invalid data frequency: {timesteps_per_year} times per year is not supported')
 
-    def get_timesteps_from_DOY(self, doy_list: list[int]) -> list[datetime]:
+    def get_timesteps_from_DOY(self, doy_list: list[int]) -> list[dt.datetime]:
         return list(self.gen_timesteps_from_DOY(doy_list))
     
-    def gen_timesteps_from_DOY(self, doy_list: list[int]) -> datetime:
+    def gen_timesteps_from_DOY(self, doy_list: list[int]) -> dt.datetime:
         """
         This will yield the timesteps to download on a given list of days of the year.
         This is useful for MODIS and VIIRS data that are available at preset DOYs.
@@ -78,35 +80,52 @@ class TimeRange():
 
         for year in range(start_year, end_year+1):
             for doy in doy_list:
-                date = datetime(year, 1, 1) + timedelta(days=doy-1)
+                date = dt.datetime(year, 1, 1) + dt.timedelta(days=doy-1)
                 if date >= self.start and date <= self.end:
                     yield date
 
-    def get_timesteps_from_issue_hour(self, issue_hours: list[int]) -> list[datetime]:
+    def get_timesteps_from_issue_hour(self, issue_hours: list[int]) -> list[dt.datetime]:
         return list(self.gen_timesteps_from_issue_hour(issue_hours))
     
-    def gen_timesteps_from_issue_hour(self, issue_hours: list) -> datetime:
+    def gen_timesteps_from_issue_hour(self, issue_hours: list) -> dt.datetime:
         """
         This will yield the timesteps to download oa product issued daily at given hours
         """
         now = self.start
         while now <= self.end:
             for issue_hour in issue_hours:
-                issue_time = datetime(now.year, now.month, now.day, issue_hour)
+                issue_time = dt.datetime(now.year, now.month, now.day, issue_hour)
                 if now <= issue_time <= self.end:
                     now = issue_time
                     yield now
-            day_after = now + timedelta(days=1)
-            now = datetime(day_after.year, day_after.month, day_after.day, issue_hours[0])
+            day_after = now + dt.timedelta(days=1)
+            now = dt.datetime(day_after.year, day_after.month, day_after.day, issue_hours[0])
 
-def get_time_from_str(string: str, name = None) -> datetime:
+def get_time_from_str(string: str, name = None) -> dt.datetime:
     available_formats = ['%Y-%m-%d', '%Y-%m-%d %H:%M:%S']
     for format in available_formats:
         try:                                                           
-            return datetime.strptime(string, format)
+            return dt.datetime.strptime(string, format)
         except ValueError:                                                        
             pass
     if name is None:
         raise ValueError(f'Invalid format for time: {string}, expected one of' + '; '.join(available_formats))
     else:
         raise ValueError(f'Invalid format for {name} time: {string}, expected one of' + '; '.join(available_formats))
+    
+def get_regular_steps(start: dt.datetime, step_hrs: int, max_steps: int) -> (list[int], list[dt.datetime]):
+    """
+    Compute the forecast steps for the model with regular n-hourly time frequency
+    """
+    max_step = (max_steps + 1) * step_hrs
+    forecast_steps = np.arange(step_hrs, max_step, step_hrs)
+    time_range = [start + dt.timedelta(hours=float(i)) for i in forecast_steps]
+    return time_range, forecast_steps
+
+# def check_max_steps(self, max_steps_model: int) -> None:
+#     """
+#     Check if selected max_steps is available for the model
+#     """
+#     if self.max_steps >= max_steps_model:
+#         print(f'ERROR! Only the first {max_steps_model} forecast hours are available!')
+#         self.max_steps = max_steps_model

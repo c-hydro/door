@@ -12,7 +12,7 @@ log_file = HOME+'/log.txt'
 
 log.set_logging(log_file)
 
-time_range = TimeRange(start='2023-12-25', end='2024-01-03')
+time_range = TimeRange(start='2023-12-30', end='2024-01-03')
 space_ref  = BoundingBox.from_file(GRID_FILE)
 
 test_downloader = CHIRPSDownloader(product='CHIRPSp25-daily')

@@ -23,10 +23,12 @@ setup(
         'h5py >= 3.4.0',
         'cfgrib >= 0.9.9',
         'xarray>=2023.9.0',
+        'rioxarray >= 0.7.0',
         'requests',
         'dask',
         'scipy',
-        'ecmwf-opendata >= 0.2.0'
+        'ecmwf-opendata >= 0.2.0',
+        'cdsapi'
     ],
     python_requires='>=3.10',
     test_suite='tests',

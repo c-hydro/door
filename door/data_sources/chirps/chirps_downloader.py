@@ -5,34 +5,35 @@ import tempfile
 import gzip
 import shutil
 
-from ...base_downloaders import DOORDownloader
+from ...base_downloaders import URLDownloader
 from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
+from ...utils.geotiff import crop_raster
 
 import logging
 logger = logging.getLogger(__name__)
 
-class CHIRPSDownloader(DOORDownloader):
+class CHIRPSDownloader(URLDownloader):
     
     name = "CHIRPS"
     default_options = {
         'get_prelim' : True, # if True, will also download preliminary data if available
     }
- 
+    
     def __init__(self, product: str) -> None:
         self.product = product
         if self.product == "CHIRPSp25-daily":
-            self.url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p25/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif.gz"
+            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p25/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif.gz"
             self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p25/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif"
             self.ts_per_year = 365 # daily
             self.prelim_nodata = -1
         elif self.product == "CHIRPSp05-daily":
-            self.url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p05/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif.gz"
+            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p05/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif.gz"
             self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p05/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif"
             self.ts_per_year  = 365 # daily
             self.prelim_nodata = -9999
         elif self.product == "CHIRPSp25-monthly":
-            self.url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_monthly/tifs/chirps-v2.0.{time:%Y.%m}.tif.gz"
+            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_monthly/tifs/chirps-v2.0.{time:%Y.%m}.tif.gz"
             self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_monthly/tifs/chirps-v2.0.{time:%Y.%m}.tif"
             self.ts_per_year  = 12 # monthly
             self.prelim_nodata = -9999
@@ -40,6 +41,7 @@ class CHIRPSDownloader(DOORDownloader):
             logger.error(" --> ERROR! Only CHIRPSp25-daily, CHIRPSp05-daily and CHIRPSp25-monthly has been implemented until now!")
             raise NotImplementedError()
         
+        super().__init__(url_blank, protocol = 'http')
         self.nodata = -9999
             
     def get_data(self,
@@ -83,7 +85,7 @@ class CHIRPSDownloader(DOORDownloader):
                     self.extract(tmp_destination)
                     # Regrid the data
                     destination_now = time_now.strftime(destination)
-                    space_bounds.crop_raster(tmp_destination[:-3], destination_now)
+                    crop_raster(tmp_destination[:-3], space_bounds, destination_now)
                     logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
 
             # Fill with prelimnary data
@@ -99,7 +101,7 @@ class CHIRPSDownloader(DOORDownloader):
                     if success:
                         # Regrid the data
                         destination_now = time_now.strftime(destination)
-                        space_bounds.crop_raster(tmp_destination, destination_now)
+                        crop_raster(tmp_destination, space_bounds, destination_now)
                         logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
         
         logger.info(f'------------------------------------------')

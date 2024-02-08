@@ -4,6 +4,11 @@ import shutil
 import bz2
 import requests
 
+from .parse import format_dict
+
+import logging
+logger = logging.getLogger(__name__)
+
 def move_to_root_folder(folder):
     base = folder
     # traverse root directory, and list directories as dirs and files as files
@@ -39,3 +44,34 @@ def download_http(url, destination):
     os.makedirs(os.path.dirname(destination), exist_ok=True)
     with open(destination, 'wb') as f:
         f.write(r.content)
+
+def check_download(destination: str, min_size: float = None, missing_action: str = 'error') -> (int, str):
+    """
+    Check if the file has been downloaded and if it is not empty.
+    Returns 0 if the file is correct. Returns 1 if the file is missing. Returns 2 if the file is empty.
+    """
+    # check if file has been actually downloaded
+    if not os.path.isfile(destination):
+        return 1, f'File {destination} not found'
+    # check if file is empty
+    elif min_size is not None and os.path.getsize(destination) < min_size:
+        return 2, f'File {destination} is smaller than {min_size} bytes'
+    
+    else:
+        return 0, f'File {destination} downloaded correctly'
+    
+def handle_missing(level: str, specs: dict = {}):
+    """
+    Handle missing data.
+    Level can be 'error', 'warn' or 'ignore'.
+    """
+    options = format_dict(specs)
+    if level.lower() in ['e', 'error']:
+        logger.error(f'data not available: {options}')
+        raise FileNotFoundError()
+    elif level.lower() in ['w', 'warn', 'warning']:
+        logger.warning(f'data not available: {options}')
+    elif level.lower() in ['i', 'ignore']:
+        pass
+    else:
+        raise ValueError(f'Invalid missing data error level: {level}')

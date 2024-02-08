@@ -2,25 +2,22 @@ import logging
 import os
 from typing import Optional
 import tempfile
-import pandas as pd
 import numpy as np
-from datetime import datetime
-import gzip
+import datetime as dt
 import xarray as xr
 import requests
-import shutil
 import subprocess
 
-from ...base_downloaders import FRCdownloader
+from ...base_downloaders import URLDownloader
 from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.io import untar_file, decompress_bz2
-
+from ...utils.netcdf import save_netcdf
 
 import logging
 logger = logging.getLogger(__name__)
 
-class ICONDownloader(FRCdownloader):
+class ICONDownloader(URLDownloader):
     
     name = "ICON"
     default_options = {
@@ -34,7 +31,7 @@ class ICONDownloader(FRCdownloader):
         self.working_path = None
         self.product = product
         if self.product == "ICON0p125":
-            self.url_blank = "https://opendata.dwd.de/weather/nwp/icon/grib/{run_time:%H}/{var}/icon_global_icosahedral_single-level_{run_time:%Y%m%d%H}_{step}_{VAR}.grib2.bz2"
+            url_blank = "https://opendata.dwd.de/weather/nwp/icon/grib/{run_time:%H}/{var}/icon_global_icosahedral_single-level_{run_time:%Y%m%d%H}_{step}_{VAR}.grib2.bz2"
             self.ancillary_remote_path = "https://opendata.dwd.de/weather/lib/cdo/"
             self.ancillary_remote_file = "ICON_GLOBAL2WORLD_0125_EASY.tar.bz2"
             self.grid_file = "target_grid_world_0125.txt"
@@ -45,8 +42,19 @@ class ICONDownloader(FRCdownloader):
             logging.error(" --> ERROR! Only ICON0p125 has been implemented until now!")
             raise NotImplementedError()
 
+        super().__init__(url_blank, protocol = 'http')
         self.frc_steps = None
         self.frc_time_range = None
+
+    def check_options(self, options: dict) -> dict:
+        super().check_options(options)
+
+        # also check that we are not asking for too many forecast steps
+        if options['frc_max_step'] > 180:
+            logger.warning("WARNING! ICON only has 180 forecast steps available, setting max_steps to 180")
+            options['frc_max_step'] = 180
+        
+        return options
 
     def get_data(self,
                  time_range: TimeRange,
@@ -66,7 +74,6 @@ class ICONDownloader(FRCdownloader):
 
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_issue_hour(self.issue_hours)
-        missing_times = []
 
         # Do all of this inside a temporary folder
         with tempfile.TemporaryDirectory() as tmp_path:
@@ -86,17 +93,14 @@ class ICONDownloader(FRCdownloader):
             for i, run_time in enumerate(timesteps):
                 logger.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
                 # Set forecast steps
-                #print(" ----> Set forecast steps")
-                self.max_steps = options['frc_max_step']
-                self.check_max_steps(180)
-                self.frc_time_range, self.frc_steps = self.compute_model_steps(time_range.start)
+                self.frc_time_range, self.frc_steps = self.compute_model_steps(run_time, options['frc_max_step'])
 
                 variables = options['variables']
                 for var_out in variables:
                     logger.info(f'  - Variable {var_out}: {i+1}/{len(variables)}')
 
                     temp_files = []
-                    for step_time, step in zip(self.frc_time_range, self.frc_steps):
+                    for step in self.frc_steps:
                         logger.debug(f' ----> Downloading {var_out} data for +{step}h')
      
                         tmp_filename = f'temp_frc{self.product}_{run_time:%Y%m%d%H}_{step}_{var_out}.grib2.bz2'
@@ -128,24 +132,26 @@ class ICONDownloader(FRCdownloader):
                             frc_out[var_out] = ds
 
                         out_name = run_time.strftime(destination)
-                        os.makedirs(os.path.dirname(out_name), exist_ok=True)
-                        frc_out.to_netcdf(out_name)
+                        save_netcdf(frc_out, out_name)
                         logger.info(f'  -> SUCCESS! Data for {var_out} ({len(temp_files)} forecast steps) dowloaded and cropped to bounds.')
         logger.info(f'------------------------------------------')
-        
-    def compute_model_steps(self, time_run: datetime):
+    
+    @staticmethod
+    def compute_model_steps(time_run: dt.datetime, max_steps: int) -> (list[dt.datetime], list[int]):
         """
         extracts from a .gz file
         """
-        max_step = self.max_steps + 1
+        max_step = max_steps + 1
         if max_step > 181:
             logger.error(" ERROR! Only the first 180 forecast hours are available on the dwd website!")
             raise NotImplementedError()
+            # this shouldn't be necessary, because we are checking before when we check the options.  
         if max_step > 78:
             forecast_steps = np.concatenate((np.arange(1, 78, 1), np.arange(78, np.min((max_step + 2, 180)), 3)))
         else:
             forecast_steps = np.arange(1, max_step, 1)
-        time_range = [time_run + pd.Timedelta(str(i) + "h") for i in forecast_steps]
+        
+        time_range = [time_run + dt.timedelta(hours = float(i)) for i in forecast_steps]
         return time_range, forecast_steps
 
     def project_bin_file(self, file_in: str):

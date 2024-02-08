@@ -10,7 +10,7 @@ import datetime as dt
 HOME = '/home/luca/Documents/CIMA_code/tests/icon_dwl'
 log_file = HOME+'/log.txt'
 
-log.set_logging(log_file, 'INFO')
+log.set_logging(log_file, 'DEBUG')
 
 today = dt.datetime.now()
 time_range = TimeRange(start=f'{today:%Y-%m-%d 00:00:00}', end=f'{today:%Y-%m-%d 03:00:00}')
@@ -18,7 +18,7 @@ space_ref  = BoundingBox(6, 19, 36, 48, projection = 'EPSG:4326')
 
 test_downloader = ICONDownloader(product='ICON0p125')
 test_downloader.get_data(time_range, space_ref,
-                         destination=HOME + '/iconFrc_%Y%m%d%H.nc',
+                         destination=HOME + '/_iconFrc_%Y%m%d%H.nc',
                          options={'variables': ["tot_prec", "t_2m"],
                                   'frc_max_step' : 3,
                                   'cdo_path' : '/usr/bin/'})

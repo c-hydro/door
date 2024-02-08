@@ -8,7 +8,7 @@ from door.utils import log
 HOME = '/home/luca/Documents/CIMA_code/tests/ecmwf_dwl'
 log_file = HOME+'/log.txt'
 
-log.set_logging(log_file, 'INFO')
+log.set_logging(log_file, 'DEBUG')
 
 time_range = TimeRange(start='2024-02-06 00:00:00', end='2024-02-06 03:00:00')
 space_ref  = BoundingBox(6, 19, 36, 48, projection = 'EPSG:4326')
