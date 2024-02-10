@@ -238,12 +238,13 @@ class CMRDownloader(DOORDownloader):
         logger.info(f'Found {len(timesteps)} timesteps to download.')
 
         #TODO: bring tmp folder inside the loop, better for memory management (for all downloaders)
-        with TemporaryDirectory() as tmpdir:
-            for i,time in enumerate(timesteps):
-                logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
+        for i,time in enumerate(timesteps):
+            logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
 
-                # get the data from the CMR
-                url_list = self.cmr_search(time, space_bounds)
+            # get the data from the CMR
+            url_list = self.cmr_search(time, space_bounds)
+
+            with TemporaryDirectory() as tmpdir:
                 file_list = self.download(url_list, tmpdir)
 
                 lnames = [layer['name'] for layer in self.layers]

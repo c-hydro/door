@@ -63,14 +63,16 @@ class CHIRPSDownloader(URLDownloader):
         timesteps = time_range.get_timesteps_from_tsnumber(self.ts_per_year)
         missing_times = []
         logger.info(f'Found {len(timesteps)} timesteps to download.')
-        # Do all of this inside a temporary folder
-        with tempfile.TemporaryDirectory() as tmp_path:
-            # Download the data for the specified times
-            for i, time_now in enumerate(timesteps):
-                logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
+        # Download the data for the specified times
+        for i, time_now in enumerate(timesteps):
+            logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+
+            # Do all of this inside a temporary folder
+            with tempfile.TemporaryDirectory() as tmp_path:
                 tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif.gz'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
+
                 # Download the data
                 if options['get_prelim']:
                     success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', time = time_now)
@@ -88,14 +90,18 @@ class CHIRPSDownloader(URLDownloader):
                     crop_raster(tmp_destination[:-3], space_bounds, destination_now)
                     logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
 
-            # Fill with prelimnary data
-            if len(missing_times) > 0 and options['get_prelim']:
-                logger.info(f'Checking preliminary folder for missing data for {len(missing_times)} timesteps.')
-                for i, time_now in enumerate(missing_times):
-                    logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+        # Fill with prelimnary data
+        if len(missing_times) > 0 and options['get_prelim']:
+            logger.info(f'Checking preliminary folder for missing data for {len(missing_times)} timesteps.')
+            
+            for i, time_now in enumerate(missing_times):
+                logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
+                # Do all of this inside a temporary folder
+                with tempfile.TemporaryDirectory() as tmp_path:
                     tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif'
-                    tmp_destination = os.path.join(tmp_path, tmp_filename)                
+                    tmp_destination = os.path.join(tmp_path, tmp_filename) 
+                                   
                     self.url_blank = self.url_prelim_blank
                     success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', time = time_now)
                     if success:
