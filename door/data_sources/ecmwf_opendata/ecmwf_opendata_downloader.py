@@ -62,25 +62,27 @@ class ECMWFOpenDataDownloader(APIDownloader):
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_issue_hour(self.issue_hours)
 
-        # Do all of this inside a temporary folder
-        with tempfile.TemporaryDirectory() as tmp_path:
+        # Download the data for the specified issue times
+        logger.info(f'Found {len(timesteps)} model issues to download.')
+        for i, run_time in enumerate(timesteps):
+            logger.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
 
-            self.working_path = tmp_path
+            
 
-            # Download the data for the specified issue times
-            logger.info(f'Found {len(timesteps)} model issues to download.')
-            for i, run_time in enumerate(timesteps):
+            
+            # Set forecast steps
+            logger.debug(" ----> Set forecast steps")
 
-                logger.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
-                # Set forecast steps
-                logger.debug(" ----> Set forecast steps")
+            # at 0 and 12, we have 144 steps max, at 6 and 18, we have 90 steps max
+            if run_time.hour == 0 or run_time.hour == 12:
+                max_steps = min(options['frc_max_step'], 144)
+            else:
+                max_steps = min(options['frc_max_step'], 90)
+            self.frc_time_range, self.frc_steps = get_regular_steps(run_time, self.freq_hours, max_steps)
 
-                # at 0 and 12, we have 144 steps max, at 6 and 18, we have 90 steps max
-                if run_time.hour == 0 or run_time.hour == 12:
-                    max_steps = min(options['frc_max_step'], 144)
-                else:
-                    max_steps = min(options['frc_max_step'], 90)
-                self.frc_time_range, self.frc_steps = get_regular_steps(run_time, self.freq_hours, max_steps)
+            # Do all of this inside a temporary folder
+            with tempfile.TemporaryDirectory() as tmp_path:
+                self.working_path = tmp_path
 
                 logger.debug(f' ----> Downloading data')
                 
