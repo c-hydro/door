@@ -244,6 +244,10 @@ class CMRDownloader(DOORDownloader):
             # get the data from the CMR
             url_list = self.cmr_search(time, space_bounds)
 
+            if not url_list:
+                logger.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
+                continue
+
             with TemporaryDirectory() as tmpdir:
                 file_list = self.download(url_list, tmpdir)
 
