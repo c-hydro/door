@@ -28,7 +28,11 @@ class VIIRSDownloader(CMRDownloader):
                        [12, 'GLSP_GSEnd1',   (1,32766), 1, 'cat'],
                        [25, 'GLSP_QC2',      (0,254),   1, '8bit'],
                        [29, 'GLSP_GSStart2', (1,32766), 1, 'cat'],
-                       [31, 'GLSP_GSEnd2',   (1,32766), 1, 'cat'],]]
+                       [31, 'GLSP_GSEnd2',   (1,32766), 1, 'cat'],]],
+        'snow': ['NSIDCDAAC_ECS', 'VNP10A1', '001', 'daily',
+                 [[3, 'Snow-cover', (0,100), 0.01, 'cont'],
+                  [0, 'Snow_AlgQA', (0,254), 1   , '8bit'],
+                  [1, 'Snow_QA',    (0,254), 1   , '8bit']]],
     }
 
     # source: http://spatialreference.org/ref/sr-org/modis-sinusoidal/
@@ -83,6 +87,8 @@ class VIIRSDownloader(CMRDownloader):
         elif varopts['timesteps'] == 'annual':
             self.timesteps = 'annual'
             self.timesteps_doy = [1]
+        elif varopts['timesteps'] == 'daily':
+            self.timesteps_doy = list(range(1,367))
 
         self.layers = varopts['layers']
     
