@@ -1,6 +1,9 @@
 import cdsapi
 from ...base_downloaders import APIDownloader
 
+import logging
+logger = logging.getLogger(__name__)
+
 class CDSDownloader(APIDownloader):
 
     def __init__(self, dataset) -> None:
