@@ -11,7 +11,7 @@ class ERA5Downloader(CDSDownloader):
         'aggregate_daily': 'mean', # one of 'mean', 'max', 'min', 'sum'
     }
 
-    def __init__(self, product) -> None:
+    def __init__(self, product = 'reanalysis-era5-single-levels') -> None:
         if product not in self.available_products:
             msg = f'Product {product} not available for ERA5'
             logger.error(msg)
@@ -33,3 +33,5 @@ class ERA5Downloader(CDSDownloader):
             options['aggregate_daily'] = 'mean'
     
         return options
+
+    def make_request(self, )
