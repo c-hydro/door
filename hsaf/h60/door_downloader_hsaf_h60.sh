@@ -3,26 +3,19 @@
 # ----------------------------------------------------------------------------------------
 # Script information
 script_name='DOOR DOWNLOADER - HSAF PRODUCT PRECIPITATION H60'
-script_version="2.3.0"
-script_date='2024/01/24'
+script_version="2.4.0"
+script_date='2024/02/14'
 
 # script mode
-script_mode='realtime' # 'history' or 'realtime' 
+script_mode='history' # 'history' or 'realtime' 
 # script period
-days=5
+days=2000
 
 # Script argument(s)
-data_folder_static_geo="/home/hsaf/hsaf_datasets/static/precipitation/geo/h60/"
-#data_folder_static_geo="/home/fabio/Desktop/Door_Workspace/door-ws/hsaf/data_static/h60/"
-
-data_folder_static_grid="/home/hsaf/hsaf_datasets/static/precipitation/gridded/"
-#data_folder_static_grid="/home/fabio/Desktop/Door_Workspace/door-dev/hsaf/h60/"
-
-data_folder_dynamic_src_raw="/home/hsaf/hsaf_datasets/dynamic/source/h60/%YYYY/%MM/%DD/"
-#data_folder_dynamic_src_raw="/home/fabio/Desktop/Door_Workspace/door-ws/hsaf/data_dynamic/source/h60/%YYYY/%MM/%DD/%HH/"
-
-data_folder_dynamic_dst_raw="/home/hsaf/hsaf_datasets/dynamic/outcome/h60/%YYYY/%MM/%DD/%HH00/"
-#data_folder_dynamic_dst_raw="/home/fabio/Desktop/Door_Workspace/door-ws/hsaf/data_dynamic/destination/h60/%YYYY/%MM/%DD/%HH00/"
+data_folder_static_geo="/share/HSAF_PRECIPITATION/ancillary/geo/h60/"
+data_folder_static_grid="/share/HSAF_PRECIPITATION/ancillary/grid/h60/"
+data_folder_dynamic_src_raw="/share/HSAF_PRECIPITATION/nrt/h60/%YYYY/%MM/%DD/"
+data_folder_dynamic_dst_raw="/share/HSAF_PRECIPITATION/dewetra/h60_corrected_extrapolation/%YYYY/%MM/%DD/%HH00/"
 
 # script ftp settings
 proxy="http://130.251.104.8:3128"
@@ -33,8 +26,8 @@ var_rain_out='rain_rate'
 var_quality_in='qind'
 var_quality_out='quality_index'
 
-ftp_machine="ftphsaf.meteoam.it"
-ftp_url="ftphsaf.meteoam.it"
+ftp_machine=""
+ftp_url=""
 ftp_usr="" 
 ftp_pwd=""
 
@@ -55,6 +48,7 @@ file_name_nc_grid="grid_europe_h60"
 str_nc_tmp_step1='tmp_fulldisk'
 str_nc_tmp_step2='tmp_domain'
 str_nc_tmp_step3='tmp_regrid'
+str_nc_tmp_step4='tmp_setmissing'
 str_nc_out='europe'
 
 list_var_drop='x,y'
@@ -74,10 +68,10 @@ file_out_compression=1
 file_out_zip=0
 
 # server command-line
-ncks_exec="/home/hsaf/library/nco-4.6.0/bin/ncks"
-ncrename_exec="/home/hsaf/library/nco-4.6.0/bin/ncrename"
-ncpdq_exec="/home/hsaf/library/nco-4.6.0/bin/ncpdq"
-cdo_exec="/home/hsaf/library/cdo-1.7.2rc3_NC-4.1.2_HDF-1.8.17/bin/cdo"
+ncks_exec="/home/idrologia/apps/nco/bin/ncks"
+ncrename_exec="/home/idrologia/apps/nco/bin/ncrename"
+ncpdq_exec="/home/idrologia/apps/nco/bin/ncpdq"
+cdo_exec="/home/idrologia/apps/cdo/bin/cdo"
 
 # local command-line
 #ncks_exec="/home/fabio/Desktop/Apps/nco-4.8.0_nc-4.6.0/bin/ncks"
@@ -86,17 +80,16 @@ cdo_exec="/home/hsaf/library/cdo-1.7.2rc3_NC-4.1.2_HDF-1.8.17/bin/cdo"
 #cdo_exec="/home/fabio/Desktop/Apps/cdo-2.0.0_nc-4.6.0_hdf-1.8.17_eccodes-2.20.0/bin/cdo"
 
 # Export library path dependecies
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/hsaf/library/grib_api-1.15.0/lib/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/idrologia/library/eccodes/lib/
 
 # CDO Option(s)  
-#CDO_GRIDSEARCH_RADIUS=5
-#export CDO_GRIDSEARCH_RADIUS
+export REMAP_EXTRAPOLATE=off
 # ----------------------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------------
 # Get time
 time_now=$(date '+%Y-%m-%d')
-# time_now='2022-05-12'
+time_now='2024-02-13'
 # ----------------------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------------
@@ -153,6 +146,10 @@ for day in $(seq 0 $days); do
 		count_start=23
 		count_end=0
 	fi 
+	
+	# debug
+	#count_start=9
+	#count_end=9
 	
 	for hour in $(seq ${count_start} -1 ${count_end}); do
 		
@@ -280,6 +277,7 @@ ftprem`
 		    file_name_nc_tmp_step1=${file_name_nc_generic/'%DOMAIN'/$str_nc_tmp_step1}'.nc'
 		    file_name_nc_tmp_step2=${file_name_nc_generic/'%DOMAIN'/$str_nc_tmp_step2}'.nc'
 		    file_name_nc_tmp_step3=${file_name_nc_generic/'%DOMAIN'/$str_nc_tmp_step3}'.nc'
+		    file_name_nc_tmp_step4=${file_name_nc_generic/'%DOMAIN'/$str_nc_tmp_step4}'.nc'
 		    
 		    file_name_nc_pattern='hsaf_h60_'${file_date_part1_nc_in}${file_date_part2_nc_in}'_'${str_nc_out}
 		    
@@ -294,6 +292,7 @@ ftprem`
 			file_path_nc_tmp_step1=${data_folder_dynamic_dst_def}${file_name_nc_tmp_step1}
 			file_path_nc_tmp_step2=${data_folder_dynamic_dst_def}${file_name_nc_tmp_step2}
 			file_path_nc_tmp_step3=${data_folder_dynamic_dst_def}${file_name_nc_tmp_step3}
+			file_path_nc_tmp_step4=${data_folder_dynamic_dst_def}${file_name_nc_tmp_step4}
 			file_path_nc_out=${data_folder_dynamic_dst_def}${file_name_nc_out}
 			file_path_zip_out=${data_folder_dynamic_dst_def}${file_name_zip_out}
 			
@@ -438,35 +437,69 @@ ftprem`
 				
 			    # ----------------------------------------------------------------------------------------
 			    # Select file over domain
-			    echo -n " =====> REGRID FILE VARIABLE(S) OVER REGULAR GRID: ${file_path_nc_tmp_step3} to ${file_path_nc_out} ..."
-			    if ! [ -e ${file_path_nc_out} ]; then
+			    echo -n " =====> REGRID FILE VARIABLE(S) OVER REGULAR GRID: ${file_path_nc_tmp_step3} to ${file_path_nc_tmp_step4} ..."
+			    if ! [ -e ${file_path_nc_tmp_step4} ]; then
 			    	
 			    	if [ "$file_out_compression" -eq "1" ]; then
 			    		echo -n " ZIP COMPRESSION ACTIVATED ... " 
-					    if ${cdo_exec} -z zip_9 remapnn,${file_path_nc_grid} ${file_path_nc_tmp_step3} ${file_path_nc_out} > /dev/null 2>&1; then
+			    		
+					    if ${cdo_exec} -z zip_9 remapnn,${file_path_nc_grid} ${file_path_nc_tmp_step3} ${file_path_nc_tmp_step4} > /dev/null 2>&1; then
 				            echo " DONE!"
 				        else
 				            echo " FAILED! Error in command execution!"
 				            create_nc=false
 				        fi
-				    
+				        
 				    else
 		        
-		        	echo -n " ZIP COMPRESSION NOT ACTIVATED ... "
-			        if ${cdo_exec} remapnn,${file_path_nc_grid} ${file_path_nc_tmp_step3} ${file_path_nc_out} > /dev/null 2>&1; then
-		                echo " DONE!"
-		            else
-		                echo " FAILED! Error in command execution!"
-		                create_nc=false
-		            fi
+				    	echo -n " ZIP COMPRESSION NOT ACTIVATED ... "
+					    if ${cdo_exec} remapnn,${file_path_nc_grid} ${file_path_nc_tmp_step3} ${file_path_nc_tmp_step4} > /dev/null 2>&1; then
+				            echo " DONE!"
+				        else
+				            echo " FAILED! Error in command execution!"
+				            create_nc=false
+				        fi
 		        
-		        fi
+		        	fi
 			        
 				else
 					echo " SKIPPED! File variable(s) previously regridded on regular grid!"
 				fi
 			    # ----------------------------------------------------------------------------------------
-				
+						
+			    # ----------------------------------------------------------------------------------------
+			    # Select file missing value
+			    echo -n " =====> SET FILE VARIABLE(S) MISSING VALUE: ${file_path_nc_tmp_step4} to ${file_path_nc_out} ..."
+			    if ! [ -e ${file_path_nc_out} ]; then
+			    	
+			    	if [ "$file_out_compression" -eq "1" ]; then
+			    		echo -n " ZIP COMPRESSION ACTIVATED ... " 
+			    		
+					    if ${cdo_exec} -z zip_9 setmissval,0 ${file_path_nc_tmp_step4} ${file_path_nc_out} > /dev/null 2>&1; then
+				            echo " DONE!"
+				        else
+				            echo " FAILED! Error in command execution!"
+				            create_nc=false
+				        fi
+				        
+				    else
+		        
+				    	echo -n " ZIP COMPRESSION NOT ACTIVATED ... "
+				    	
+					    if ${cdo_exec} setmissval,0 ${file_path_nc_tmp_step4} ${file_path_nc_out} > /dev/null 2>&1; then
+				            echo " DONE!"
+				        else
+				            echo " FAILED! Error in command execution!"
+				            create_nc=false
+				        fi
+		        
+		        	fi
+			        
+				else
+					echo " SKIPPED! File variable(s) missing values previously set!"
+				fi
+			    # ----------------------------------------------------------------------------------------
+
 			    # ----------------------------------------------------------------------------------------
 			    # Check file nc 
 			    echo -n " =====> CHECK AND COMPRESS FILE NC: ${file_path_nc_out} ..."
@@ -511,6 +544,10 @@ ftprem`
 		    
 			if [ -e ${file_path_nc_tmp_step3} ]; then
 			    rm ${file_path_nc_tmp_step3} 
+		    fi
+		    
+			if [ -e ${file_path_nc_tmp_step4} ]; then
+			    rm ${file_path_nc_tmp_step4} 
 		    fi
 		    
 		    if [ "$file_out_zip" -eq "1" ]; then
