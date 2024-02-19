@@ -1,6 +1,8 @@
 from osgeo import gdal, osr, gdalconst
 import numpy as np
 import os
+import xarray as xr
+import rioxarray as rxr
 
 from .space import BoundingBox
 
@@ -51,3 +53,10 @@ def save_raster(src: gdal.Dataset, output_file: str) -> None:
     """
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     gdal.Translate(output_file, src, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
+
+def save_array_to_tiff(src: xr.DataArray, output_file:str) -> None:
+    """
+    Save a xarray dataset to a tiff file
+    """
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    src.rio.to_raster(output_file)
