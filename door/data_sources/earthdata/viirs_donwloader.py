@@ -30,9 +30,9 @@ class VIIRSDownloader(CMRDownloader):
                        [29, 'GLSP_GSStart2', (1,32766), 1, 'cat'],
                        [31, 'GLSP_GSEnd2',   (1,32766), 1, 'cat'],]],
         'snow': ['NSIDCDAAC_ECS', 'VNP10A1', '001', 'daily',
-                 [[3, 'Snow-cover', (0,100), 0.01, 'cont'],
-                  [0, 'Snow_AlgQA', (0,254), 1   , '8bit'],
-                  [1, 'Snow_QA',    (0,254), 1   , '8bit']]],
+                 [[3, 'NDSI_Snow_Cover',    (0,254), 1, '8bit'],
+                  [0, 'Snow_AlgQA',         (0,254), 1, '8bit'],
+                  [1, 'Snow_QA',            (0,254), 1, '8bit']]],
     }
 
     # source: http://spatialreference.org/ref/sr-org/modis-sinusoidal/
