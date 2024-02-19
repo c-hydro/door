@@ -1,4 +1,8 @@
 from setuptools import setup, find_packages
+from subprocess import check_output
+
+# get the version of gdal-config to use as a requirement (from bash)
+gdalconfig_version = check_output('gdal-config --version', shell=True).decode('utf-8').strip()
 
 setup(
     name='door',
@@ -19,7 +23,7 @@ setup(
     keywords='data retrieval, meteorological data, satellite data, climatological data, environmental data, raster data,\
         xarray, netcdf, hdf5, grib, hdf4, hdf-eos, hdf-eos5, geotiff',
     install_requires=[
-        'gdal[numpy] >= 3.4.3',
+        f'gdal[numpy]=={gdalconfig_version}',
         'h5py >= 3.4.0',
         'cfgrib >= 0.9.9',
         'xarray>=2023.9.0',
