@@ -39,7 +39,8 @@ class CMRDownloader(DOORDownloader):
     default_options = {
         'layers': None,
         'make_mosaic': True,
-        'crop_to_bounds': True
+        'crop_to_bounds': True,
+        'keep_tiles_naming': False,
     }
     
     def __init__(self) -> None:
@@ -275,7 +276,12 @@ class CMRDownloader(DOORDownloader):
                         for layer in self.layers:
                             lname = layer['name']
                             ds = these_hdf5_datasets[layer['id']]
-                            file_out = time.strftime(destination.format(layer=lname, tile=tile))
+                            if options['keep_tiles_naming']:
+                                pattern = re.compile(r'h\d+v\d+')
+                                tile_name = re.search(pattern, file).group()
+                                file_out = time.strftime(destination.format(layer=lname, tile=tile_name))
+                            else:
+                                file_out = time.strftime(destination.format(layer=lname, tile=tile))
                             if options['crop_to_bounds']:
                                 crop_raster(ds, space_bounds, file_out)
                             else:
