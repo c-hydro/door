@@ -2,13 +2,15 @@ from urllib.request import Request, urlopen, build_opener, HTTPCookieProcessor
 from urllib.error import URLError, HTTPError
 import ssl
 
+import re
+import os
 import json
 import itertools
 import sys
 import numpy as np
 from datetime import datetime
 from typing import Optional
-from tempfile import TemporaryDirectory
+import tempfile
 
 from osgeo import gdal
 
@@ -249,14 +251,17 @@ class CMRDownloader(DOORDownloader):
                 logger.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
                 continue
 
-            with TemporaryDirectory() as tmpdir:
-                file_list = self.download(url_list, tmpdir)
+            # Do all of this inside a temporary folder
+            tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
+            os.makedirs(tmpdirs, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
+                file_list = self.download(url_list, tmp_path)
 
                 lnames = [layer['name'] for layer in self.layers]
                 if options['make_mosaic']:
                     # build the mosaic (one for each layer)
                     # this is better to do all at once, so that we open the HDF5 file only once
-                    dest = [f'{tmpdir}/mosaic_{name}.tif' for name in lnames]
+                    dest = [f'{tmp_path}/mosaic_{name}.tif' for name in lnames]
                     mosaics = self.build_mosaics_from_hdf5(file_list, self.layers)#,
                                                 #destinations = dest)
                                     # from here on, we work on layers individually

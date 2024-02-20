@@ -76,7 +76,9 @@ class ICONDownloader(URLDownloader):
         timesteps = time_range.get_timesteps_from_issue_hour(self.issue_hours)
 
         # Do all of this inside a temporary folder
-        with tempfile.TemporaryDirectory() as tmp_path:
+        tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
+        os.makedirs(tmpdirs, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
 
             self.working_path = tmp_path
 
