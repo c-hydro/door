@@ -141,8 +141,6 @@ class APIDownloader(DOORDownloader):
 
     def __init__(self, client) -> None:
         self.client = client
-        pass
-        #self.cds = cdsapi.Client(progress=False)#, quiet=True)
 
     def download(self, destination: str, min_size: float = None, missing_action: str = 'error', **kwargs) -> bool:
         """
@@ -167,3 +165,6 @@ class APIDownloader(DOORDownloader):
             return False
 
         return True
+    
+    def retrieve(self, **kwargs):
+        return self.client.retrieve(**kwargs)
