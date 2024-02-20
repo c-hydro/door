@@ -25,8 +25,32 @@ class ERA5Downloader(CDSDownloader):
         'aggregate_in_time':  None,    # one of 'mean', 'max', 'min', 'sum'
         'timesteps_per_year': 365,     # the number of timesteps per year to split the download over #365=daily, 12=monthly, 36=10-daily
     }
-    spatial_ref = 'PROJCS["WGS 84 / UTM zone 22S",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-51],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",10000000],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","32722"]]'
-
+    spatial_ref =  'GEOGCRS["WGS 84",\
+                    ENSEMBLE["World Geodetic System 1984 ensemble",\
+                        MEMBER["World Geodetic System 1984 (Transit)"],\
+                        MEMBER["World Geodetic System 1984 (G730)"],\
+                        MEMBER["World Geodetic System 1984 (G873)"],\
+                        MEMBER["World Geodetic System 1984 (G1150)"],\
+                        MEMBER["World Geodetic System 1984 (G1674)"],\
+                        MEMBER["World Geodetic System 1984 (G1762)"],\
+                        MEMBER["World Geodetic System 1984 (G2139)"],\
+                        ELLIPSOID["WGS 84",6378137,298.257223563,\
+                            LENGTHUNIT["metre",1]],\
+                        ENSEMBLEACCURACY[2.0]],\
+                    PRIMEM["Greenwich",0,\
+                        ANGLEUNIT["degree",0.0174532925199433]],\
+                    CS[ellipsoidal,2],\
+                        AXIS["geodetic latitude (Lat)",north,\
+                            ORDER[1],\
+                            ANGLEUNIT["degree",0.0174532925199433]],\
+                        AXIS["geodetic longitude (Lon)",east,\
+                            ORDER[2],\
+                            ANGLEUNIT["degree",0.0174532925199433]],\
+                    USAGE[\
+                        SCOPE["Horizontal component of 3D system."],\
+                        AREA["World."],\
+                        BBOX[-90,-180,90,180]],\
+                    ID["EPSG",4326]]'
 
     def __init__(self, product = 'reanalysis-era5-single-levels') -> None:
         if product not in self.available_products:
@@ -81,7 +105,7 @@ class ERA5Downloader(CDSDownloader):
         
         year = str(start.year)
         month = str(start.month).zfill(2)
-        days = [start.day + i for i in range((end-start).days)]
+        days = [start.day + i for i in range((end-start).days + 1)]
         days = [str(d).zfill(2) for d in days]
 
         # Get the bounding box in the correct order
@@ -150,7 +174,6 @@ class ERA5Downloader(CDSDownloader):
                 request = self.build_request(self.variables, TimeRange(timestep_start, timestep_end), space_bounds)
                 self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
                 
-                breakpoint()
                 data = xr.open_dataset(tmp_destination, engine='cfgrib')
                 #data = xr.open_dataset('/home/luca/Downloads/adaptor.mars.internal-1708037793.2312179-18856-1-d2512f5e-7708-46a5-8418-e52847aa208a.grib', engine='cfgrib')
 
@@ -164,10 +187,11 @@ class ERA5Downloader(CDSDownloader):
                 data = data.stack(valid_time=('time', 'step'))
 
                 # and asign it the new time values
+                data = data.drop_vars(['valid_time', 'time', 'step'])
                 data = data.assign_coords(valid_time=valid_times)
 
                 # filter data to the selected days (we have to do this because the API returns data for 36 hours)
-                inrange = (data.valid_time >= timestep_start) & (data.valid_time <= timestep_end)
+                inrange = (data.valid_time.dt.date >= timestep_start.date()) & (data.valid_time.dt.date <= timestep_end.date())
                 data = data.sel(valid_time = inrange)
 
                 # rename the time dimension to time
@@ -202,7 +226,7 @@ class ERA5Downloader(CDSDownloader):
                     vardata = vardata.rio.write_crs(self.spatial_ref)
 
                     out_name = format_string(destination, {'variable': var})
-                    out_name = timestep_start.strftime()
+                    out_name = timestep_end.strftime(out_name)
 
                     if options['output_format'] == 'GeoTIFF':
                         logger.debug(f' ----> Saving to GeoTIFF')
