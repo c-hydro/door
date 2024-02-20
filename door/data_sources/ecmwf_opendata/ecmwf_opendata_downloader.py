@@ -81,7 +81,9 @@ class ECMWFOpenDataDownloader(APIDownloader):
             self.frc_time_range, self.frc_steps = get_regular_steps(run_time, self.freq_hours, max_steps)
 
             # Do all of this inside a temporary folder
-            with tempfile.TemporaryDirectory() as tmp_path:
+            tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
+            os.makedirs(tmpdirs, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
                 self.working_path = tmp_path
 
                 logger.debug(f' ----> Downloading data')

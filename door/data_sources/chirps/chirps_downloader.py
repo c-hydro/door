@@ -69,7 +69,9 @@ class CHIRPSDownloader(URLDownloader):
             logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
             # Do all of this inside a temporary folder
-            with tempfile.TemporaryDirectory() as tmp_path:
+            tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
+            os.makedirs(tmpdirs, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
                 tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif.gz'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
 
@@ -98,7 +100,7 @@ class CHIRPSDownloader(URLDownloader):
                 logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
                 # Do all of this inside a temporary folder
-                with tempfile.TemporaryDirectory() as tmp_path:
+                with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
                     tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif'
                     tmp_destination = os.path.join(tmp_path, tmp_filename) 
                                    

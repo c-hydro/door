@@ -15,7 +15,7 @@ space_ref  = BoundingBox(-180,-90,180,90, projection = 'EPSG:4326')
 
 test_downloader = ERA5Downloader('reanalysis-era5-single-levels')
 test_downloader.get_data(time_range, space_ref,
-                         destination=HOME+'/ERA5_dekads/%Y/%m%d/ERA5_precipitation_%Y%m%d.tif',
+                         destination=HOME+'/ERA5_dekads/%Y/%m/%d/ERA5_precipitation_%Y%m%d.tif',
                          options={'variables': ['total_precipitation'],
                                   'output_format': 'GeoTIFF',
                                   'aggregate_in_time': 'sum',

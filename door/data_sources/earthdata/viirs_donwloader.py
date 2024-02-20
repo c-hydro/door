@@ -1,9 +1,6 @@
-from datetime import datetime, timedelta
-from tempfile import TemporaryDirectory
-from typing import Optional
+from datetime import datetime
 
 import h5py
-import numpy as np
 
 from .cmr_downloader import CMRDownloader
 

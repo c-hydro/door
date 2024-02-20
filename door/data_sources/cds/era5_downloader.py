@@ -164,7 +164,9 @@ class ERA5Downloader(CDSDownloader):
             logger.info(f' - Block {i+1}/{ntimesteps}: starting at {timestep_start:%Y-%m-%d}')
 
             # Do all of this inside a temporary folder
-            with tempfile.TemporaryDirectory() as tmp_path:
+            tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
+            os.makedirs(tmpdirs, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
                 self.working_path = tmp_path
 
                 logger.debug(f' ----> Downloading data')
