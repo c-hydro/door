@@ -196,6 +196,14 @@ class ERA5Downloader(CDSDownloader):
                 inrange = (data.valid_time.dt.date >= timestep_start.date()) & (data.valid_time.dt.date <= timestep_end.date())
                 data = data.sel(valid_time = inrange)
 
+                # check if we are using any preliminary data, or if it is all final
+                if 'expver' in data.dims:
+                    logger.warning('  -> Some of the data is preliminary, we will use the final version where available')
+                    data_final  = data.sel(expver=1)
+                    data_prelim = data.sel(expver=5)
+
+                    data = xr.where(np.isnan(data_final), data_prelim, data_final)
+
                 # rename the time dimension to time
                 data = data.rename_dims({'valid_time': 'time'})
 
