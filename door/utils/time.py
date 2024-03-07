@@ -162,6 +162,16 @@ def add_dekad(time: dt.datetime) -> dt.datetime:
     else:
         raise ValueError('Invalid day for dekad')
 
+def get_decade_days(time=dt.datetime) -> list[dt.datetime]:
+    """
+    Get the days of the dekad of the given time
+    """
+    days = [time + dt.timedelta(days=i) for i in range(10)]
+    if time.day == 21:
+        days = [time + dt.timedelta(days=i) for i in range(11)]
+        days = [d for d in days if d.month == time.month]
+    return days
+
 # def check_max_steps(self, max_steps_model: int) -> None:
 #     """
 #     Check if selected max_steps is available for the model
