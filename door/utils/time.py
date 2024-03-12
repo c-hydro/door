@@ -162,6 +162,21 @@ def add_dekad(time: dt.datetime) -> dt.datetime:
     else:
         raise ValueError('Invalid day for dekad')
 
+def substract_dekad(time: dt.datetime) -> dt.datetime:
+    """
+    Substract the dekad to the time
+    """
+    day = time.day
+    if day == 1:
+        previous_month = time - dtr.relativedelta(months = 1)
+        return previous_month.replace(day = 21)
+    elif day == 11:
+        return time.replace(day = 1)
+    elif day == 21:
+        return time.replace(day = 11)
+    else:
+        raise ValueError('Invalid day for dekad')
+
 def get_decade_days(time=dt.datetime) -> list[dt.datetime]:
     """
     Get the days of the dekad of the given time
