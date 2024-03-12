@@ -29,7 +29,8 @@ class VIIRSDownloader(CMRDownloader):
         'snow': ['NSIDCDAAC_ECS', 'VNP10A1', '001', 'daily',
                  [[0, 'Snow_AlgQA',         (0,254), 1, '8bit'],
                   [1, 'Snow_QA',            (0,254), 1, '8bit'],
-                  [3, 'NDSI_Snow_Cover',    (0,254), 1, '8bit']]],
+                  [3, 'NDSI_Snow_Cover',    (0,254), 1, '8bit'],
+                  ]],
     }
 
     # source: http://spatialreference.org/ref/sr-org/modis-sinusoidal/
