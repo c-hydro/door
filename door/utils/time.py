@@ -177,7 +177,7 @@ def substract_dekad(time: dt.datetime) -> dt.datetime:
     else:
         raise ValueError('Invalid day for dekad')
 
-def get_decade_days(time=dt.datetime) -> list[dt.datetime]:
+def get_decade_days(time=dt.datetime, first:bool=False, last:bool=False) -> list[dt.datetime]:
     """
     Get the days of the dekad of the given time
     """
@@ -185,6 +185,12 @@ def get_decade_days(time=dt.datetime) -> list[dt.datetime]:
     if time.day == 21:
         days = [time + dt.timedelta(days=i) for i in range(11)]
         days = [d for d in days if d.month == time.month]
+
+    if first:
+        return days[0]
+    elif last:
+        return days[-1]
+
     return days
 
 # def check_max_steps(self, max_steps_model: int) -> None:
