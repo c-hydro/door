@@ -94,19 +94,20 @@ class ERA5Downloader(CDSDownloader):
         start = time.start
         end = time.end
 
-        if start.year != end.year:
-            msg = f'Request is split between multiple years, this should not happen'
-            logger.debug(msg)
-            raise ValueError(msg)
-        elif start.month != end.month:
-            msg = f'Request is split between multiple months, this should not happen'
-            logger.debug(msg)
-            raise ValueError(msg)
-        
-        year = str(start.year)
-        month = str(start.month).zfill(2)
-        days = [start.day + i for i in range((end-start).days + 1)]
-        days = [str(d).zfill(2) for d in days]
+        years = set()
+        months = set()
+        days = set()
+
+        this_time = start
+        while this_time <= end:
+            years.add(this_time.year)
+            months.add(this_time.month)
+            days.add(this_time.day)
+            this_time += dt.timedelta(days=1)
+
+        years_str = [str(y) for y in years]
+        months_str = [str(m).zfill(2) for m in months]
+        days_str = [str(d).zfill(2) for d in days]
 
         # Get the bounding box in the correct order
         W, S, E, N = space_bounds.bbox
@@ -115,9 +116,9 @@ class ERA5Downloader(CDSDownloader):
             'product_type': 'reanalysis',
             'format': 'grib', # we always want grib, it's smaller, then we convert
             'variable': variables,
-            'year' : year,
-            'month': month,
-            'day'  : days,
+            'year' : years_str,
+            'month': months_str,
+            'day'  : days_str,
             'time': [ # we always want all times in a day
                 '00:00', '01:00', '02:00',
                 '03:00', '04:00', '05:00',
@@ -148,7 +149,7 @@ class ERA5Downloader(CDSDownloader):
         
         logger.info(f'------------------------------------------')
         logger.info(f'Starting download of {self.dataset} data from {self.name}')
-        logger.info(f'Data requested between {time_range.start:%Y-%m-%d %H:%M} and {time_range.end:%Y-%m-%d %H:%m}')
+        logger.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
         logger.info(f'Bounding box: {space_bounds.bbox}')
         logger.info(f'------------------------------------------')
 
@@ -173,9 +174,10 @@ class ERA5Downloader(CDSDownloader):
                 
                 tmp_filename = f'temp_{self.dataset}_{timestep_start:%Y%m%d}-{timestep_end:%Y%m%d}.grib2'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
-                request = self.build_request(self.variables, TimeRange(timestep_start, timestep_end), space_bounds)
+                request_end = timestep_end + dt.timedelta(days=1) # we need to add 1 day to the end time to get all the data for the last day (23h-00h is included in the next day's data)
+                request = self.build_request(self.variables, TimeRange(timestep_start, request_end), space_bounds)
                 self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
-                
+
                 data = xr.open_dataset(tmp_destination, engine='cfgrib')
                 #data = xr.open_dataset('/home/luca/Downloads/adaptor.mars.internal-1708037793.2312179-18856-1-d2512f5e-7708-46a5-8418-e52847aa208a.grib', engine='cfgrib')
 
@@ -205,7 +207,7 @@ class ERA5Downloader(CDSDownloader):
                     data = xr.where(np.isnan(data_final), data_prelim, data_final)
 
                 # rename the time dimension to time
-                data = data.rename_dims({'valid_time': 'time'})
+                data = data.rename({'valid_time': 'time'})
 
                 # remove non needed dimensions
                 data = data.squeeze()
@@ -215,6 +217,16 @@ class ERA5Downloader(CDSDownloader):
                     varname = self.available_variables[var]
 
                     vardata = data[varname]
+
+                    # verify that we have all the data we need!
+                    time_to_check = timestep_start
+                    while time_to_check <= timestep_end:
+                        istoday = vardata.time.dt.date == time_to_check.date()
+                        this_data = vardata.sel(time = istoday)
+                        if this_data.isnull().sum() > 0:
+                            logger.error(f'  -> Missing data for {var} at time {time_to_check:%Y-%m-%d}')
+                            raise ValueError(f'Missing data for {var} at time {time_to_check:%Y-%m-%d}')
+                        time_to_check += dt.timedelta(days=1)
 
                     # add start and end time as attributes
                     vardata.attrs['start_time'] = timestep_start
