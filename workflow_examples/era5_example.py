@@ -10,7 +10,7 @@ log_file = HOME+'/door-log.txt'
 
 log.set_logging(log_file, 'INFO')
 
-time_range = TimeRange(start='2024-01-21', end='2024-02-19 00:00:00')
+time_range = TimeRange(start='2024-01-01', end='2024-02-19 00:00:00')
 space_ref  = BoundingBox(-180,-90,180,90, projection = 'EPSG:4326')
 
 test_downloader = ERA5Downloader('reanalysis-era5-single-levels')
@@ -20,4 +20,5 @@ test_downloader.get_data(time_range, space_ref,
                                   'output_format': 'GeoTIFF',
                                   'aggregate_in_time': 'sum',
                                   'timesteps_per_year': 36,
+                                  'n_processes': 4,
                                   })
