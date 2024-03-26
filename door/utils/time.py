@@ -162,9 +162,9 @@ def add_dekad(time: dt.datetime) -> dt.datetime:
     else:
         raise ValueError('Invalid day for dekad')
 
-def substract_dekad(time: dt.datetime) -> dt.datetime:
+def subtract_dekad(time: dt.datetime) -> dt.datetime:
     """
-    Substract the dekad to the time
+    Subtract the dekad to the time
     """
     day = time.day
     if day == 1:
