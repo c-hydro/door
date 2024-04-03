@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 class ERA5Downloader(CDSDownloader):
 
     available_products = ['reanalysis-era5-single-levels']
-    available_variables = {'total_precipitation': 'tp'}
+    available_variables = {'total_precipitation': 'tp',
+                           '2m_temperature': 't2m'}
     default_options = {
         'variables':         'total_precipitation',
         'output_format':     'netcdf', # one of netcdf, GeoTIFF
@@ -58,21 +59,27 @@ class ERA5Downloader(CDSDownloader):
             msg = f'Product {product} not available for ERA5'
             logger.error(msg)
             raise ValueError(msg)
-        
+
         super().__init__(product)
 
     def check_options(self, options: dict) -> dict:
         options = super().check_options(options)
 
-        if 'tif' in options['output_format'].lower():
+        if 'necdf' in options['output_format'].lower():
+            options['output_format'] = 'netcdf'
+        elif 'tif' in options['output_format'].lower():
             options['output_format'] = 'GeoTIFF'
         else:
             logger.warning(f'Output format {options["output_format"]} not supported. Using netcdf')
             options['output_format'] = 'netcdf'
-        
-        if options['aggregate_in_time'] is not None and options['aggregate_in_time'].lower() not in ['mean', 'max', 'min', 'sum']:
-            logger.warning(f'Unknown method {options["aggregate_in_time"]}, won\'t aggregate')
-            options['aggregate_in_time'] = None
+
+        if options['aggregate_in_time'] is not None and not isinstance(options['aggregate_in_time'], list):
+            options['aggregate_in_time'] = [options['aggregate_in_time']]
+
+        for aggregation in options['aggregate_in_time']:
+            if aggregation not in ['mean', 'max', 'min', 'sum']:
+                logger.warning(f'Unknown method {aggregation}, won\'t aggregate')
+                options['aggregate_in_time'].remove(aggregation)
 
         for variable in options['variables']:
             if variable not in self.available_variables:
@@ -133,17 +140,19 @@ class ERA5Downloader(CDSDownloader):
         'area': [N, W, S, E],
         }
         return request
-    
+
     def get_singledata(self,
                        step_range: TimeRange,
                        space_bounds: BoundingBox,
                        destination: str,
                        options: Optional[dict] = None) -> None:
-        
+
         # Check options
         options = self.check_options(options)
         self.variables = options['variables']
-            
+
+        self.aggregations = options['aggregate_in_time']
+
         timestep_start = step_range.start #timesteps[i]
         timestep_end   = step_range.end #timesteps[i+1] - dt.timedelta(days=1)
         #logger.info(f' - Block {i+1}/{ntimesteps}: starting at {timestep_start:%Y-%m-%d}')
@@ -155,32 +164,22 @@ class ERA5Downloader(CDSDownloader):
             self.working_path = tmp_path
 
             logger.debug(f' ----> Downloading data')
-            
+
             tmp_filename = f'temp_{self.dataset}_{timestep_start:%Y%m%d}-{timestep_end:%Y%m%d}.grib2'
             tmp_destination = os.path.join(tmp_path, tmp_filename)
-            request_end = timestep_end + dt.timedelta(days=1) # we need to add 1 day to the end time to get all the data for the last day (23h-00h is included in the next day's data)
+
+            # If in the variable list we have total precipitation, we need to download the data for the next day as well
+            # we need to add 1 day to the end time to get all the data for the last day (23h-00h is included in the next day's data)
+            if 'total_precipitation' in self.variables:
+                request_end = timestep_end + dt.timedelta(days=1)
+            else:
+                request_end = timestep_end
+
             request = self.build_request(self.variables, TimeRange(timestep_start, request_end), space_bounds)
             self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
 
             data = xr.open_dataset(tmp_destination, engine='cfgrib')
             #data = xr.open_dataset('/home/luca/Downloads/adaptor.mars.internal-1708037793.2312179-18856-1-d2512f5e-7708-46a5-8418-e52847aa208a.grib', engine='cfgrib')
-
-            # We need to handle the time dimention
-            # Valid times, contains the time + step combined (times, step) array.
-            # first we linearise it, we remove 1 hour to make it easier to filter for the day later
-            # the original time is the end time of the step so a step that ends at midnight is actally from the previous day
-            valid_times = data.valid_time.values.flatten() - np.timedelta64(1, 'h')
-
-            # We need to create a new time dimension that is the combination of the time and step dimensions
-            data = data.stack(valid_time=('time', 'step'))
-
-            # and asign it the new time values
-            data = data.drop_vars(['valid_time', 'time', 'step'])
-            data = data.assign_coords(valid_time=valid_times)
-
-            # filter data to the selected days (we have to do this because the API returns data for 36 hours)
-            inrange = (data.valid_time.dt.date >= timestep_start.date()) & (data.valid_time.dt.date <= timestep_end.date())
-            data = data.sel(valid_time = inrange)
 
             # check if we are using any preliminary data, or if it is all final
             if 'expver' in data.dims:
@@ -190,17 +189,48 @@ class ERA5Downloader(CDSDownloader):
 
                 data = xr.where(np.isnan(data_final), data_prelim, data_final)
 
-            # rename the time dimension to time
-            data = data.rename({'valid_time': 'time'})
-
-            # remove non needed dimensions
-            data = data.squeeze()
-
             for var in self.variables:
                 logger.debug(f' --> Variable {var}')
                 varname = self.available_variables[var]
 
                 vardata = data[varname]
+
+                if varname == 'tp':
+
+                    # We need to handle the time dimention
+                    # Valid times, contains the time + step combined (times, step) array.
+                    # first we linearise it, we remove 1 hour to make it easier to filter for the day later
+                    # the original time is the end time of the step so a step that ends at midnight is actally from the previous day
+                    valid_times = vardata.valid_time.values.flatten() - np.timedelta64(1, 'h')
+
+                    # We need to create a new time dimension that is the combination of the time and step dimensions
+                    vardata = vardata.stack(valid_time=('time', 'step'))
+
+                    # and asign it the new time values
+                    vardata = vardata.drop_vars(['valid_time', 'time', 'step'])
+                    vardata = vardata.assign_coords(valid_time=valid_times)
+
+                    # filter data to the selected days (we have to do this because the API returns data for 36 hours)
+                    inrange = (vardata.valid_time.dt.date >= timestep_start.date()) & (vardata.valid_time.dt.date <= timestep_end.date())
+                    vardata = vardata.sel(valid_time = inrange)
+
+                    # rename the time dimension to time
+                    vardata = vardata.rename({'valid_time': 'time'})
+
+                elif varname == 't2m':
+
+                    # remove from the data all hours > timestep_end
+                    vardata = vardata.sel(time = vardata.time.dt.date <= timestep_end.date())
+
+                    # Convert Kelvin to Celsius
+                    vardata = vardata - 273.15
+
+                else:
+                    logger.error(f'Variable {var} not implemented')
+                    raise ValueError(f'Variable {var} not implemented')
+
+                # remove non needed dimensions
+                vardata = vardata.squeeze()
 
                 # verify that we have all the data we need!
                 time_to_check = timestep_start
@@ -216,30 +246,37 @@ class ERA5Downloader(CDSDownloader):
                 vardata.attrs['start_time'] = timestep_start
                 vardata.attrs['end_time'] = timestep_end
 
-                if options['aggregate_in_time'] is not None:
-                    logger.debug(f' ----> Aggregating data')
-                    vardata.attrs['agg_function'] = options['aggregate_in_time']
-                    if options['aggregate_in_time'] == 'mean':
-                        vardata = vardata.mean(dim='time')
-                    elif options['aggregate_in_time'] == 'max':
-                        vardata = vardata.max(dim='time')
-                    elif options['aggregate_in_time'] == 'min':
-                        vardata = vardata.min(dim='time')
-                    elif options['aggregate_in_time'] == 'sum':
-                        vardata = vardata.sum(dim='time')
+                for agg in self.aggregations:
+                    vardata.attrs['agg_function'] = agg
+                    if agg == 'mean':
+                        logger.debug(f' ----> Aggregating data to mean')
+                        aggdata = vardata.mean(dim='time')
+                    elif agg == 'max':
+                        logger.debug(f' ----> Aggregating data to max')
+                        aggdata = vardata.max(dim='time')
+                    elif agg == 'min':
+                        logger.debug(f' ----> Aggregating data to min')
+                        aggdata = vardata.min(dim='time')
+                    elif agg == 'sum':
+                        logger.debug(f' ----> Aggregating data to sum')
+                        aggdata = vardata.sum(dim='time')
+                    else:
+                        logger.debug(f' ----> No aggregation needed')
+                        aggdata = vardata
 
-                vardata = vardata.rio.set_spatial_dims('longitude', 'latitude')
-                vardata = vardata.rio.write_crs(self.spatial_ref)
+                    aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
+                    aggdata = aggdata.rio.write_crs(self.spatial_ref)
 
-                out_name = format_string(destination, {'variable': var})
-                out_name = timestep_end.strftime(out_name)
+                    out_name = format_string(destination, {'variable': var})
+                    out_name = format_string(destination, {'aggregation': agg})
+                    out_name = timestep_end.strftime(out_name)
 
-                if options['output_format'] == 'GeoTIFF':
-                    logger.debug(f' ----> Saving to GeoTIFF')
-                    save_array_to_tiff(vardata, out_name)
-                else:
-                    logger.debug(f' ----> Saving to netcdf')
-                    save_netcdf(vardata, out_name)        
+                    if options['output_format'] == 'GeoTIFF':
+                        logger.debug(f' ----> Saving to GeoTIFF')
+                        save_array_to_tiff(aggdata, out_name)
+                    else:
+                        logger.debug(f' ----> Saving to netcdf')
+                        save_netcdf(aggdata, out_name)
 
     def get_data(self,
                  time_range: TimeRange,
@@ -249,7 +286,7 @@ class ERA5Downloader(CDSDownloader):
 
         # set the bounding box to EPSG:4326
         space_bounds.transform('EPSG:4326')
-        
+
         logger.info(f'------------------------------------------')
         logger.info(f'Starting download of {self.dataset} data from {self.name}')
         logger.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
@@ -269,7 +306,7 @@ class ERA5Downloader(CDSDownloader):
             step_ranges = [TimeRange(timesteps[i], timesteps[i+1] - dt.timedelta(days=1)) for i in range(0, ntimesteps)]
             with multiprocessing.Pool(options['n_processes']) as p:
                 p.starmap(get_singledata, [(ds,step_ranges[i],space_bounds, destination, options) for i in range(0, ntimesteps)])
-            
+
         else:
             for i in range(0, ntimesteps):
                 step_range = TimeRange(timesteps[i], timesteps[i+1] - dt.timedelta(days=1))
