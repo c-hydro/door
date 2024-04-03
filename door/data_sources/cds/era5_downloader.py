@@ -219,6 +219,9 @@ class ERA5Downloader(CDSDownloader):
 
                 elif varname == 't2m':
 
+                    # remove from the data all hours > timestep_end
+                    vardata = vardata.sel(time = vardata.time.dt.date <= timestep_end.date())
+
                     # Convert Kelvin to Celsius
                     vardata = vardata - 273.15
 
