@@ -69,7 +69,7 @@ class BoundingBox():
                      right + self.buffer,
                      top + self.buffer)
 
-    def transform(self, new_proj: str) -> None:
+    def transform(self, new_proj: str, inplace = False) -> None:
         """
         Transform the bounding box to a new projection
         """
@@ -106,8 +106,11 @@ class BoundingBox():
         else:
             min_x, min_y, max_x, max_y = self.bbox
 
-        self.bbox = (min_x, min_y, max_x, max_y)
-        self.proj = new_proj
+        if inplace:
+            self.bbox = (min_x, min_y, max_x, max_y)
+            self.proj = new_proj
+        else:
+            return BoundingBox(min_x, min_y, max_x, max_y, new_proj)
 
 
 def get_wkt(proj_string: str) -> str:
