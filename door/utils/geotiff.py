@@ -20,9 +20,9 @@ def crop_raster(src: str|gdal.Dataset, BBox: BoundingBox, output_file: str) -> N
     geotransform = src_ds.GetGeoTransform()
 
     # transform the bounding box to the geotiff projection
-    BBox.transform(geoprojection)
+    BBox_trans = BBox.transform(geoprojection, inplace = False)
 
-    min_x, min_y, max_x, max_y = BBox.bbox
+    min_x, min_y, max_x, max_y = BBox_trans.bbox
     # in order to not change the grid, we need to make sure that the new bounds were also in the old grid
     in_min_x = geotransform[0]
     in_res_x = geotransform[1]
