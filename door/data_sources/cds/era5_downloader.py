@@ -284,6 +284,9 @@ class ERA5Downloader(CDSDownloader):
                  destination: str,
                  options: Optional[dict] = None) -> None:
 
+        # Check options
+        options = self.check_options(options)
+
         # set the bounding box to EPSG:4326
         space_bounds.transform('EPSG:4326')
 
