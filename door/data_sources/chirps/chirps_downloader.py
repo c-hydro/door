@@ -29,7 +29,7 @@ class CHIRPSDownloader(URLDownloader):
             self.prelim_nodata = -1
         elif self.product == "CHIRPSp05-daily":
             url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p05/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif.gz"
-            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p05/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif"
+            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p05/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif.gz"
             self.ts_per_year  = 365 # daily
             self.prelim_nodata = -9999
         elif self.product == "CHIRPSp25-monthly":
@@ -101,12 +101,19 @@ class CHIRPSDownloader(URLDownloader):
 
                 # Do all of this inside a temporary folder
                 with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
-                    tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif'
+                    if 'p05' in self.product:
+                        tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif.gz'
+                    else:
+                        tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif'
                     tmp_destination = os.path.join(tmp_path, tmp_filename) 
                                    
                     self.url_blank = self.url_prelim_blank
                     success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', time = time_now)
                     if success:
+                        if tmp_destination.endswith('.gz'):
+                            self.extract(tmp_destination)
+                            tmp_destination = tmp_destination[:-3]
+                            
                         # Regrid the data
                         destination_now = time_now.strftime(destination)
                         crop_raster(tmp_destination, space_bounds, destination_now)
