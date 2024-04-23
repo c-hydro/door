@@ -39,8 +39,12 @@ def decompress_bz2(filepath):
     newfilepath = filepath[:-4]  # assuming the filepath ends with .bz2
     open(newfilepath, 'wb').write(data)
 
-def download_http(url, destination):
-    r = requests.get(url)
+def download_http(url, destination, auth=None):
+    """
+    Downlaod a file via http
+    if the argument auth is passed as (user, pass), it will be used for authentication
+    """
+    r = requests.get(url, auth)
     os.makedirs(os.path.dirname(destination), exist_ok=True)
     with open(destination, 'wb') as f:
         f.write(r.content)

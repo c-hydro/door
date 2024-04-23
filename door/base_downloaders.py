@@ -56,9 +56,9 @@ class DOORDownloader():
                 keys_to_delete.append(key)
         for key in keys_to_delete:
             del options[key]
-    
+
         return options
-    
+
     #TODO: this is a bit of an akward spot to put this, but it is used by all forecast downloaders, so it makes some sense to have it here
     def postprocess_forecast(self, ds: xr.Dataset, space_bounds: BoundingBox) -> None:
         """
@@ -95,7 +95,7 @@ class URLDownloader(DOORDownloader):
     """
 
     def __init__(self, url_blank: str, protocol: str = 'http') -> None:
-        
+
         self.url_blank = url_blank
         if protocol.lower() != 'http':
             raise ValueError(f'Protocol {protocol} not supported')
@@ -114,11 +114,13 @@ class URLDownloader(DOORDownloader):
         Downloads data from url
         Eventually check file size to avoid empty files
         """
+        if not "auth" in kwargs:
+            kwargs["auth"] = None
 
         url = self.format_url(**kwargs)
         if self.protocol == 'http':
             try:
-                download_http(url, destination)
+                download_http(url, destination, kwargs["auth"])
             except Exception as e:
                 handle_missing(missing_action, kwargs)
                 logger.debug(f'Error downloading {url}: {e}')
