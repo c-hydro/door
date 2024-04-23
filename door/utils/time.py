@@ -74,6 +74,8 @@ class TimeRange():
 
         while True:
             yield now
+            if timesteps_per_year == 17520:
+                now += dt.timedelta(minutes = 30)
             if timesteps_per_year == 8760:
                 now += dt.timedelta(hours = 1)
             elif timesteps_per_year == 365:
