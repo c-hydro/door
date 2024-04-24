@@ -9,7 +9,7 @@ log_file = HOME+'/log.txt'
 
 log.set_logging(log_file)
 
-time_range = TimeRange(start='2017-02-02', end='2017-02-02')
+time_range = TimeRange(start='2017-01-01', end='2017-02-12')
 space_ref  = BoundingBox(-5, -2, 5, 18, projection = 'EPSG:4326')
 
 test_downloader = VIIRSDownloader('FAPAR')

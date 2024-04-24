@@ -46,6 +46,30 @@ class CMRDownloader(DOORDownloader):
         #test_url = None #TODO: add test url
         #self.credentials = get_credentials(self.urs_url)
         pass
+    
+    @property
+    def variable(self):
+        return self._variable
+    
+    @variable.setter
+    def variable(self, variable: str):
+        available_list = self.get_available_variables().keys()
+        # check if the variable is available
+        if variable.lower() not in available_list:
+            msg = f'Variable {variable} is not available. Available variables are: '
+            msg += ', '.join(available_list)
+            raise ValueError(msg)
+        
+        # set the variable
+        self._variable = variable.lower()
+
+        # add the variable-specific parameters
+        varopts = self.get_available_variables()[self._variable]
+        self.provider  = varopts['provider']
+        self.product   = varopts['product']
+        self.version   = varopts['version']
+        self.timesteps = varopts['timesteps']
+        self.layers = varopts['layers']
 
     def get_credentials(self, url: str) -> str:
 
@@ -212,6 +236,21 @@ class CMRDownloader(DOORDownloader):
         """
         filename_filter = time.strftime('*A%Y%j*')
         return f'&producer_granule_id[]={filename_filter}&options[producer_granule_id][pattern]=true'
+    
+    @classmethod
+    def get_available_variables(cls) -> dict:
+        available_variables = cls.available_variables
+        return {v: {'provider' : available_variables[v][0],\
+                    'product'  : available_variables[v][1],
+                    'version'  : available_variables[v][2],
+                    'timesteps': available_variables[v][3],
+                    'layers'   : [{'id'   : l[0],
+                                   'name' : l[1],
+                                   #'range': l[2],
+                                   #'scale': l[3],
+                                   #'type' : l[4]
+                                   } for l in available_variables[v][4]]}\
+                for v in available_variables}
     
 def cmr_filter_urls(search_results, extensions=['.hdf', '.h5']):
     """Select only the desired data files from CMR response."""

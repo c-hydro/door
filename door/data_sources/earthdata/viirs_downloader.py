@@ -71,38 +71,6 @@ class VIIRSDownloader(CMRDownloader):
 
         # set the variable
         self.variable = variable
-
-    @property
-    def variable(self):
-        return self._variable
-    
-    @variable.setter
-    def variable(self, variable: str):
-        available_list = self.get_available_variables().keys()
-        # check if the variable is available
-        if variable.lower() not in available_list:
-            msg = f'Variable {variable} is not available. Available variables are: '
-            msg += ', '.join(available_list)
-            raise ValueError(msg)
-        
-        # set the variable
-        self._variable = variable.lower()
-
-        # add the variable-specific parameters
-        varopts = self.get_available_variables()[self._variable]
-        self.provider  = varopts['provider']
-        self.product   = varopts['product']
-        self.version   = varopts['version']
-        if varopts['timesteps'] == 'viirs':
-            self.timesteps = 'viirs'
-            self.timesteps_doy = list(range(1, 366, 8))
-        elif varopts['timesteps'] == 'annual':
-            self.timesteps = 'annual'
-            self.timesteps_doy = [1]
-        elif varopts['timesteps'] == 'daily':
-            self.timesteps_doy = list(range(1,367))
-
-        self.layers = varopts['layers']
     
     # this is specific to VIIRS, different from MODIS!
     def get_geotransform(self, filename):
@@ -183,21 +151,6 @@ class VIIRSDownloader(CMRDownloader):
 
         return hdf5_datasets
 
-    @classmethod
-    def get_available_variables(cls) -> dict:
-        available_variables = cls.available_variables
-        return {v: {'provider' : available_variables[v][0],\
-                    'product'  : available_variables[v][1],
-                    'version'  : available_variables[v][2],
-                    'timesteps': available_variables[v][3],
-                    'layers'   : [{'id'   : l[0],
-                                   'name' : l[1],
-                                   #'range': l[2],
-                                   #'scale': l[3],
-                                   #'type' : l[4]
-                                   } for l in available_variables[v][4]]}\
-                for v in available_variables}
-
     def get_data(self,
                  time_range: TimeRange,
                  space_bounds: BoundingBox,
@@ -222,7 +175,13 @@ class VIIRSDownloader(CMRDownloader):
         logger.info(f'Bounding box: {space_bounds.bbox}')
         logger.info(f'------------------------------------------')
 
-        timesteps = time_range.get_timesteps_from_DOY(self.timesteps_doy)
+        if self.timesteps == 'viirs':
+            timesteps = time_range.get_timesteps_from_DOY(list(range(1, 366, 8)))
+        elif self.timesteps == 'annual':
+            timesteps = time_range.get_timesteps_from_tsnumber(1)
+        elif self.timesteps == 'daily':
+            timesteps = time_range.get_timesteps_from_tsnumber(365)
+
         logger.info(f'Found {len(timesteps)} timesteps to download.')
 
         for i,time in enumerate(timesteps):
