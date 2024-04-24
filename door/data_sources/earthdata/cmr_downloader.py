@@ -2,23 +2,17 @@ from urllib.request import Request, urlopen, build_opener, HTTPCookieProcessor
 from urllib.error import URLError, HTTPError
 import ssl
 
-import re
-import os
 import json
 import itertools
 import sys
 import numpy as np
 from datetime import datetime
-from typing import Optional
-import tempfile
 
 from osgeo import gdal
 
 from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
-from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
-from ...utils.geotiff import crop_raster, save_raster
 
 import logging
 logger = logging.getLogger(__name__)
@@ -126,7 +120,7 @@ class CMRDownloader(DOORDownloader):
 
         return cmr_base_url + product_query + version_query + temporal_query + spatial_query + filter_query
 
-    def cmr_search(self, time: datetime, space_bounds: BoundingBox) -> dict:
+    def cmr_search(self, time: datetime, space_bounds: BoundingBox, extensions=['.hdf', '.h5']) -> dict:
         """
         Search CMR for files matching the query.
         """
@@ -152,7 +146,7 @@ class CMRDownloader(DOORDownloader):
                     hits = int(headers['cmr-hits'])
                 search_page = response.read()
                 search_page = json.loads(search_page.decode('utf-8'))
-                url_scroll_results = cmr_filter_urls(search_page)
+                url_scroll_results = cmr_filter_urls(search_page, extensions=extensions)
                 if not url_scroll_results:
                     break
                 if hits > self.cmr_page_size:
@@ -213,153 +207,7 @@ class CMRDownloader(DOORDownloader):
         filename_filter = time.strftime('*A%Y%j*')
         return f'&producer_granule_id[]={filename_filter}&options[producer_granule_id][pattern]=true'
     
-    def get_data(self,
-                 time_range: TimeRange,
-                 space_bounds: BoundingBox,
-                 destination: str,
-                 options: Optional[dict] = None) -> None:
-        """
-        Get data from the CMR.
-        """
-
-        # Check options
-        options = self.check_options(options)
-
-        # Check if all the layers are requested (e.g. we might not need both QC layers for FAPAR, depending on the project)
-        if options['layers'] is not None:
-            for layer in self.layers:
-                if layer['id'] not in options['layers']:
-                    self.layers.remove(layer)
-
-        logger.info(f'------------------------------------------')
-        logger.info(f'Starting download of {self.source}-{self.variable} data')
-        logger.info(f'{len(self.layers)} layers requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        logger.info(f'Bounding box: {space_bounds.bbox}')
-        logger.info(f'------------------------------------------')
-
-        timesteps = time_range.get_timesteps_from_DOY(self.timesteps_doy)
-        logger.info(f'Found {len(timesteps)} timesteps to download.')
-
-        #TODO: bring tmp folder inside the loop, better for memory management (for all downloaders)
-        for i,time in enumerate(timesteps):
-            logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
-
-            # get the data from the CMR
-            url_list = self.cmr_search(time, space_bounds)
-
-            if not url_list:
-                logger.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
-                continue
-
-            # Do all of this inside a temporary folder
-            tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
-            os.makedirs(tmpdirs, exist_ok=True)
-            with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
-                file_list = self.download(url_list, tmp_path)
-
-                lnames = [layer['name'] for layer in self.layers]
-                if options['make_mosaic']:
-                    # build the mosaic (one for each layer)
-                    # this is better to do all at once, so that we open the HDF5 file only once
-                    dest = [f'{tmp_path}/mosaic_{name}.tif' for name in lnames]
-                    mosaics = self.build_mosaics_from_hdf5(file_list, self.layers)#,
-                                                #destinations = dest)
-                                    # from here on, we work on layers individually
-                    for layer in self.layers:
-                        lname = layer['name']
-                        dataset = mosaics[layer['id']]
-                        file_out = time.strftime(destination.format(layer=lname))
-                        if options['crop_to_bounds']:
-                            crop_raster(dataset, space_bounds, file_out)
-                        else:
-                            save_raster(dataset, file_out)
-                        dataset = None
-                    logger.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded and combined into a single mosaic per layer')
-                else:
-                    for tile, file in enumerate(file_list):
-                        these_hdf5_datasets = self.get_layers_from_hdf5(file, self.layers)
-                        for layer in self.layers:
-                            lname = layer['name']
-                            ds = these_hdf5_datasets[layer['id']]
-                            if options['keep_tiles_naming']:
-                                pattern = re.compile(r'h\d+v\d+')
-                                tile_name = re.search(pattern, file).group()
-                                file_out = time.strftime(destination.format(layer=lname, tile=tile_name))
-                            else:
-                                file_out = time.strftime(destination.format(layer=lname, tile=tile))
-                            if options['crop_to_bounds']:
-                                crop_raster(ds, space_bounds, file_out)
-                            else:
-                                save_raster(ds, file_out)
-                            ds = None
-                    logger.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded, {len(file_list)} tiles per layer')
-        logger.info(f'------------------------------------------')                
-            
-
-    def build_mosaics_from_hdf5(self,
-                                file_list: list[str],
-                                layer_list: list[dict]) -> None:
-        """
-        Build a mosaic for each layer from a list of HDF5 files.
-        """
-
-        # Get the layers from the HDF5 files
-        hdf5_datasets = {l['id']: [] for l in layer_list}
-        for file in file_list:
-            these_hdf5_datasets = self.get_layers_from_hdf5(file, layer_list)
-            for lid in these_hdf5_datasets:
-                hdf5_datasets[lid].append(these_hdf5_datasets[lid])
-
-        # Create virtual mosaics of the HDF5 datasets and save to disk
-        mosaics = {l['id']: None for l in layer_list}
-        for tl in layer_list:
-            lid = tl['id']
-            vrt_ds = gdal.BuildVRT('', hdf5_datasets[lid])
-            mosaics[lid] = vrt_ds
-            #output_tif = dest_dict[lid]
-            #new_dataset = gdal.Translate(output_tif, vrt_ds, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
-
-        return mosaics
-    
-    def get_layers_from_hdf5(self,
-                             hdf5_file: str,
-                             layer_list: list[dict]) -> dict[gdal.Dataset]:
-        """
-        Get the layers from an HDF5 file.
-        """
-        # Create a dict to hold the HDF5 datasets, one for each layer
-        hdf5_datasets = {l['id']: [] for l in layer_list}
-
-        # Open the HDF5 file and add to the list
-        src_ds = gdal.Open(hdf5_file)
-        layers = src_ds.GetSubDatasets()
-        for tl in layer_list:
-            lid = tl['id']
-            src_layer = gdal.Open(layers[lid][0])
-            geotranform = self.get_geotransform(layers[lid][0])
-            projection = self.projection
-            src_layer.SetGeoTransform(geotranform)
-            src_layer.SetProjection(projection)
-            hdf5_datasets[lid] = src_layer
-
-        return hdf5_datasets
-
-    @classmethod
-    def get_available_variables(cls) -> dict:
-        available_variables = cls.available_variables
-        return {v: {'provider' : available_variables[v][0],\
-                    'product'  : available_variables[v][1],
-                    'version'  : available_variables[v][2],
-                    'timesteps': available_variables[v][3],
-                    'layers'   : [{'id'   : l[0],
-                                   'name' : l[1],
-                                   #'range': l[2],
-                                   #'scale': l[3],
-                                   #'type' : l[4]
-                                   } for l in available_variables[v][4]]}\
-                for v in available_variables}
-
-def cmr_filter_urls(search_results):
+def cmr_filter_urls(search_results, extensions=['.hdf', '.h5']):
     """Select only the desired data files from CMR response."""
     if 'feed' not in search_results or 'entry' not in search_results['feed']:
         return []
@@ -387,6 +235,11 @@ def cmr_filter_urls(search_results):
             # Exclude OPeNDAP links--they are responsible for many duplicates
             # This is a hack; when the metadata is updated to properly identify
             # non-datapool links, we should be able to do this in a non-hack way
+            continue
+
+        extensions = [ext.lower().replace('.','') for ext in extensions]
+        if link['href'].split('.')[-1].lower() not in extensions:
+            # Exclude links with non-desired extensions
             continue
 
         filename = link['href'].split('/')[-1]

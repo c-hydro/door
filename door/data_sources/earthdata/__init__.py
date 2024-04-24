@@ -1,1 +1,1 @@
-from .viirs_donwloader import VIIRSDownloader
+from .viirs_downloader import VIIRSDownloader
