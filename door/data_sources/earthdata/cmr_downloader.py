@@ -28,7 +28,7 @@ class CMRDownloader(DOORDownloader):
     name = "CMR downloader"
 
     urs_url='https://urs.earthdata.nasa.gov'
-    cmr_url='https://cmr.earthdata.nasa.gov'
+    cmr_url='https://cmr.earthdata.nasa.gov/search/granules.json?'
 
     cmr_page_size = 200 #TODO: check if true
 
@@ -108,17 +108,19 @@ class CMRDownloader(DOORDownloader):
 
     def build_cmr_query(self, time: datetime, bounding_box) -> str:
 
-        cmr_base_url = ('{0}/search/granules.json?version=2.0provider={1}'
-                        '&sort_key[]=start_date&sort_key[]=producer_granule_id'
+        cmr_base_url = ('{0}provider={1}'
+                        '&sort_key=start_date&sort_key=producer_granule_id'
                         '&scroll=true&page_size={2}'.format(self.cmr_url, self.provider, self.cmr_page_size))
 
         product_query = self.fomat_product(self.product)
         version_query = self.format_version(self.version)
         temporal_query = self.format_temporal(time)
         spatial_query = self.format_spatial(bounding_box)
-        filter_query = self.format_filename_filter(time)
+        #filter_query = self.format_filename_filter(time)
 
-        return cmr_base_url + product_query + version_query + temporal_query + spatial_query + filter_query
+        tail = '&options[producer_granule_id][pattern]=true'
+
+        return cmr_base_url + product_query + version_query + temporal_query + spatial_query + tail# + filter_query
 
     def cmr_search(self, time: datetime, space_bounds: BoundingBox, extensions=['.hdf', '.h5']) -> dict:
         """
@@ -173,12 +175,16 @@ class CMRDownloader(DOORDownloader):
         Formats the version to be used in the CMR query.
         """
         desired_pad_length = 3
-        version = str(int(version))  # Strip off any leading zeros
-        query_params = ''
-        while len(version) <= desired_pad_length:
-            padded_version = version.zfill(desired_pad_length)
-            query_params += f'&version={padded_version}'
-            desired_pad_length -= 1
+        try:
+            version = str(int(version))  # Strip off any leading zeros
+            query_params = ''
+            while len(version) <= desired_pad_length:
+                padded_version = version.zfill(desired_pad_length)
+                query_params += f'&version={padded_version}'
+                desired_pad_length -= 1
+        except ValueError:
+            query_params = f'&version={version}'
+
         return query_params
 
     @staticmethod
@@ -189,7 +195,7 @@ class CMRDownloader(DOORDownloader):
         date_st = time.strftime('%Y-%m-%d')
         time_start = date_st + 'T00:00:00Z'
         time_end = date_st + 'T23:59:59Z'
-        return f'&temporal[]={time_start},{time_end}'
+        return f'&temporal={time_start},{time_end}'
     
     @staticmethod
     def format_spatial(bounding_box) -> str:
@@ -197,7 +203,7 @@ class CMRDownloader(DOORDownloader):
         Formats the spatial extent to be used in the CMR query.
         """
         bbformat = '{0},{1},{2},{3}'.format(bounding_box[0], bounding_box[1], bounding_box[2], bounding_box[3])
-        return f'&bounding_box[]={bbformat}'
+        return f'&bounding_box={bbformat}'
     
     @staticmethod
     def format_filename_filter(time: datetime) -> str:

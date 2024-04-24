@@ -57,6 +57,9 @@ class VIIRSDownloader(CMRDownloader):
                   PARAMETER["false_northing",0], \
                   UNIT["Meter",1]]'
 
+    # we need to add the version=2.0 to the URL to get the correct response for the snow product (for FAPAR it doesn't matter)
+    cmr_url='https://cmr.earthdata.nasa.gov/search/granules.json?version=2.0'
+
     def __init__(self, variable) -> None:
         """
         Initializes the CMRDownloader class.
