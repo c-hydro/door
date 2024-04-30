@@ -60,3 +60,33 @@ def save_array_to_tiff(src: xr.DataArray, output_file:str) -> None:
     """
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     src.rio.to_raster(output_file)
+
+def transform_longitude(input_file:str) -> None:
+    """
+    Transform the longitude of a raster file from 0-360 to -180-180
+    """
+    output_file = input_file
+
+    # Open the raster file
+    with rio.open(input_file) as src:
+        # Read the data
+        data = src.read(1)
+
+        # Create a new array to hold the transformed data
+        transformed_data = np.empty(data.shape, dtype=data.dtype)
+
+        # Transform the longitude
+        half = data.shape[1] // 2
+        transformed_data[:, :half] = data[:, half:]
+        transformed_data[:, half:] = data[:, :half]
+
+        # Update the metadata
+        transform = src.transform
+        transform = rio.Affine(transform.a, transform.b, transform.c - 180,
+                                    transform.d, transform.e, transform.f)
+
+        # Write the transformed data to the output file
+        with rio.open(output_file, 'w', driver='GTiff', height=src.height,
+                           width=src.width, count=1, dtype=str(data.dtype),
+                           crs=src.crs, transform=transform) as dst:
+            dst.write(transformed_data, 1)
