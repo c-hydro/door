@@ -11,7 +11,7 @@ def crop_netcdf(src: str|xr.Dataset, BBox: BoundingBox) -> xr.DataArray:
     Cut a geotiff to a bounding box.
     """
     if isinstance(src, str):
-        engine = "necdf4" if src.endswith(".nc") else "cfgrib"
+        engine = "netcdf4" if src.endswith(".nc") else "cfgrib"
         src_ds = xr.load_dataset(src, engine=engine)
     else:
         src_ds = src
