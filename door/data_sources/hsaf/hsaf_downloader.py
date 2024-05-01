@@ -91,8 +91,8 @@ class HSAFDownloader(URLDownloader):
                 # Download the data
                 success = self.download(tmp_file, time = time_now)
 
-                # if not succes or tmp_file is less than 1kb then continue
-                if not success or os.path.getsize(tmp_file) < 1024:
+                # if not succes or tmp_file is less than 500kb then continue
+                if not success or os.path.getsize(tmp_file) < 500000:
                     logger.info(f'  -> Could not find data for {time_now:%Y-%m-%d}')
                     continue
 
