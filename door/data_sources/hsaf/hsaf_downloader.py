@@ -97,7 +97,7 @@ class HSAFDownloader(URLDownloader):
                     # Unzip the data
                     if self.format == 'bz2':
 
-                        tmp_file = decompress_bz2(tmp_file)
+                        # tmp_file = decompress_bz2(tmp_file)
                         tmp_file = remapgrib(tmp_file, cdo_path=self.cdo_path)
 
                     file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
@@ -192,6 +192,10 @@ def remapgrib(file_path: str, cdo_path: str="/usr/bin/cdo") -> str:
     '''
     Remap the grib file to a regular grid.
     '''
+    # if last 3 characters are .bz2 then decompress the file
+    if file_path[-4:] == '.bz2':
+        os.system(f'bunzip2 {file_path}')
+        file_path = file_path[:-4]
     file_out = file_path[:-5] + '_remap.grib'
     nc_file = file_out[:-4] + 'nc'
     os.system(f'{cdo_path} -R remapcon,r1600x800 -setgridtype,regular {file_path} {file_out}')
