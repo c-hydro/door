@@ -2,6 +2,7 @@ from osgeo import gdal, osr, gdalconst
 import numpy as np
 import os
 import xarray as xr
+import rasterio as rio
 import rioxarray as rxr
 
 from .space import BoundingBox
