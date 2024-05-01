@@ -91,14 +91,22 @@ class HSAFDownloader(URLDownloader):
                 # Download the data
                 success = self.download(tmp_file, time = time_now)
 
-                if not success:
+                # if not succes or tmp_file is less than 1kb then continue
+                if not success or os.path.getsize(tmp_file) < 1024:
                     logger.info(f'  -> Could not find data for {time_now:%Y-%m-%d}')
+                    continue
+
                 elif success:
                     # Unzip the data
                     if self.format == 'bz2':
 
                         # tmp_file = decompress_bz2(tmp_file)
                         tmp_file = remapgrib(tmp_file, cdo_path=self.cdo_path)
+
+                    # check if tmp_file is not less than 1kb
+                    if os.path.getsize(tmp_file) < 1024:
+                        logger.info(f'  -> ERROR! File for {time_now:%Y-%m-%d} is empty')
+                        continue
 
                     file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
 
