@@ -102,6 +102,10 @@ class HSAFDownloader(URLDownloader):
 
                     file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
 
+                    # if present change names swi1, swi2, swi3, swi4 to var40, var41, var42, var43
+                    if 'swi1' in file_handle:
+                        file_handle = file_handle.rename_vars({'swi1': 'var40', 'swi2': 'var41', 'swi3': 'var42', 'swi4': 'var43'})
+
                     for var_name in self.variables:
 
                         destination_now = time_now.strftime(destination).replace('{var}', var_name)
