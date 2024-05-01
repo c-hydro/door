@@ -1,5 +1,4 @@
 import os
-import logging
 import tempfile
 import netrc
 import datetime
@@ -18,6 +17,7 @@ from ...utils.io import decompress_bz2
 
 from dam.utils.io_geotiff import read_geotiff_asXarray, write_geotiff_fromXarray
 
+import logging
 logger = logging.getLogger(__name__)
 
 class HSAFDownloader(URLDownloader):
