@@ -33,7 +33,7 @@ class HSAFDownloader(URLDownloader):
         "input_variables": ["var40", "var41"],
         "weights": [0.75, 0.25],
     }
-    # dims_order = ['time', 'lat', 'lon']
+    variable_mapping = {'var40': 'swi1', 'var41': 'swi2', 'var42': 'swi3', 'var43': 'swi4'}
 
     def __init__(self, product: str) -> None:
         self.product = product
@@ -108,11 +108,22 @@ class HSAFDownloader(URLDownloader):
                         logger.info(f'  -> ERROR! File for {time_now:%Y-%m-%d} is empty')
                         continue
 
-                    file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
+                    try:
+                        file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
+                    except Exception as e:
+                        logger.error(f' --> ERROR! The file {tmp_file} is corrupted')
+                        continue
 
                     # if present change names swi1, swi2, swi3, swi4 to var40, var41, var42, var43
-                    if 'swi1' in file_handle:
-                        file_handle = file_handle.rename_vars({'swi1': 'var40', 'swi2': 'var41', 'swi3': 'var42', 'swi4': 'var43'})
+                    for var_name in self.variables:
+                        # get the variable name from the mapping
+                        alternative_name = self.variable_mapping[var_name]
+                        # if both var_name and alternative_name are not present in the file then the file is corrupted
+                        if alternative_name in file_handle:
+                            file_handle = file_handle.rename_vars({alternative_name: var_name})
+                        elif var_name not in file_handle:
+                            logger.error(f' --> ERROR! The variable {var_name} is not present in the file {tmp_file}')
+                            continue
 
                     for var_name in self.variables:
 
@@ -158,6 +169,8 @@ class HSAFDownloader(URLDownloader):
         # Download the data from the URL
         url = self.format_url(**kwargs)
         host = self.host
+
+        time_run_step = kwargs['time']
 
         try:
             host.get(url, destination)
