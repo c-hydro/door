@@ -127,3 +127,13 @@ def get_wkt(proj_string: str) -> str:
     wkt_string = srs.ExportToWkt()
 
     return wkt_string
+
+def get_epsg(wkt_string: str) -> str:
+    # Create a spatial reference object
+    srs = osr.SpatialReference()
+    srs.ImportFromWkt(wkt_string)
+
+    # Get the EPSG code
+    epsg_code = srs.GetAuthorityCode(None)
+
+    return f'EPSG:{epsg_code}'
