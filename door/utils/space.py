@@ -87,7 +87,7 @@ class BoundingBox():
         bbox_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
         # make sure that the projection is the same, if it is not, update the 4 corners of the bbox
-        if not new_srs.IsSame(bbox_srs):
+        if not new_proj==self.epsg_code:
 
             # Create a transformer to convert coordinates
             transformer = osr.CoordinateTransformation(bbox_srs, new_srs)
