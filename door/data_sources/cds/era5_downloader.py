@@ -176,10 +176,14 @@ class ERA5Downloader(CDSDownloader):
                 request_end = timestep_end
 
             request = self.build_request(self.variables, TimeRange(timestep_start, request_end), space_bounds)
-            self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
+            success = self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
+
+            # if the download fail interrupt
+            if not success:
+                logger.error(f'  -> Download failed, skipping block')
+                return
 
             data = xr.open_dataset(tmp_destination, engine='cfgrib')
-            #data = xr.open_dataset('/home/luca/Downloads/adaptor.mars.internal-1708037793.2312179-18856-1-d2512f5e-7708-46a5-8418-e52847aa208a.grib', engine='cfgrib')
 
             # check if we are using any preliminary data, or if it is all final
             if 'expver' in data.dims:
