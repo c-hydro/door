@@ -176,10 +176,10 @@ class ERA5Downloader(CDSDownloader):
                 request_end = timestep_end
 
             request = self.build_request(self.variables, TimeRange(timestep_start, request_end), space_bounds)
-            success = self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
+            self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
 
             # if the download fail interrupt
-            if not success:
+            if not os.path.exists(tmp_destination):
                 logger.error(f'  -> Download failed, skipping block')
                 return
 
