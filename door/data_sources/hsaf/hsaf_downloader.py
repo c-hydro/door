@@ -13,7 +13,6 @@ from ...base_downloaders import URLDownloader
 from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.geotiff import save_array_to_tiff, transform_longitude
-from ...utils.io import decompress_bz2
 
 from dam.utils.io_geotiff import read_geotiff_asXarray, write_geotiff_fromXarray
 
@@ -100,7 +99,6 @@ class HSAFDownloader(URLDownloader):
                     # Unzip the data
                     if self.format == 'bz2':
 
-                        # tmp_file = decompress_bz2(tmp_file)
                         tmp_file = remapgrib(tmp_file, cdo_path=self.cdo_path)
 
                     # check if tmp_file is not less than 1kb
