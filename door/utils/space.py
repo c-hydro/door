@@ -69,10 +69,17 @@ class BoundingBox():
                      right + self.buffer,
                      top + self.buffer)
 
-    def transform(self, new_proj: str, inplace = False) -> None:
+    def transform(self, new_proj: str|int, inplace = False) -> None:
         """
         Transform the bounding box to a new projection
+        new_proj: the new projection in the form of an EPSG code
         """
+        
+        if isinstance(new_proj, int):
+            new_proj = f'EPSG:{new_proj}'
+        elif not new_proj.startswith('EPSG:'):
+            new_proj = 'EPSG:' + new_proj
+
         # Create a spatial reference object for the GeoTIFF projection
         new_srs = osr.SpatialReference()
         new_srs.ImportFromWkt(get_wkt(new_proj))
@@ -108,7 +115,8 @@ class BoundingBox():
 
         if inplace:
             self.bbox = (min_x, min_y, max_x, max_y)
-            self.proj = new_proj
+            self.proj = get_wkt(new_proj)
+            self.epsg_code = new_proj
         else:
             return BoundingBox(min_x, min_y, max_x, max_y, new_proj)
 

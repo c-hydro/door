@@ -18,7 +18,7 @@ def crop_netcdf(src: str|xr.Dataset, BBox: BoundingBox) -> xr.DataArray:
 
     # transform the bounding box to the geotiff projection
     if src_ds.rio.crs is not None:
-        BBox.transform(src_ds.rio.crs)
+        transformed_BBox = BBox.transform(src_ds.rio.crs.to_epsg())
     else:
         logger.warning(f' --> WARNING! No CRS found in the raster, assuming it is in {BBox.epsg_code}')
         src_ds = src_ds.rio.write_crs(BBox.proj, inplace=True)
@@ -26,7 +26,7 @@ def crop_netcdf(src: str|xr.Dataset, BBox: BoundingBox) -> xr.DataArray:
     #TODO: eventually fix this...
 
     # Crop the raster
-    cropped = src_ds.rio.clip_box(*BBox.bbox)
+    cropped = src_ds.rio.clip_box(*transformed_BBox.bbox)
     # cropped = src_ds.where((src_ds.lat <= BBox.bbox[3]) &
     #          (src_ds.lat >= BBox.bbox[1]) &
     #          (src_ds.lon >= BBox.bbox[0]) &
