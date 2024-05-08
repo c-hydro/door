@@ -3,6 +3,7 @@ from typing import Optional
 import tempfile
 import os
 import xarray as xr
+import rioxarray as rxr
 import numpy as np
 import cfgrib
 
@@ -24,14 +25,22 @@ class ERA5Downloader(CDSDownloader):
                            'volumetric_soil_water_layer_1': 'swvl1',
                            'volumetric_soil_water_layer_2': 'swvl2',
                            'volumetric_soil_water_layer_3': 'swvl3',
-                           'volumetric_soil_water_layer_4': 'swvl4',}
+                           'volumetric_soil_water_layer_4': 'swvl4'}
     
+    soil_level_depths = {
+        'volumetric_soil_water_layer_1': [0, 0.07],
+        'volumetric_soil_water_layer_2': [0.07, 0.28],
+        'volumetric_soil_water_layer_3': [0.28, 1],
+        'volumetric_soil_water_layer_4': [1, 1.89],
+    }
+
     default_options = {
         'variables':         'total_precipitation',
-        'output_format':     'netcdf',   # one of netcdf, GeoTIFF
-        'aggregate_in_time':  None,      # one of 'mean', 'max', 'min', 'sum'
-        'timesteps_per_year': 365,       # the number of timesteps per year to split the download over #365=daily, 12=monthly, 36=10-daily
-        'n_processes':        1,         # number of parallel processes to use
+        'custom_volumetric_soil_water': None, # if not None, it should be a dict with the desired variable name as key and the depth range as value
+        'output_format':     'netcdf',        # one of netcdf, GeoTIFF
+        'aggregate_in_time':  None,           # one of 'mean', 'max', 'min', 'sum'
+        'timesteps_per_year': 365,            # the number of timesteps per year to split the download over #365=daily, 12=monthly, 36=10-daily
+        'n_processes':        1,              # number of parallel processes to use
     }
 
     spatial_ref =  'GEOGCRS["WGS 84",\
@@ -148,6 +157,25 @@ class ERA5Downloader(CDSDownloader):
         }
         return request
 
+    def find_parents_of_custom_sm(self, custom_soil_moisture: dict) -> dict:
+        '''
+        Find the parent variables of the custom variables.
+        custom_variables are in the form {'var_name': [depth_start, depth_end]}
+        '''
+        parents = {}
+        for var in custom_soil_moisture:
+            parents[var] = {'variables': [], 'weights': []}
+            depth_start, depth_end = custom_soil_moisture[var]
+            size = depth_end - depth_start
+            for parent_var in self.soil_level_depths:
+                parent_depth_start, parent_depth_end = self.soil_level_depths[parent_var]
+                overlap = min(depth_end, parent_depth_end) - max(depth_start, parent_depth_start)
+                if overlap > 0:
+                    parents[var]['variables'].append(parent_var)
+                    parents[var]['weights'].append(overlap / size)
+                
+        return parents
+
     def get_singledata(self,
                        step_range: TimeRange,
                        space_bounds: BoundingBox,
@@ -155,6 +183,19 @@ class ERA5Downloader(CDSDownloader):
                        options: Optional[dict] = None) -> None:
 
         # Check options
+        if 'custom_volumetric_soil_water' in options and options['custom_volumetric_soil_water'] is not None:
+            self.custom_variables = self.find_parents_of_custom_sm(options['custom_volumetric_soil_water'])
+        else:
+            self.custom_variables = []
+        
+        if 'variables' not in options or options['variables'] is None:
+            options['variables'] = []
+        
+        original_vars = options['variables'].copy() # we keep this to know what we actually need to save
+        
+        for var in self.custom_variables:
+            options['variables'].extend(self.custom_variables[var]['variables'])
+
         options = self.check_options(options)
         self.variables = options['variables']
 
@@ -195,6 +236,7 @@ class ERA5Downloader(CDSDownloader):
             # (if the variable have different dimensions)
             all_data = cfgrib.open_datasets(tmp_destination)
 
+            var_paths = {}
             for var in self.variables:
                 logger.debug(f' --> Variable {var}')
                 varname = self.available_variables[var]
@@ -229,6 +271,7 @@ class ERA5Downloader(CDSDownloader):
                 if 'step' in vardata.dims:
                     vardata = vardata.rename({'time': 'time_orig'})
                     vardata = vardata.stack(time=('time_orig', 'step'))
+                    vardata = vardata.drop_vars(['time', 'time_orig', 'step'])
 
                 vardata = vardata.assign_coords(time=valid_times)
 
@@ -280,16 +323,35 @@ class ERA5Downloader(CDSDownloader):
                     aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
                     aggdata = aggdata.rio.write_crs(self.spatial_ref)
 
-                    out_name = format_string(destination, {'variable': var})
-                    out_name = format_string(out_name, {'aggregation': agg})
-                    out_name = timestep_end.strftime(out_name)
+                    if var in original_vars:
+                        out_name = format_string(destination, {'variable': var})
+                        out_name = format_string(out_name, {'aggregation': agg})
+                        out_name = timestep_end.strftime(out_name)
+                    else:
+                        out_name = os.path.join(tmp_path, f'{var}_{agg}_{timestep_end:%Y%m%d}.nc')
 
+                    var_paths[var] = out_name
                     if options['output_format'] == 'GeoTIFF':
                         logger.debug(f' ----> Saving to GeoTIFF')
                         save_array_to_tiff(aggdata, out_name)
                     else:
                         logger.debug(f' ----> Saving to netcdf')
                         save_netcdf(aggdata, out_name)
+
+            if self.custom_variables is not None:
+                for custom_var in self.custom_variables:
+                    # calculate the new variable
+                    variables, weights = self.custom_variables[custom_var]['variables'], self.custom_variables[custom_var]['weights']
+                    new_var = sum([rxr.open_rasterio(var_paths[var]) * weight for var, weight in zip(variables, weights)])
+                    new_var = new_var.where(new_var <= 1, np.nan)
+                    new_var = new_var.where(new_var >= 0, np.nan)
+                    new_var.rio.write_nodata(np.nan)
+                    new_var = new_var.rio.write_crs(self.spatial_ref)
+
+                    out_name = format_string(destination, {'variable': custom_var, 'var': custom_var, 'aggregation': agg})
+                    out_name = timestep_end.strftime(out_name)
+
+                    save_array_to_tiff(new_var.squeeze(), out_name)
 
     def get_data(self,
                  time_range: TimeRange,
