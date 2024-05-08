@@ -7,10 +7,10 @@ import numpy as np
 import xarray as xr
 import requests
 
+
 from .utils.time import TimeRange
 from .utils.space import BoundingBox
-from .utils.io import download_http, check_download, handle_missing
-
+from .utils.io import download_http, check_download, handle_missing, download_ftp
 from .utils.netcdf import crop_netcdf
 
 import logging
@@ -94,13 +94,19 @@ class URLDownloader(DOORDownloader):
     It allows to specify a URL template with placeholders for various parameters (as keyword arguments).
     """
 
-    def __init__(self, url_blank: str, protocol: str = 'http') -> None:
+    def __init__(self, url_blank: str, protocol: str = 'http', host: str|None = None) -> None:
 
         self.url_blank = url_blank
-        if protocol.lower() != 'http':
+        if protocol.lower() not in ['http', 'ftp']:
             raise ValueError(f'Protocol {protocol} not supported')
         else:
-            self.protocol = protocol
+            self.protocol = protocol.lower()
+
+        if self.protocol == 'ftp':
+            if host is None:
+                raise ValueError(f'FTP host must be specified')
+            else:
+                self.host = host
 
     def format_url(self, **kwargs) -> str:
         """
@@ -121,6 +127,13 @@ class URLDownloader(DOORDownloader):
         if self.protocol == 'http':
             try:
                 download_http(url, destination, kwargs["auth"])
+            except Exception as e:
+                handle_missing(missing_action, kwargs)
+                logger.debug(f'Error downloading {url}: {e}')
+                return False
+        elif self.protocol == 'ftp':
+            try:
+                download_ftp(self.host, url, destination, kwargs["auth"])
             except Exception as e:
                 handle_missing(missing_action, kwargs)
                 logger.debug(f'Error downloading {url}: {e}')

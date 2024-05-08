@@ -69,10 +69,17 @@ class BoundingBox():
                      right + self.buffer,
                      top + self.buffer)
 
-    def transform(self, new_proj: str, inplace = False) -> None:
+    def transform(self, new_proj: str|int, inplace = False) -> None:
         """
         Transform the bounding box to a new projection
+        new_proj: the new projection in the form of an EPSG code
         """
+        
+        if isinstance(new_proj, int):
+            new_proj = f'EPSG:{new_proj}'
+        elif not new_proj.startswith('EPSG:'):
+            new_proj = 'EPSG:' + new_proj
+
         # Create a spatial reference object for the GeoTIFF projection
         new_srs = osr.SpatialReference()
         new_srs.ImportFromWkt(get_wkt(new_proj))
@@ -87,7 +94,7 @@ class BoundingBox():
         bbox_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
         # make sure that the projection is the same, if it is not, update the 4 corners of the bbox
-        if not new_srs.IsSame(bbox_srs):
+        if not new_proj==self.epsg_code:
 
             # Create a transformer to convert coordinates
             transformer = osr.CoordinateTransformation(bbox_srs, new_srs)
@@ -108,7 +115,8 @@ class BoundingBox():
 
         if inplace:
             self.bbox = (min_x, min_y, max_x, max_y)
-            self.proj = new_proj
+            self.proj = get_wkt(new_proj)
+            self.epsg_code = new_proj
         else:
             return BoundingBox(min_x, min_y, max_x, max_y, new_proj)
 
@@ -127,3 +135,13 @@ def get_wkt(proj_string: str) -> str:
     wkt_string = srs.ExportToWkt()
 
     return wkt_string
+
+def get_epsg(wkt_string: str) -> str:
+    # Create a spatial reference object
+    srs = osr.SpatialReference()
+    srs.ImportFromWkt(wkt_string)
+
+    # Get the EPSG code
+    epsg_code = srs.GetAuthorityCode(None)
+
+    return f'EPSG:{epsg_code}'

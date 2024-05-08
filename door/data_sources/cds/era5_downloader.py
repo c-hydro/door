@@ -183,7 +183,12 @@ class ERA5Downloader(CDSDownloader):
                 request_end = timestep_end
 
             request = self.build_request(self.variables, TimeRange(timestep_start, request_end), space_bounds)
-            self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
+            success = self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
+
+            # if the download fail interrupt
+            if not success:
+                logger.error(f'  -> Download failed, skipping block')
+                return
 
             # this will create a list of xarray datasets, one for each "well-formed" cube in the grib file,
             # this is needed because requesting multiple variables at once will return a single grib file that might contain multiple cubes

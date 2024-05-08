@@ -3,6 +3,10 @@ import os
 import shutil
 import bz2
 import requests
+from urllib.parse import urlparse
+import base64
+
+from ftpretty import ftpretty as ftp
 
 from .parse import format_dict
 
@@ -48,6 +52,16 @@ def download_http(url, destination, auth=None):
     os.makedirs(os.path.dirname(destination), exist_ok=True)
     with open(destination, 'wb') as f:
         f.write(r.content)
+
+def download_ftp(url_host, url, destination, auth=None):
+    """
+    Download a file via ftp
+    if the argument auth is passed as (user, pass), it will be used for authentication
+    """
+    host = urlparse(url_host).hostname
+    username, password = base64.b64decode(auth).decode('ascii').split(':')
+    client = ftp(host, username, password)
+    client.get(url, destination)
 
 def check_download(destination: str, min_size: float = None, missing_action: str = 'error') -> (int, str):
     """
