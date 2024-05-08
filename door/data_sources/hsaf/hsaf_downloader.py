@@ -30,8 +30,8 @@ class HSAFDownloader(URLDownloader):
     var_depth = {
         "var40": [0   , 0.07], # 0-7 cm
         "var41": [0.07, 0.28], # 7-28 cm
-        "var42": [0.28, 0.72], # 28-72 cm
-        "var43": [0.72, 1.89], # 72-189 cm
+        "var42": [0.28, 1.00], # 28-100 cm
+        "var43": [1.00, 1.89], # 100-189 cm
     }
 
     variable_mapping = {'var40': 'swi1', 'var41': 'swi2', 'var42': 'swi3', 'var43': 'swi4'}
@@ -107,7 +107,11 @@ class HSAFDownloader(URLDownloader):
                  options: Optional[dict] = None) -> None:
 
         # Check options
-        self.custom_variables = self.find_parents_of_custom_variables(options['custom_variables'])
+        if 'custom_variables' in options and options['custom_variables'] is not None:
+            self.custom_variables = self.find_parents_of_custom_variables(options['custom_variables'])
+        else:
+            self.custom_variables = []
+        
         if 'variables' not in options or options['variables'] is None:
             options['variables'] = []
         
