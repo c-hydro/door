@@ -111,10 +111,11 @@ class HSAFDownloader(URLDownloader):
         if 'variables' not in options or options['variables'] is None:
             options['variables'] = []
         
+        original_vars = options['variables'].copy() # we keep this to know what we actually need to save
+        
         for var in self.custom_variables:
             options['variables'].extend(self.custom_variables[var]['variables'])
 
-        original_vars = options['variables'] # we keep this to know what we actually need to save
         options = self.check_options(options)
         self.cdo_path = options['cdo_path']
         self.variables = options['variables']
@@ -173,7 +174,6 @@ class HSAFDownloader(URLDownloader):
                     
                     var_paths = {}
                     for var_name in self.variables:
-                        
                         if var_name in original_vars:
                             destination_now = time_now.strftime(destination).replace('{variable}', var_name).replace('{var}', var_name)
                         else:
