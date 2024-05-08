@@ -18,5 +18,5 @@ space_ref  = BoundingBox(-10,-10,10,10, 'EPSG:4326')#.from_file(GRID_FILE)
 test_downloader = HSAFDownloader(product="HSAF-h14")
 test_downloader.get_data(time_range, space_ref,
                          destination=HOME+'/%Y/%m/%d/HSAF-h14_{variable}_%Y%m%d.tif',
-                         options={'variables': ['var40']})
+                         options={'custom_variables': {'var028':[0,0.28]}})
 

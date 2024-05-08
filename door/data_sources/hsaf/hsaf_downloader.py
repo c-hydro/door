@@ -2,6 +2,7 @@ import os
 import tempfile
 import numpy as np
 import xarray as xr
+import rioxarray as rxr
 from typing import Optional
 
 from ...base_downloaders import URLDownloader
@@ -22,14 +23,17 @@ class HSAFDownloader(URLDownloader):
     name = "HSAF"
     default_options = {
         "variables": ["var40", "var41", "var42", "var43"],
-        "add_variable": None,
+        "custom_variables": None,
         "cdo_path": "/usr/bin/cdo"
     }
-    add_variable_options = {
-        "variable": "var28",
-        "input_variables": ["var40", "var41"],
-        "weights": [0.75, 0.25],
+
+    var_depth = {
+        "var40": [0   , 0.07], # 0-7 cm
+        "var41": [0.07, 0.28], # 7-28 cm
+        "var42": [0.28, 0.72], # 28-72 cm
+        "var43": [0.72, 1.89], # 72-189 cm
     }
+
     variable_mapping = {'var40': 'swi1', 'var41': 'swi2', 'var42': 'swi3', 'var43': 'swi4'}
 
     spatial_ref =  'GEOGCRS["WGS 84",\
@@ -77,6 +81,25 @@ class HSAFDownloader(URLDownloader):
         super().__init__(url_blank, protocol = 'ftp', host = url_host)
         self.nodata = -9999
 
+    def find_parents_of_custom_variables(self, custom_variables: dict) -> dict:
+        '''
+        Find the parent variables of the custom variables.
+        custom_variables are in the form {'var_name': [depth_start, depth_end]}
+        '''
+        parents = {}
+        for var in custom_variables:
+            parents[var] = {'variables': [], 'weights': []}
+            depth_start, depth_end = custom_variables[var]
+            size = depth_end - depth_start
+            for parent_var in self.var_depth:
+                parent_depth_start, parent_depth_end = self.var_depth[parent_var]
+                overlap = min(depth_end, parent_depth_end) - max(depth_start, parent_depth_start)
+                if overlap > 0:
+                    parents[var]['variables'].append(parent_var)
+                    parents[var]['weights'].append(overlap / size)
+                
+        return parents
+
     def get_data(self,
                  time_range: TimeRange,
                  space_bounds: BoundingBox,
@@ -84,6 +107,14 @@ class HSAFDownloader(URLDownloader):
                  options: Optional[dict] = None) -> None:
 
         # Check options
+        self.custom_variables = self.find_parents_of_custom_variables(options['custom_variables'])
+        if 'variables' not in options or options['variables'] is None:
+            options['variables'] = []
+        
+        for var in self.custom_variables:
+            options['variables'].extend(self.custom_variables[var]['variables'])
+
+        original_vars = options['variables'] # we keep this to know what we actually need to save
         options = self.check_options(options)
         self.cdo_path = options['cdo_path']
         self.variables = options['variables']
@@ -140,11 +171,14 @@ class HSAFDownloader(URLDownloader):
                             logger.error(f' --> ERROR! The variable {var_name} is not present in the file {tmp_file}')
                             continue
                     
+                    var_paths = {}
                     for var_name in self.variables:
-
-                        destination_now = time_now.strftime(destination).replace('{variable}', var_name).replace('{var}', var_name)
-                        #tmp_var_name = f'temp_{var_name}_{time_now:%Y%m%d}.tif'
-                        #tmp_var_file = os.path.join(tmp_path, tmp_var_name)
+                        
+                        if var_name in original_vars:
+                            destination_now = time_now.strftime(destination).replace('{variable}', var_name).replace('{var}', var_name)
+                        else:
+                            tmp_var_name = f'temp_{var_name}_{time_now:%Y%m%d}.tif'
+                            destination_now = os.path.join(tmp_path, tmp_var_name)
 
                         var_data = file_handle[var_name]
 
@@ -157,14 +191,19 @@ class HSAFDownloader(URLDownloader):
 
                         cropped = crop_netcdf(src=var_data, BBox=space_bounds)
                         save_array_to_tiff(cropped.squeeze(), destination_now)
+                        var_paths[var_name] = destination_now
+
+                    if self.custom_variables is not None:
+                        for custom_var in self.custom_variables:
+                            # calculate the new variable
+                            variables, weights = self.custom_variables[custom_var]['variables'], self.custom_variables[custom_var]['weights']
+                            new_var = sum([rxr.open_rasterio(var_paths[var]) * weight for var, weight in zip(variables, weights)])
+                            
+                            destination_now = time_now.strftime(destination).replace('{variable}', custom_var).replace('{var}', custom_var)
+
+                            save_array_to_tiff(new_var.squeeze(), destination_now)
 
                     logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} saved to destination folder')
-
-                # # If add_variable is True, add the variable to the downloaded file
-                # if options['add_variable'] is not None:
-                #     # calculate the new variable
-
-                #     self.add_variable(destination, time_now, self.add_variable_options)
 
         logger.info(f'------------------------------------------')
 
@@ -184,35 +223,3 @@ class HSAFDownloader(URLDownloader):
         os.system(f'{cdo_path} -R remapcon,r1600x800 -setgridtype,regular {file_path} {file_out}')
         os.system(f'{cdo_path} -f nc copy {file_out} {nc_file}')
         return nc_file
-    
-    # def add_variable(self, destination: str, time: datetime, variable_options: dict) -> None:
-    #     '''
-    #     Add a variable to the downloaded file.
-    #     '''
-    #     variable_name = variable_options['variable']
-    #     input_variables = variable_options['input_variables']
-    #     weights = variable_options['weights']
-
-    #     # Open the input files
-    #     input_files = [time.strftime(destination).replace('{var}', var) for var in input_variables]
-    #     input_data = [rio.open(file).read(1) for file in input_files]
-
-    #     # create a new xarray variable empty from input files
-    #     new_var = read_geotiff_asXarray(input_files[0])
-    #     # fill all values with np.nan
-    #     new_var.values = np.full(new_var.shape, np.nan)
-
-    #     # Calculate the new variable
-    #     weighted_sum = sum([data * weight for data, weight in zip(input_data, weights)])
-    #     weighted_sum = np.expand_dims(weighted_sum, axis=0)
-    #     new_var.values = weighted_sum
-
-    #     new_var = new_var.fillna(self.nodata)
-
-    #     # Save the new variable as geotiff
-    #     new_var_file = time.strftime(destination).replace('{var}', variable_name)
-    #     write_geotiff_fromXarray(new_var, new_var_file)
-
-    #     logger.info(f'  -> SUCCESS! New variable {variable_name} added to the downloaded file')
-
-    #     return
