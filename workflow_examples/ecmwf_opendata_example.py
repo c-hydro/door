@@ -11,7 +11,7 @@ log_file = HOME+'/log.txt'
 log.set_logging(log_file, 'DEBUG')
 
 time_range = TimeRange(start='2024-02-06 00:00:00', end='2024-02-06 03:00:00')
-space_ref  = BoundingBox(6, 19, 36, 48, projection = 'EPSG:4326')
+space_ref  = BoundingBox(6, 19, 36, 48, datum = 'EPSG:4326')
 
 test_downloader = ECMWFOpenDataDownloader(product='HRES')
 test_downloader.get_data(time_range, space_ref,
