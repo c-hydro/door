@@ -11,7 +11,7 @@ log_file = HOME+'/door-log.txt'
 log.set_logging(log_file, 'INFO')
 
 time_range = TimeRange(start='2024-04-01', end='2024-04-10 00:00:00')
-space_ref  = BoundingBox(-5.35,2.28,5.79,14.89, projection = 'EPSG:4326')
+space_ref  = BoundingBox(-5.35,2.28,5.79,14.89, datum = 'EPSG:4326')
 
 test_downloader = ERA5Downloader('reanalysis-era5-land')
 test_downloader.get_data(time_range, space_ref,
