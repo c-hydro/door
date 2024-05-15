@@ -16,6 +16,14 @@ def crop_netcdf(src: str|xr.Dataset, BBox: BoundingBox) -> xr.DataArray:
     else:
         src_ds = src
 
+    x_dim = src_ds.rio.x_dim
+    lon_values = src_ds[x_dim].values
+    if (lon_values > 180).any():
+        new_lon_values = xr.where(lon_values > 180, lon_values - 360, lon_values)
+        new = src_ds.assign_coords({x_dim:new_lon_values}).sortby(x_dim)
+        src_ds = new.rio.set_spatial_dims(x_dim, new.rio.y_dim)
+
+
     # transform the bounding box to the geotiff projection
     if src_ds.rio.crs is not None:
         transformed_BBox = BBox.transform(src_ds.rio.crs.to_epsg())

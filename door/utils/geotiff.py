@@ -16,7 +16,9 @@ def crop_raster(src: str|gdal.Dataset, BBox: BoundingBox, output_file: str) -> N
         src_ds = gdal.Open(src, gdalconst.GA_ReadOnly)
     else:
         src_ds = src
-    
+
+    ## TODO: check the longitude values and transform them if necessary
+
     geoprojection = src_ds.GetProjection()
     geotransform = src_ds.GetGeoTransform()
 
@@ -62,6 +64,24 @@ def save_array_to_tiff(src: xr.DataArray, output_file:str) -> None:
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     src.rio.to_raster(output_file)
 
+# def transform_longitudes(dataset):
+#     # Get the original spatial reference
+#     old_srs = osr.SpatialReference()
+#     old_srs.ImportFromWkt(dataset.GetProjection())
+
+#     # Create a new spatial reference with a central meridian at 0
+#     new_srs = old_srs.Clone()
+#     new_srs.SetProjParm(osr.SRS_PP_CENTRAL_MERIDIAN, 0)
+
+
+#     # Apply the transformation to the dataset
+#     new_dataset = gdal.Warp('', dataset, format='MEM', dstSRS=new_srs,
+#                             outputBoundsSRS=new_srs,
+#                             xRes=dataset.GetGeoTransform()[1],
+#                             yRes=dataset.GetGeoTransform()[5],
+#                             dstNodata=dataset.GetRasterBand(1).GetNoDataValue())
+
+#     return new_dataset
 def transform_longitude(input_file:str) -> None:
     """
     Transform the longitude of a raster file from 0-360 to -180-180
