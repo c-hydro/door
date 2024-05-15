@@ -19,5 +19,5 @@ class CDSDownloader(APIDownloader):
         request: a dictionary with the request parameters
         output: the name of the output file
         """
-        super().download(destination, min_size, missing_action, name = self.dataset, request = request, target = destination)
+        return super().download(destination, min_size, missing_action, name = self.dataset, request = request, target = destination)
 
