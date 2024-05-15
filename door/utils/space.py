@@ -140,11 +140,14 @@ def get_epsg(wkt_string: str) -> str:
 
     return f'EPSG:{epsg_code}'
 
-def get_datum(value: str) -> tuple[str]:
+def get_datum(value: str|int) -> tuple[str]:
     """
     Check if the value is an EPSG code or a WKT string,
     will return a tuple of (EPSG, WKT)
     """
+    if isinstance(value, int):
+        value = f'EPSG:{value}'
+
     try: # this will fail if value it is not an EPSG code
         epsg_code = value
         wkt_datum = get_wkt(value)
