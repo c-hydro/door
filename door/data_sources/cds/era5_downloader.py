@@ -4,7 +4,6 @@ import tempfile
 import os
 import xarray as xr
 import numpy as np
-import cfgrib
 
 from .cds_downloader import CDSDownloader
 from ...utils.space import BoundingBox
@@ -153,6 +152,8 @@ class ERA5Downloader(CDSDownloader):
                        space_bounds: BoundingBox,
                        destination: str,
                        options: Optional[dict] = None) -> None:
+
+        import cfgrib
 
         # Check options
         options = self.check_options(options)
