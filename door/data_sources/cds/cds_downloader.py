@@ -1,13 +1,20 @@
 import cdsapi
 from ...base_downloaders import APIDownloader
 
+import os
 import logging
 logger = logging.getLogger(__name__)
 
 class CDSDownloader(APIDownloader):
 
+    apikey_env_vars = 'CDSAPI_KEY' # this should be in the form UID:API_KEY already
+    cds_url = 'https://cds.climate.copernicus.eu/api/v2'
+
     def __init__(self, dataset) -> None:
-        client = cdsapi.Client()#progress=False, quiet=True)
+
+        # if key is None, this will automatically look for the .cdsapirc file
+        client = cdsapi.Client(url=self.cds_url, key=os.getenv(self.apikey_env_vars))
+        
         super().__init__(client)
         self.dataset = dataset
 
