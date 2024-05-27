@@ -30,6 +30,8 @@ class CMRDownloader(DOORDownloader):
     urs_url='https://urs.earthdata.nasa.gov'
     cmr_url='https://cmr.earthdata.nasa.gov/search/granules.json?'
 
+    credential_env_vars = {'username' : 'EARTHDATA_LOGIN', 'password' : 'EARTHDATA_PWD'}
+
     cmr_page_size = 200 #TODO: check if true
 
     default_options = {
@@ -40,11 +42,6 @@ class CMRDownloader(DOORDownloader):
     }
     
     def __init__(self) -> None:
-        # credentials should be saved in a .netrc file in the user's home directory
-        # with the following line:
-        # machine urs.earthdata.nasa.gov login <username> password <password>
-        #test_url = None #TODO: add test url
-        #self.credentials = get_credentials(self.urs_url)
         pass
     
     @property
@@ -73,8 +70,14 @@ class CMRDownloader(DOORDownloader):
 
     def get_credentials(self, url: str) -> str:
 
+        # credentials will be looked for in the environment variables
+        # username = 'EARTHDATA_LOGIN', password = 'EARTHDATA_PWD'
+        # should be saved in a .netrc file in the user's home directory
+        # with the following line:
+        # machine urs.earthdata.nasa.gov login <username> password <password>
         if not hasattr(self, 'credentials') or not isinstance(self.credentials, str):
-            self.credentials = get_credentials(self.urs_url, test_url = url)
+            self.credentials = get_credentials(env_variables=self.credential_env_vars,
+                                               url=self.urs_url, test_url=url)
         
         return self.credentials
 

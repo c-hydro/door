@@ -27,6 +27,8 @@ class HSAFDownloader(URLDownloader):
         "cdo_path": "/usr/bin/cdo"
     }
 
+    credential_env_vars = {'username' : 'HSAF_LOGIN', 'password' : 'HSAF_PWD'}
+
     var_depth = {
         "var40": [0   , 0.07], # 0-7 cm
         "var41": [0.07, 0.28], # 7-28 cm
@@ -130,7 +132,8 @@ class HSAFDownloader(URLDownloader):
         timesteps = time_range.get_timesteps_from_tsnumber(self.ts_per_year)
         logger.info(f'Found {len(timesteps)} timesteps to download.')
 
-        credentials = get_credentials(self.host)
+        credentials = get_credentials(env_variables=self.credential_env_vars,
+                                      url = self.host)
 
         # Download the data for the specified times
         for i, time_now in enumerate(timesteps):
