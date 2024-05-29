@@ -81,7 +81,7 @@ class CMRDownloader(DOORDownloader):
         
         return self.credentials
 
-    def download(self, url_list: list[str], destination: str) -> list[str]:
+    def download(self, url_list: list[str], destination: str, trials = 100) -> list[str]:
         """
         Downloads the files from the urls in the list
         """
@@ -98,35 +98,42 @@ class CMRDownloader(DOORDownloader):
             credentials = self.get_credentials(url)
             filename = url.split('/')[-1]
 
-            try:
-                req = Request(url)
-                if credentials:
-                    req.add_header('Authorization', 'Basic {0}'.format(credentials))
-                opener = build_opener(HTTPCookieProcessor())
-                data = opener.open(req).read()
+            trial = 1
+            while trial <= trials:
+                try:
+                    req = Request(url)
+                    if credentials:
+                        req.add_header('Authorization', 'Basic {0}'.format(credentials))
+                    opener = build_opener(HTTPCookieProcessor())
+                    data = opener.open(req).read()
 
-                filename_save = destination + '/' + filename
-                with open(filename_save, 'wb') as f:
-                    f.write(data)
-                
-                #open(filename_save, 'wb').write(data)
-                
-                if filename_save.find('.xml') > 0:
-                    continue
-                if filename_save.find('s3credentials') < 0:
-                    filename_ls.append(filename_save)
+                    filename_save = destination + '/' + filename
+                    with open(filename_save, 'wb') as f:
+                        f.write(data)
+                    
+                    #open(filename_save, 'wb').write(data)
+                    
+                    if filename_save.find('.xml') > 0:
+                        continue
+                    if filename_save.find('s3credentials') < 0:
+                        filename_ls.append(filename_save)
 
-                if n % log_step == 0 or n == len(url_list)-1:
-                    logger.info(f'  -> Downloaded {n+1} of {len(url_list)} files')
+                    if n % log_step == 0 or n == len(url_list)-1:
+                        logger.info(f'  -> Downloaded {n+1} of {len(url_list)} files')
+                    
+                    break
 
-            except HTTPError as e:
-                print('HTTP error {0}, {1}'.format(e.code, e.reason))
-            except URLError as e:
-                print('URL error: {0}'.format(e.reason))
-            except IOError:
-                raise
-            except KeyboardInterrupt:
-                quit()
+                except HTTPError as e:
+                    logging.info(f'HTTP error {e.code}, {e.reason} - trying again {trial}/{trials}')
+                    trial += 1
+                except URLError as e:
+                    logging.error('URL error {0}'.format(e.reason))
+                    raise
+                except OSError as e:
+                    logging.error('IO error {0}'.format(e))
+                    raise
+                except KeyboardInterrupt:
+                    quit()
 
         with open(destination + '/hdf5names.json', 'w') as f:
             json.dump(filename_ls, f) 

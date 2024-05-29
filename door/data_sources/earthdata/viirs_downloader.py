@@ -32,7 +32,7 @@ class VIIRSDownloader(CMRDownloader):
                    [3, 'FAPAR_ExtraQC', (0,254), 1   , '8bit']]],
         'phenology': ['LPDAAC_ECS', 'VNP22Q2', '001', 'annual',
                       [[5,  'GLSP_QC1',      (0,254),   1, '8bit'],
-                       [9, 'GLSP_GSStart1', (1,32766), 1, 'cat'],
+                       [9, 'GLSP_GSStart1',  (1,32766), 1, 'cat'],
                        [11, 'GLSP_GSEnd1',   (1,32766), 1, 'cat'],
                        [24, 'GLSP_QC2',      (0,254),   1, '8bit'],
                        [28, 'GLSP_GSStart2', (1,32766), 1, 'cat'],
