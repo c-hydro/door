@@ -15,12 +15,9 @@ from ...utils.io import decompress_bz2
 
 # from dam.utils.io_geotiff import read_geotiff_asXarray, write_geotiff_fromXarray
 
-import logging
-logger = logging.getLogger(__name__)
-
 class HSAFDownloader(URLDownloader):
 
-    name = "HSAF"
+    name = "HSAF_downloader"
     default_options = {
         "variables": ["var40", "var41", "var42", "var43"],
         "custom_variables": None,
@@ -77,10 +74,14 @@ class HSAFDownloader(URLDownloader):
             self.ts_per_year  = 365 # daily
             self.format = 'bz2'
         else:
-            logger.error(" --> ERROR! Only HSAF-h141-daily and HSAF-h14-daily has been implemented until now!")
-            raise NotImplementedError()
+            url_blank = None
 
         super().__init__(url_blank, protocol = 'ftp', host = url_host)
+        if url_blank is None:
+            self.log.error(" --> ERROR! Only HSAF-h141-daily and HSAF-h14-daily has been implemented until now!")
+            raise NotImplementedError()
+
+        
         self.nodata = -9999
 
     def find_parents_of_custom_variables(self, custom_variables: dict) -> dict:
@@ -122,22 +123,22 @@ class HSAFDownloader(URLDownloader):
         self.cdo_path = options['cdo_path']
         self.variables = options['variables']
 
-        logger.info(f'------------------------------------------')
-        logger.info(f'Starting download of {self.product} data')
-        logger.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        logger.info(f'Bounding box: {space_bounds.bbox}')
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
+        self.log.info(f'Starting download of {self.product} data')
+        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
+        self.log.info(f'Bounding box: {space_bounds.bbox}')
+        self.log.info(f'------------------------------------------')
 
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_tsnumber(self.ts_per_year)
-        logger.info(f'Found {len(timesteps)} timesteps to download.')
+        self.log.info(f'Found {len(timesteps)} timesteps to download.')
 
         credentials = get_credentials(env_variables=self.credential_env_vars,
                                       url = self.host)
 
         # Download the data for the specified times
         for i, time_now in enumerate(timesteps):
-            logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
             # Do all of this inside a temporary folder
             with tempfile.TemporaryDirectory() as tmp_path:
@@ -149,7 +150,7 @@ class HSAFDownloader(URLDownloader):
 
                 # if not succes
                 if not success:
-                    logger.info(f'  -> Could not find data for {time_now:%Y-%m-%d}')
+                    self.log.info(f'  -> Could not find data for {time_now:%Y-%m-%d}')
                     continue
 
                 elif success:
@@ -161,7 +162,7 @@ class HSAFDownloader(URLDownloader):
                     try:
                         file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
                     except Exception as e:
-                        logger.error(f' --> ERROR! The file {tmp_file} is corrupted')
+                        self.log.error(f' --> ERROR! The file {tmp_file} is corrupted')
                         continue
 
                     # if present change names swi1, swi2, swi3, swi4 to var40, var41, var42, var43
@@ -172,7 +173,7 @@ class HSAFDownloader(URLDownloader):
                         if alternative_name in file_handle:
                             file_handle = file_handle.rename_vars({alternative_name: var_name})
                         elif var_name not in file_handle:
-                            logger.error(f' --> ERROR! The variable {var_name} is not present in the file {tmp_file}')
+                            self.log.error(f' --> ERROR! The variable {var_name} is not present in the file {tmp_file}')
                             continue
                     
                     var_paths = {}
@@ -206,9 +207,9 @@ class HSAFDownloader(URLDownloader):
 
                             save_array_to_tiff(new_var.squeeze(), destination_now)
 
-                    logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} saved to destination folder')
+                    self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} saved to destination folder')
 
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
 
     def remapgrib(self, file_path: str) -> str:
         '''

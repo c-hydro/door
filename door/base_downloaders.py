@@ -1,31 +1,28 @@
 from typing import Optional
 import datetime as dt
 import os
+import logging
 
 import pandas as pd
 import numpy as np
 import xarray as xr
 import requests
 
-
 from .utils.time import TimeRange
 from .utils.space import BoundingBox
 from .utils.io import download_http, check_download, handle_missing, download_ftp
 from .utils.netcdf import crop_netcdf
-
-import logging
-logger = logging.getLogger(__name__)
 
 class DOORDownloader():
     """
     Base class for all DOOR downloaders.
     """
 
-    name = "DOOR Downloader"
+    name = "DOOR_Downloader"
     default_options = {}
 
     def __init__(self) -> None:
-        pass
+        self.log = logging.getLogger(self.name)
 
     def get_data(self,
                  time_range: TimeRange,
@@ -94,6 +91,8 @@ class URLDownloader(DOORDownloader):
     It allows to specify a URL template with placeholders for various parameters (as keyword arguments).
     """
 
+    name = "URL_Downloader"
+
     def __init__(self, url_blank: str, protocol: str = 'http', host: str|None = None) -> None:
 
         self.url_blank = url_blank
@@ -107,6 +106,8 @@ class URLDownloader(DOORDownloader):
                 raise ValueError(f'FTP host must be specified')
             else:
                 self.host = host
+
+        super().__init__()
 
     def format_url(self, **kwargs) -> str:
         """
@@ -129,20 +130,20 @@ class URLDownloader(DOORDownloader):
                 download_http(url, destination, kwargs["auth"])
             except Exception as e:
                 handle_missing(missing_action, kwargs)
-                logger.debug(f'Error downloading {url}: {e}')
+                self.log.debug(f'Error downloading {url}: {e}')
                 return False
         elif self.protocol == 'ftp':
             try:
                 download_ftp(self.host, url, destination, kwargs["auth"])
             except Exception as e:
                 handle_missing(missing_action, kwargs)
-                logger.debug(f'Error downloading {url}: {e}')
+                self.log.debug(f'Error downloading {url}: {e}')
                 return False
 
         success_flag, success_msg = check_download(destination, min_size, missing_action)
         if success_flag > 0:
             handle_missing(missing_action, kwargs)
-            logger.debug(f'Error downloading file from {url}: {success_msg}')
+            self.log.debug(f'Error downloading file from {url}: {success_msg}')
             return False
 
         return True
@@ -154,8 +155,11 @@ class APIDownloader(DOORDownloader):
     Once and API client is specified, it uses a dict to send a request.
     """
 
+    name = "API_Downloader"
+
     def __init__(self, client) -> None:
         self.client = client
+        super().__init__()
 
     def download(self, destination: str, min_size: float = None, missing_action: str = 'error', **kwargs) -> bool:
         """
@@ -167,16 +171,16 @@ class APIDownloader(DOORDownloader):
         # send request to the client (this works for ecmwf and cdsapi, not sure how generalisable it is)
         try:
             output = self.client.retrieve(**kwargs)
-            logger.debug(f'Output: {output}')
+            self.log.debug(f'Output: {output}')
         except Exception as e:
             handle_missing(missing_action, kwargs)
-            logger.debug(f'Error downloading data: {e}')
+            self.log.debug(f'Error downloading data: {e}')
             return False
 
         success_flag, success_msg = check_download(destination, min_size, missing_action)
         if success_flag > 0:
             handle_missing(missing_action, kwargs)
-            logger.debug(f'Error downloading data: {success_msg}')
+            self.log.debug(f'Error downloading data: {success_msg}')
             return False
 
         return True

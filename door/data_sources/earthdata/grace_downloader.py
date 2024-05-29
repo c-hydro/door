@@ -13,12 +13,10 @@ from ...utils.space import BoundingBox
 from ...utils.geotiff import crop_raster, save_raster
 from ...utils.time import TimeRange
 
-import logging
-logger = logging.getLogger(__name__)
-
 class GRACEDownloader(CMRDownloader):
 
     source = 'GRACE'
+    name = 'GRACE_downloader'
 
     available_variables = {
         'tws': ['POCLOUD', 'TELLUS_GRFO_L3_JPL_RL06.1_LND_v04', 'RL06.1v04', 'monthly',
@@ -56,22 +54,22 @@ class GRACEDownloader(CMRDownloader):
                 if layer['id'] not in options['layers']:
                     self.layers.remove(layer)
 
-        logger.info(f'------------------------------------------')
-        logger.info(f'Starting download of {self.source}-{self.variable} data')
-        logger.info(f'{len(self.layers)} layers requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        logger.info(f'Bounding box: {space_bounds.bbox}')
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
+        self.log.info(f'Starting download of {self.source}-{self.variable} data')
+        self.log.info(f'{len(self.layers)} layers requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
+        self.log.info(f'Bounding box: {space_bounds.bbox}')
+        self.log.info(f'------------------------------------------')
 
         if self.timesteps == 'monthly':
             timesteps = time_range.get_timesteps_from_tsnumber(12)
         # this is literally the only available option
 
-        logger.info(f'Found {len(timesteps)} timesteps to download.')
+        self.log.info(f'Found {len(timesteps)} timesteps to download.')
         
         # order timesteps decreasingly, this way once we hit 2018 we can change the product and version and keep them
         timesteps.sort(reverse=True)
         for i,time in enumerate(timesteps):
-            logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
+            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
 
             if time.year < 2018:
                 self.product = self.pre2018_variables[self.variable]['product']
@@ -83,7 +81,7 @@ class GRACEDownloader(CMRDownloader):
             # get the data from the CMR
             url_list = self.cmr_search(time, space_bounds, extensions=['.tif', '.tiff'])
             if not url_list:
-                logger.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
+                self.log.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
                 continue
 
             # Do all of this inside a temporary folder
@@ -94,12 +92,12 @@ class GRACEDownloader(CMRDownloader):
 
                 ds = rasterio.open(file)
                 if ds is None:
-                    logger.error(f'Could not open file {file}')
+                    self.log.error(f'Could not open file {file}')
                     continue
                
                 #lnames = [layer['name'] for layer in self.layers]
                 for layer in self.layers:
-                    logger.info(f'  -> Processing layer {layer["name"]}')
+                    self.log.info(f'  -> Processing layer {layer["name"]}')
 
                     # create a new dataset with only the current layer (band)
                     band = ds.read(layer['id'] + 1)

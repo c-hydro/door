@@ -5,22 +5,14 @@ import os
 # Method to set logging information
 def set_logging(log_file   = 'log.txt',
                 log_level  = 'INFO',
-                log_format = None):
+                log_format = None,
+                console    = False):
 
     if log_format is None:
         log_format = '%(asctime)s %(name)-12s [%(lineno)-4s - %(funcName)10s()] %(levelname)-8s: %(message)s'
 
     level = logging.getLevelName(log_level)
     formatter = logging.Formatter(log_format)
-    # # Remove old logging file
-    # if os.path.exists(logger_file):
-    #     os.remove(logger_file)
-
-    # Set level of root debugger
-    #logging.root.setLevel(logging.INFO)
-
-    # Open logging basic configuration (for file logging)
-    #logging.basicConfig(level=level, format=log_format, filename=log_file, filemode='a')
 
     # Set logger handlers (console and file) 
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -39,5 +31,8 @@ def set_logging(log_file   = 'log.txt',
     # root_logger.addHandler(file_handler)
     # root_logger.addHandler(console_handler)
 
-    logging.basicConfig(level = level, handlers=[file_handler, console_handler])
+    if console:
+        logging.basicConfig(level = level, handlers=[file_handler, console_handler])
+    else:
+        logging.basicConfig(level = level, handlers=[file_handler])
 # -------------------------------------------------------------------------------------

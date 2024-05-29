@@ -13,12 +13,9 @@ from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.geotiff import crop_raster
 
-import logging
-logger = logging.getLogger(__name__)
-
 class IMERGDownloader(URLDownloader):
     
-    name = "IMERG"
+    name = "IMERG_downloader"
     default_options = {
         'credentials_arthurhouhttps' : {'username': None, 'password': None},
         'credentials_jsimpsonhttps': {'username': None, 'password': None},
@@ -39,10 +36,13 @@ class IMERGDownloader(URLDownloader):
             self.ts_per_year = 17520 # 30 mins
             self.prelim_nodata = -1
         else:
-            logger.error(" --> ERROR! Only IMERG-final, IMERG-late and IMERG-early has been implemented until now!")
-            raise NotImplementedError()
+            url_blank = None
         
         super().__init__(url_blank, protocol = 'http')
+        if url_blank is None:
+            self.log.error(" --> ERROR! Only IMERG-final, IMERG-late and IMERG-early has been implemented until now!")
+            raise NotImplementedError()
+        
         self.nodata = -9999
             
     def get_data(self,
@@ -54,28 +54,28 @@ class IMERGDownloader(URLDownloader):
         # Check options
         options = self.check_options(options)
 
-        logger.info(f'------------------------------------------')
-        logger.info(f'Starting download of {self.product} data')
-        logger.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        logger.info(f'Bounding box: {space_bounds.bbox}')
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
+        self.log.info(f'Starting download of {self.product} data')
+        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
+        self.log.info(f'Bounding box: {space_bounds.bbox}')
+        self.log.info(f'------------------------------------------')
 
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_tsnumber(self.ts_per_year)
         missing_times = []
-        logger.info(f'Found {len(timesteps)} timesteps to download.')
+        self.log.info(f'Found {len(timesteps)} timesteps to download.')
         # Do all of this inside a temporary folder
         with tempfile.TemporaryDirectory() as tmp_path:
             # Download the data for the specified times
             for i, time_now in enumerate(timesteps):
-                logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+                self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
                 tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif.gz'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
                 # Download the data
-                success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', time = time_now, auth = setup_credentials(self.product, options))
+                success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', time = time_now, auth = self.setup_credentials(options))
                 if not success:
-                    logger.info(f'  -> Could not find data for {time_now:%Y-%m-%d}')
+                    self.log.info(f'  -> Could not find data for {time_now:%Y-%m-%d}')
                     missing_times.append(time_now)
                 if success:
                     # Unzip the data
@@ -83,13 +83,13 @@ class IMERGDownloader(URLDownloader):
                     # Regrid the data
                     destination_now = time_now.strftime(destination)
                     crop_raster(tmp_destination[:-3], space_bounds, destination_now)
-                    logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
+                    self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
 
             # Fill with prelimnary data
             if len(missing_times) > 0 and options['get_prelim']:
-                logger.info(f'Checking preliminary folder for missing data for {len(missing_times)} timesteps.')
+                self.log.info(f'Checking preliminary folder for missing data for {len(missing_times)} timesteps.')
                 for i, time_now in enumerate(missing_times):
-                    logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+                    self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
                     tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif'
                     tmp_destination = os.path.join(tmp_path, tmp_filename)                
@@ -99,9 +99,9 @@ class IMERGDownloader(URLDownloader):
                         # Regrid the data
                         destination_now = time_now.strftime(destination)
                         crop_raster(tmp_destination, space_bounds, destination_now)
-                        logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
+                        self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
         
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
 
     def extract(self, filename: str):
         """
@@ -111,6 +111,24 @@ class IMERGDownloader(URLDownloader):
         with gzip.open(filename, 'rb') as f_in:
             with open(file_out, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
+
+    def setup_credentials(self, options):
+        if self.product == "IMERG-final":
+            ref_site = "arthurhouhttps"
+        else:
+            ref_site = "jsimpsonhttps"
+        if options["credentials_" + ref_site]['username'] is None or options["credentials_" + ref_site]['password'] is None:
+            self.log.warning(f' --> Credentials {ref_site} are None, try to read them from .netrc file!')
+            try:
+                netrc_handle = netrc.netrc()
+                user, _, password = netrc_handle.authenticators(ref_site)
+                credentials = (user, password)
+            except FileNotFoundError:
+                self.log.error(f' --> .netrc file not found in the home directory, please provide credentials for {ref_site} site!')
+                raise FileNotFoundError()
+        else:
+            credentials = (options["credentials_" + ref_site]["username"], options["credentials_" + ref_site]["password"])
+        return credentials
 
 def compute_name_features(time_now, type):
     if type == "late":
@@ -137,24 +155,6 @@ def compute_name_features(time_now, type):
     step = int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)
 
     return vers_code, time_end, step
-
-def setup_credentials(product, options):
-    if product == "IMERG-final":
-        ref_site = "arthurhouhttps"
-    else:
-        ref_site = "jsimpsonhttps"
-    if options["credentials_" + ref_site]['username'] is None or options["credentials_" + ref_site]['password'] is None:
-        logger.warning(f' --> Credentials {ref_site} are None, try to read them from .netrc file!')
-        try:
-            netrc_handle = netrc.netrc()
-            user, _, password = netrc_handle.authenticators(ref_site)
-            credentials = (user, password)
-        except FileNotFoundError:
-            logger.error(f' --> .netrc file not found in the home directory, please provide credentials for {ref_site} site!')
-            raise FileNotFoundError()
-    else:
-        credentials = (options["credentials_" + ref_site]["username"], options["credentials_" + ref_site]["password"])
-    return credentials
 
 import pandas as pd
 import datetime as dt

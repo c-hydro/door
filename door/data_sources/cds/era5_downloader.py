@@ -12,10 +12,9 @@ from ...utils.netcdf import save_netcdf
 from ...utils.geotiff import save_array_to_tiff
 from ...utils.parse import format_string
 
-import logging
-logger = logging.getLogger(__name__)
-
 class ERA5Downloader(CDSDownloader):
+
+    name = "ERA5_downloader"
 
     available_products = ['reanalysis-era5-single-levels', 'reanalysis-era5-land']
     available_variables = {'total_precipitation': 'tp',
@@ -61,12 +60,12 @@ class ERA5Downloader(CDSDownloader):
                     ID["EPSG",4326]]'
 
     def __init__(self, product = 'reanalysis-era5-single-levels') -> None:
+        super().__init__(product)
+
         if product not in self.available_products:
             msg = f'Product {product} not available for ERA5'
-            logger.error(msg)
+            self.log.error(msg)
             raise ValueError(msg)
-
-        super().__init__(product)
 
     def check_options(self, options: dict) -> dict:
         options = super().check_options(options)
@@ -76,7 +75,7 @@ class ERA5Downloader(CDSDownloader):
         elif 'tif' in options['output_format'].lower():
             options['output_format'] = 'GeoTIFF'
         else:
-            logger.warning(f'Output format {options["output_format"]} not supported. Using netcdf')
+            self.log.warning(f'Output format {options["output_format"]} not supported. Using netcdf')
             options['output_format'] = 'netcdf'
 
         if options['aggregate_in_time'] is not None and not isinstance(options['aggregate_in_time'], list):
@@ -84,12 +83,12 @@ class ERA5Downloader(CDSDownloader):
 
         for aggregation in options['aggregate_in_time']:
             if aggregation not in ['mean', 'max', 'min', 'sum']:
-                logger.warning(f'Unknown method {aggregation}, won\'t aggregate')
+                self.log.warning(f'Unknown method {aggregation}, won\'t aggregate')
                 options['aggregate_in_time'].remove(aggregation)
 
         for variable in options['variables']:
             if variable not in self.available_variables:
-                logger.warning(f'Variable {variable} not available for ERA5 or not implemented/tested, removing from list')
+                self.log.warning(f'Variable {variable} not available for ERA5 or not implemented/tested, removing from list')
                 options['variables'].remove(variable)
 
         return options
@@ -163,7 +162,7 @@ class ERA5Downloader(CDSDownloader):
 
         timestep_start = step_range.start #timesteps[i]
         timestep_end   = step_range.end #timesteps[i+1] - dt.timedelta(days=1)
-        #logger.info(f' - Block {i+1}/{ntimesteps}: starting at {timestep_start:%Y-%m-%d}')
+        #self.log.info(f' - Block {i+1}/{ntimesteps}: starting at {timestep_start:%Y-%m-%d}')
 
         # Do all of this inside a temporary folder
         tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
@@ -171,7 +170,7 @@ class ERA5Downloader(CDSDownloader):
         with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
             self.working_path = tmp_path
 
-            logger.debug(f' ----> Downloading data')
+            self.log.debug(f' ----> Downloading data')
 
             tmp_filename = f'temp_{self.dataset}_{timestep_start:%Y%m%d}-{timestep_end:%Y%m%d}.grib2'
             tmp_destination = os.path.join(tmp_path, tmp_filename)
@@ -188,7 +187,7 @@ class ERA5Downloader(CDSDownloader):
 
             # if the download fail interrupt
             if not success:
-                logger.error(f'  -> Download failed, skipping block')
+                self.log.error(f'  -> Download failed, skipping block')
                 return
 
             # this will create a list of xarray datasets, one for each "well-formed" cube in the grib file,
@@ -197,7 +196,7 @@ class ERA5Downloader(CDSDownloader):
             all_data = cfgrib.open_datasets(tmp_destination)
 
             for var in self.variables:
-                logger.debug(f' --> Variable {var}')
+                self.log.debug(f' --> Variable {var}')
                 varname = self.available_variables[var]
 
                 # get the data for the variable from the list of datasets
@@ -208,7 +207,7 @@ class ERA5Downloader(CDSDownloader):
 
                 # check if we are using any preliminary data, or if it is all final
                 if 'expver' in data.dims:
-                    logger.warning('  -> Some of the data is preliminary, we will use the final version where available')
+                    self.log.warning('  -> Some of the data is preliminary, we will use the final version where available')
                     data_final  = data.sel(expver=1)
                     data_prelim = data.sel(expver=5)
 
@@ -251,7 +250,7 @@ class ERA5Downloader(CDSDownloader):
                     this_data = vardata.sel(time = istoday)
                     for time in this_data.time:
                         if this_data.sel(time = time).isnull().all():
-                            logger.error(f'  -> Missing data for {var} at time {time:%Y-%m-%d %H:%M}')
+                            self.log.error(f'  -> Missing data for {var} at time {time:%Y-%m-%d %H:%M}')
                             raise ValueError(f'Missing data for {var} at time {time:%Y-%m-%d %H:%M}')
 
                     time_to_check += dt.timedelta(days=1)
@@ -263,19 +262,19 @@ class ERA5Downloader(CDSDownloader):
                 for agg in self.aggregations:
                     vardata.attrs['agg_function'] = agg
                     if agg == 'mean':
-                        logger.debug(f' ----> Aggregating data to mean')
+                        self.log.debug(f' ----> Aggregating data to mean')
                         aggdata = vardata.mean(dim='time')
                     elif agg == 'max':
-                        logger.debug(f' ----> Aggregating data to max')
+                        self.log.debug(f' ----> Aggregating data to max')
                         aggdata = vardata.max(dim='time')
                     elif agg == 'min':
-                        logger.debug(f' ----> Aggregating data to min')
+                        self.log.debug(f' ----> Aggregating data to min')
                         aggdata = vardata.min(dim='time')
                     elif agg == 'sum':
-                        logger.debug(f' ----> Aggregating data to sum')
+                        self.log.debug(f' ----> Aggregating data to sum')
                         aggdata = vardata.sum(dim='time')
                     else:
-                        logger.debug(f' ----> No aggregation needed')
+                        self.log.debug(f' ----> No aggregation needed')
                         aggdata = vardata
 
                     aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
@@ -286,10 +285,10 @@ class ERA5Downloader(CDSDownloader):
                     out_name = timestep_end.strftime(out_name)
 
                     if options['output_format'] == 'GeoTIFF':
-                        logger.debug(f' ----> Saving to GeoTIFF')
+                        self.log.debug(f' ----> Saving to GeoTIFF')
                         save_array_to_tiff(aggdata, out_name)
                     else:
-                        logger.debug(f' ----> Saving to netcdf')
+                        self.log.debug(f' ----> Saving to netcdf')
                         save_netcdf(aggdata, out_name)
 
     def get_data(self,
@@ -304,18 +303,18 @@ class ERA5Downloader(CDSDownloader):
         # set the bounding box to EPSG:4326
         space_bounds.transform('EPSG:4326')
 
-        logger.info(f'------------------------------------------')
-        logger.info(f'Starting download of {self.dataset} data from {self.name}')
-        logger.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        logger.info(f'Bounding box: {space_bounds.bbox}')
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
+        self.log.info(f'Starting download of {self.dataset} data from {self.name}')
+        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
+        self.log.info(f'Bounding box: {space_bounds.bbox}')
+        self.log.info(f'------------------------------------------')
 
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_tsnumber(options['timesteps_per_year'], get_end = True)
         ntimesteps = len(timesteps) - 1
 
         # Download the data for the specified issue times
-        logger.info(f'Found {ntimesteps} blocks of data to download.')
+        self.log.info(f'Found {ntimesteps} blocks of data to download.')
 
         if options['n_processes'] > 1:
             import multiprocessing
@@ -329,8 +328,8 @@ class ERA5Downloader(CDSDownloader):
                 step_range = TimeRange(timesteps[i], timesteps[i+1] - dt.timedelta(days=1))
                 self.get_singledata(step_range, space_bounds, destination, options)
                 
-            logger.info(f'  -> SUCCESS! Data for {len(self.variables)} variables downloaded.')
-        logger.info(f'------------------------------------------')
+            self.log.info(f'  -> SUCCESS! Data for {len(self.variables)} variables downloaded.')
+        self.log.info(f'------------------------------------------')
 
 def get_singledata(dataset, step_range, space_bounds, destination, options):
     downloader = ERA5Downloader(dataset)

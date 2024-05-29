@@ -1,4 +1,3 @@
-import logging
 import os
 from typing import Optional
 import tempfile
@@ -14,12 +13,9 @@ from ...utils.space import BoundingBox
 from ...utils.io import untar_file, decompress_bz2
 from ...utils.netcdf import save_netcdf
 
-import logging
-logger = logging.getLogger(__name__)
-
 class ICONDownloader(URLDownloader):
     
-    name = "ICON"
+    name = "ICON_downloader"
     default_options = {
         'frc_max_step': 180,
         'variables': ["tp", "t_2m"],
@@ -39,10 +35,13 @@ class ICONDownloader(URLDownloader):
             self.issue_hours = [0, 6, 12, 18]
             self.frc_dims = {"time": "valid_time", "lat": "latitude", "lon": "longitude"}
         else:
-            logging.error(" --> ERROR! Only ICON0p125 has been implemented until now!")
+            url_blank = None
+        
+        super().__init__(url_blank, protocol = 'http')
+        if url_blank is None:
+            self.log.error(" --> ERROR! Only ICON0p125 has been implemented until now!")
             raise NotImplementedError()
 
-        super().__init__(url_blank, protocol = 'http')
         self.frc_steps = None
         self.frc_time_range = None
 
@@ -51,7 +50,7 @@ class ICONDownloader(URLDownloader):
 
         # also check that we are not asking for too many forecast steps
         if options['frc_max_step'] > 180:
-            logger.warning("WARNING! ICON only has 180 forecast steps available, setting max_steps to 180")
+            self.log.warning("WARNING! ICON only has 180 forecast steps available, setting max_steps to 180")
             options['frc_max_step'] = 180
         
         return options
@@ -66,11 +65,11 @@ class ICONDownloader(URLDownloader):
         options = self.check_options(options)
         self.cdo_path = options['cdo_path']
 
-        logger.info(f'------------------------------------------')
-        logger.info(f'Starting download of {self.product} data')
-        logger.info(f'Data requested between {time_range.start:%Y-%m-%d %H:%M} and {time_range.end:%Y-%m-%d %H:%m}')
-        logger.info(f'Bounding box: {space_bounds.bbox}')
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
+        self.log.info(f'Starting download of {self.product} data')
+        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d %H:%M} and {time_range.end:%Y-%m-%d %H:%m}')
+        self.log.info(f'Bounding box: {space_bounds.bbox}')
+        self.log.info(f'------------------------------------------')
 
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_issue_hour(self.issue_hours)
@@ -88,22 +87,22 @@ class ICONDownloader(URLDownloader):
                 with open(os.path.join(tmp_path, "binary_grids.tar.bz2"), 'wb') as f:
                     f.write(r.content)
                 untar_file(os.path.join(tmp_path, "binary_grids.tar.bz2"), move_to_root=True)
-                logger.info("Binary decodification table downloaded and extracted")
+                self.log.info("Binary decodification table downloaded and extracted")
 
-            logger.info(f'Found {len(timesteps)} model issues to download.')
+            self.log.info(f'Found {len(timesteps)} model issues to download.')
             # Download the data for the specified issue times
             for i, run_time in enumerate(timesteps):
-                logger.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
+                self.log.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
                 # Set forecast steps
                 self.frc_time_range, self.frc_steps = self.compute_model_steps(run_time, options['frc_max_step'])
 
                 variables = options['variables']
                 for var_out in variables:
-                    logger.info(f'  - Variable {var_out}: {i+1}/{len(variables)}')
+                    self.log.info(f'  - Variable {var_out}: {i+1}/{len(variables)}')
 
                     temp_files = []
                     for step in self.frc_steps:
-                        logger.debug(f' ----> Downloading {var_out} data for +{step}h')
+                        self.log.debug(f' ----> Downloading {var_out} data for +{step}h')
      
                         tmp_filename = f'temp_frc{self.product}_{run_time:%Y%m%d%H}_{step}_{var_out}.grib2.bz2'
                         tmp_destination = os.path.join(tmp_path, var_out, tmp_filename)
@@ -111,19 +110,19 @@ class ICONDownloader(URLDownloader):
                                                 step=str(step).zfill(3), VAR=var_out.upper(), var=var_out)
                         if success:
                             temp_files.append(self.project_bin_file(tmp_destination))
-                            logger.debug(f'  ---> SUCCESS! Downloaded {var_out} data for +{step}h')
+                            self.log.debug(f'  ---> SUCCESS! Downloaded {var_out} data for +{step}h')
                         else:
-                            logger.error(f'  ---> ERROR! {var_out} for forecast step {step}h not available, skipping this variable!')
+                            self.log.error(f'  ---> ERROR! {var_out} for forecast step {step}h not available, skipping this variable!')
                             break
                     
                     if len(temp_files) > 0:
-                        logger.debug(f' ----> Merging {var_out} data')
+                        self.log.debug(f' ----> Merging {var_out} data')
                         with xr.open_mfdataset(temp_files, concat_dim='valid_time', data_vars='minimal',
                                                combine='nested', coords='minimal',
                                                compat='override', engine="cfgrib") as ds:
                             var_names = [vars for vars in ds.data_vars.variables.mapping]
                             if len(var_names) > 1:
-                                logger.error("ERROR! Only one variable should be in the grib file, check file integrity!")
+                                self.log.error("ERROR! Only one variable should be in the grib file, check file integrity!")
                                 raise TypeError
                             else:
                                 ds = self.postprocess_forecast(ds[var_names[0]], space_bounds)
@@ -135,8 +134,8 @@ class ICONDownloader(URLDownloader):
 
                         out_name = run_time.strftime(destination)
                         save_netcdf(frc_out, out_name)
-                        logger.info(f'  -> SUCCESS! Data for {var_out} ({len(temp_files)} forecast steps) dowloaded and cropped to bounds.')
-        logger.info(f'------------------------------------------')
+                        self.log.info(f'  -> SUCCESS! Data for {var_out} ({len(temp_files)} forecast steps) dowloaded and cropped to bounds.')
+        self.log.info(f'------------------------------------------')
     
     @staticmethod
     def compute_model_steps(time_run: dt.datetime, max_steps: int) -> (list[dt.datetime], list[int]):
@@ -145,7 +144,7 @@ class ICONDownloader(URLDownloader):
         """
         max_step = max_steps + 1
         if max_step > 181:
-            logger.error(" ERROR! Only the first 180 forecast hours are available on the dwd website!")
+            self.log.error(" ERROR! Only the first 180 forecast hours are available on the dwd website!")
             raise NotImplementedError()
             # this shouldn't be necessary, because we are checking before when we check the options.  
         if max_step > 78:
