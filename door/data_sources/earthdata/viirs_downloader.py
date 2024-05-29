@@ -12,13 +12,10 @@ from ...utils.space import BoundingBox
 from ...utils.geotiff import crop_raster, save_raster
 from ...utils.time import TimeRange
 
-
-import logging
-logger = logging.getLogger(__name__)
-
 class VIIRSDownloader(CMRDownloader):
 
     source = 'VIIRS'
+    name = 'VIIRS_downloader'
 
     # list of available variables -> those not implementeed/tested yet are commented out
     # for each variable the list indicates
@@ -169,11 +166,11 @@ class VIIRSDownloader(CMRDownloader):
                 if layer['id'] not in options['layers']:
                     self.layers.remove(layer)
 
-        logger.info(f'------------------------------------------')
-        logger.info(f'Starting download of {self.source}-{self.variable} data')
-        logger.info(f'{len(self.layers)} layers requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        logger.info(f'Bounding box: {space_bounds.bbox}')
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
+        self.log.info(f'Starting download of {self.source}-{self.variable} data')
+        self.log.info(f'{len(self.layers)} layers requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
+        self.log.info(f'Bounding box: {space_bounds.bbox}')
+        self.log.info(f'------------------------------------------')
 
         if self.timesteps == 'viirs':
             timesteps = time_range.get_timesteps_from_DOY(list(range(1, 366, 8)))
@@ -182,16 +179,16 @@ class VIIRSDownloader(CMRDownloader):
         elif self.timesteps == 'daily':
             timesteps = time_range.get_timesteps_from_tsnumber(365)
 
-        logger.info(f'Found {len(timesteps)} timesteps to download.')
+        self.log.info(f'Found {len(timesteps)} timesteps to download.')
 
         for i,time in enumerate(timesteps):
-            logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
+            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
 
             # get the data from the CMR
             url_list = self.cmr_search(time, space_bounds, extensions=['.hdf', '.h5'])
 
             if not url_list:
-                logger.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
+                self.log.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
                 continue
 
             # Do all of this inside a temporary folder
@@ -217,7 +214,7 @@ class VIIRSDownloader(CMRDownloader):
                         else:
                             save_raster(dataset, file_out)
                         dataset = None
-                    logger.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded and combined into a single mosaic per layer')
+                    self.log.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded and combined into a single mosaic per layer')
                 else:
                     for tile, file in enumerate(file_list):
                         these_hdf5_datasets = self.get_layers_from_hdf5(file, self.layers)
@@ -235,6 +232,6 @@ class VIIRSDownloader(CMRDownloader):
                             else:
                                 save_raster(ds, file_out)
                             ds = None
-                    logger.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded, {len(file_list)} tiles per layer')
-        logger.info(f'------------------------------------------')                
+                    self.log.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded, {len(file_list)} tiles per layer')
+        self.log.info(f'------------------------------------------')                
             

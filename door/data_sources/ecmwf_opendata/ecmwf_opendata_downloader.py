@@ -10,17 +10,21 @@ from ...utils.time import TimeRange, get_regular_steps
 from ...utils.space import BoundingBox
 from ...utils.netcdf import save_netcdf
 
-import logging
-logger = logging.getLogger(__name__)
-
 class ECMWFOpenDataDownloader(APIDownloader):
-    name = "ECMWF-OpenData"
+    name = "ECMWF-OpenData_downloader"
     default_options = {
         'frc_max_step': 144,
         'variables': ["10u", "10v"]
     }
 
     def __init__(self, product: str) -> None:
+        client = Client(
+            source="ecmwf",
+            beta=True,
+            preserve_request_order=False,
+            infer_stream_keyword=True)
+        super().__init__(client)
+
         self.product = product
         if self.product == "HRES":
             self.prod_code = "fc"
@@ -28,7 +32,7 @@ class ECMWFOpenDataDownloader(APIDownloader):
             self.issue_hours = [0, 6, 12, 18]
             self.frc_dims = {"time": "step", "lat": "latitude", "lon": "longitude"}
         else:
-            logger.error(" --> ERROR! Only HRES has been implemented until now!")
+            self.log.error(" --> ERROR! Only HRES has been implemented until now!")
             raise NotImplementedError()
 
         self.frc_steps = None
@@ -53,25 +57,25 @@ class ECMWFOpenDataDownloader(APIDownloader):
 
         self.variables = options['variables']
         
-        logger.info(f'------------------------------------------')
-        logger.info(f'Starting download of {self.product} data from {self.name}')
-        logger.info(f'Data requested between {time_range.start:%Y-%m-%d %H:%M} and {time_range.end:%Y-%m-%d %H:%m}')
-        logger.info(f'Bounding box: {space_bounds.bbox}')
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
+        self.log.info(f'Starting download of {self.product} data from {self.name}')
+        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d %H:%M} and {time_range.end:%Y-%m-%d %H:%m}')
+        self.log.info(f'Bounding box: {space_bounds.bbox}')
+        self.log.info(f'------------------------------------------')
 
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_issue_hour(self.issue_hours)
 
         # Download the data for the specified issue times
-        logger.info(f'Found {len(timesteps)} model issues to download.')
+        self.log.info(f'Found {len(timesteps)} model issues to download.')
         for i, run_time in enumerate(timesteps):
-            logger.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
+            self.log.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
 
             
 
             
             # Set forecast steps
-            logger.debug(" ----> Set forecast steps")
+            self.log.debug(" ----> Set forecast steps")
 
             # at 0 and 12, we have 144 steps max, at 6 and 18, we have 90 steps max
             if run_time.hour == 0 or run_time.hour == 12:
@@ -86,27 +90,27 @@ class ECMWFOpenDataDownloader(APIDownloader):
             with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
                 self.working_path = tmp_path
 
-                logger.debug(f' ----> Downloading data')
+                self.log.debug(f' ----> Downloading data')
                 
                 tmp_filename = f'temp_frc{self.product}_{run_time:%Y%m%d%H}.grib2'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
                 request = self.build_request(run_time, tmp_destination)
                 self.download(tmp_destination, min_size = 200,  missing_action = 'w', **request)
             
-                logger.debug(' ----> SUCCESS! Downloaded forecast data')
+                self.log.debug(' ----> SUCCESS! Downloaded forecast data')
 
-                logger.debug(f' ----> Postprocess data')
+                self.log.debug(f' ----> Postprocess data')
                 frc_out = xr.load_dataset(tmp_destination, engine="cfgrib")
                 frc_out = self.postprocess_forecast(frc_out, space_bounds)
-                logger.debug(' ----> SUCCESS! Postprocessed forecast data')
+                self.log.debug(' ----> SUCCESS! Postprocessed forecast data')
 
                 out_name = run_time.strftime(destination)
                 save_netcdf(frc_out, out_name)
                 #os.makedirs(os.path.dirname(out_name), exist_ok=True)
                 #frc_out.to_netcdf(out_name)
-                logger.info(f'  -> SUCCESS! Data for {len(self.variables)} variables dowloaded and cropped to bounds.')
+                self.log.info(f'  -> SUCCESS! Data for {len(self.variables)} variables dowloaded and cropped to bounds.')
 
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
 
     def build_request(self, run_time, destination):
         """

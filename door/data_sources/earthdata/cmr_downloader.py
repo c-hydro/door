@@ -14,9 +14,6 @@ from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
 from ...utils.space import BoundingBox
 
-import logging
-logger = logging.getLogger(__name__)
-
 class CMRDownloader(DOORDownloader):
     """
     This class is a downloader for through the Common Metadata Repository (CMR).
@@ -25,7 +22,7 @@ class CMRDownloader(DOORDownloader):
     In this common class, we will implement the methods used to navigate the CMR and download raw data.
     """
 
-    name = "CMR downloader"
+    name = "CMR_downloader"
 
     urs_url='https://urs.earthdata.nasa.gov'
     cmr_url='https://cmr.earthdata.nasa.gov/search/granules.json?'
@@ -42,7 +39,7 @@ class CMRDownloader(DOORDownloader):
     }
     
     def __init__(self) -> None:
-        pass
+        super().__init__()
     
     @property
     def variable(self):
@@ -119,18 +116,18 @@ class CMRDownloader(DOORDownloader):
                         filename_ls.append(filename_save)
 
                     if n % log_step == 0 or n == len(url_list)-1:
-                        logger.info(f'  -> Downloaded {n+1} of {len(url_list)} files')
+                        self.log.info(f'  -> Downloaded {n+1} of {len(url_list)} files')
                     
                     break
 
                 except HTTPError as e:
-                    logging.info(f'HTTP error {e.code}, {e.reason} - trying again {trial}/{trials}')
+                    self.log.info(f'HTTP error {e.code}, {e.reason} - trying again {trial}/{trials}')
                     trial += 1
                 except URLError as e:
-                    logging.error('URL error {0}'.format(e.reason))
+                    self.log.error('URL error {0}'.format(e.reason))
                     raise
                 except OSError as e:
-                    logging.error('IO error {0}'.format(e))
+                    self.log.error('IO error {0}'.format(e))
                     raise
                 except KeyboardInterrupt:
                     quit()

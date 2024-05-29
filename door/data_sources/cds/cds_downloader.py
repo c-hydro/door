@@ -2,11 +2,10 @@ import cdsapi
 from ...base_downloaders import APIDownloader
 
 import os
-import logging
-logger = logging.getLogger(__name__)
 
 class CDSDownloader(APIDownloader):
 
+    name = "CDS_downloader"
     apikey_env_vars = 'CDSAPI_KEY' # this should be in the form UID:API_KEY already
     cds_url = 'https://cds.climate.copernicus.eu/api/v2'
 

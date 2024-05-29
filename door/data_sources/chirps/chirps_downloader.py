@@ -10,12 +10,9 @@ from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.geotiff import crop_raster
 
-import logging
-logger = logging.getLogger(__name__)
-
 class CHIRPSDownloader(URLDownloader):
     
-    name = "CHIRPS"
+    name = "CHIRPS_downloader"
     default_options = {
         'get_prelim' : True, # if True, will also download preliminary data if available
     }
@@ -38,10 +35,13 @@ class CHIRPSDownloader(URLDownloader):
             self.ts_per_year  = 12 # monthly
             self.prelim_nodata = -9999
         else:
-            logger.error(" --> ERROR! Only CHIRPSp25-daily, CHIRPSp05-daily and CHIRPSp25-monthly has been implemented until now!")
+            url_blank = None
+
+        super().__init__(url_blank, protocol = 'http')
+        if url_blank is None:
+            self.log.error(" --> ERROR! Only CHIRPSp25-daily, CHIRPSp05-daily and CHIRPSp25-monthly has been implemented until now!")
             raise NotImplementedError()
         
-        super().__init__(url_blank, protocol = 'http')
         self.nodata = -9999
             
     def get_data(self,
@@ -53,20 +53,20 @@ class CHIRPSDownloader(URLDownloader):
         # Check options
         options = self.check_options(options)
 
-        logger.info(f'------------------------------------------')
-        logger.info(f'Starting download of {self.product} data')
-        logger.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        logger.info(f'Bounding box: {space_bounds.bbox}')
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
+        self.log.info(f'Starting download of {self.product} data')
+        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
+        self.log.info(f'Bounding box: {space_bounds.bbox}')
+        self.log.info(f'------------------------------------------')
 
         # Get the timesteps to download
         timesteps = time_range.get_timesteps_from_tsnumber(self.ts_per_year)
         missing_times = []
-        logger.info(f'Found {len(timesteps)} timesteps to download.')
+        self.log.info(f'Found {len(timesteps)} timesteps to download.')
 
         # Download the data for the specified times
         for i, time_now in enumerate(timesteps):
-            logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
             # Do all of this inside a temporary folder
             tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
@@ -79,7 +79,7 @@ class CHIRPSDownloader(URLDownloader):
                 if options['get_prelim']:
                     success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', time = time_now)
                     if not success:
-                        logger.info(f'  -> Could not find data for {time_now:%Y-%m-%d}, will check preliminary folder later')
+                        self.log.info(f'  -> Could not find data for {time_now:%Y-%m-%d}, will check preliminary folder later')
                         missing_times.append(time_now)
                 else:
                     success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', time = time_now)
@@ -90,14 +90,14 @@ class CHIRPSDownloader(URLDownloader):
                     # Regrid the data
                     destination_now = time_now.strftime(destination)
                     crop_raster(tmp_destination[:-3], space_bounds, destination_now)
-                    logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
+                    self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
 
         # Fill with prelimnary data
         if len(missing_times) > 0 and options['get_prelim']:
-            logger.info(f'Checking preliminary folder for missing data for {len(missing_times)} timesteps.')
+            self.log.info(f'Checking preliminary folder for missing data for {len(missing_times)} timesteps.')
             
             for i, time_now in enumerate(missing_times):
-                logger.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+                self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
                 # Do all of this inside a temporary folder
                 with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
@@ -117,9 +117,9 @@ class CHIRPSDownloader(URLDownloader):
                         # Regrid the data
                         destination_now = time_now.strftime(destination)
                         crop_raster(tmp_destination, space_bounds, destination_now)
-                        logger.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
+                        self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
         
-        logger.info(f'------------------------------------------')
+        self.log.info(f'------------------------------------------')
 
     def extract(self, filename: str):
         """
