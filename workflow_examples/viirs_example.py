@@ -12,7 +12,7 @@ log.set_logging(log_file)
 time_range = TimeRange(start='2017-01-01', end='2017-02-12')
 space_ref  = BoundingBox(-5, -2, 5, 18, datum = 'EPSG:4326')
 
-test_downloader = VIIRSDownloader('FAPAR')
+test_downloader = VIIRSDownloader('FAPAR', version = 2)
 test_downloader.get_data(time_range, space_ref,
                          destination=HOME+'/%Y/%m/VIIRS-{layer}_tile{tile}_%Y%m%d.tif',
                          options={'layers': [0,2],              # we don't need the extra QC layer

@@ -57,7 +57,7 @@ class VIIRSDownloader(CMRDownloader):
     # we need to add the version=2.0 to the URL to get the correct response for the snow product (for FAPAR it doesn't matter)
     cmr_url='https://cmr.earthdata.nasa.gov/search/granules.json?version=2.0'
 
-    def __init__(self, variable) -> None:
+    def __init__(self, variable, version = None) -> None:
         """
         Initializes the CMRDownloader class.
         Available (tested) variables are:
@@ -68,6 +68,12 @@ class VIIRSDownloader(CMRDownloader):
 
         # set the variable
         self.variable = variable
+
+        # override the default version if needed
+        if version is not None:
+            default_version = self.version
+            self.version = f'{version:03d}'
+            self.log.info(f'Overriding default data version ({default_version}) with {self.version}')
     
     # this is specific to VIIRS, different from MODIS!
     def get_geotransform(self, filename):
