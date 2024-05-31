@@ -71,9 +71,13 @@ class VIIRSDownloader(CMRDownloader):
 
         # override the default version if needed
         if version is not None:
-            default_version = self.version
-            self.version = f'{version:03d}'
-            self.log.info(f'Overriding default data version ({default_version}) with {self.version}')
+            if version in [1,2]:
+                default_version = self.version
+                self.version = f'{version:03d}'
+                if self.version != default_version:
+                    self.log.info(f'Overriding default data version ({default_version}) with {self.version}')
+            else:
+                self.log.warning(f'Version {version:03d} unrecognised, using default version ({self.version})')
     
     # this is specific to VIIRS, different from MODIS!
     def get_geotransform(self, filename):
