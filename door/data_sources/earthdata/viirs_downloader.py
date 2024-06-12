@@ -197,7 +197,7 @@ class VIIRSDownloader(CMRDownloader):
             self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
 
             # get the data from the CMR
-            url_list = self.cmr_search(time, space_bounds, extensions=['.hdf', '.h5'])
+            url_list = self.cmr_search(time, space_bounds)
 
             if not url_list:
                 self.log.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
