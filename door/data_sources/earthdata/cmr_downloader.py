@@ -6,7 +6,7 @@ import json
 import itertools
 import sys
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from osgeo import gdal
 
@@ -37,7 +37,9 @@ class CMRDownloader(DOORDownloader):
         'crop_to_bounds': True,
         'keep_tiles_naming': False,
     }
-    
+
+    file_ext = ['.hdf', '.h5']
+
     def __init__(self) -> None:
         super().__init__()
     
@@ -77,6 +79,30 @@ class CMRDownloader(DOORDownloader):
                                                url=self.urs_url, test_url=url)
         
         return self.credentials
+
+    def get_last_published_date(self) -> datetime:
+        """
+        Get the last published date for the dataset.
+        """
+        
+        global_bounds = BoundingBox(-180, -90, 180, 90)
+        now = datetime.now()
+        time = datetime(now.year, now.month, now.day)
+
+        while True:
+            urls = self.cmr_search(time, global_bounds)
+            if urls:
+                break
+            time -= timedelta(days=1)
+        
+        # time is now the end of the timestep that the data refers to
+        # we need to find the beginning, so we keep going back until the list of urls changes
+        new_urls = urls.copy()
+        while all([url in new_urls for url in urls]):
+            time -= timedelta(days=1)
+            new_urls = self.cmr_search(time, global_bounds)
+        
+        return time + timedelta(days=1)
 
     def download(self, url_list: list[str], destination: str, trials = 100) -> list[str]:
         """
@@ -153,7 +179,7 @@ class CMRDownloader(DOORDownloader):
 
         return cmr_base_url + product_query + version_query + temporal_query + spatial_query + tail# + filter_query
 
-    def cmr_search(self, time: datetime, space_bounds: BoundingBox, extensions=['.hdf', '.h5']) -> dict:
+    def cmr_search(self, time: datetime, space_bounds: BoundingBox) -> dict:
         """
         Search CMR for files matching the query.
         """
@@ -179,11 +205,10 @@ class CMRDownloader(DOORDownloader):
                     hits = int(headers['cmr-hits'])
                 search_page = response.read()
                 search_page = json.loads(search_page.decode('utf-8'))
-                url_scroll_results = cmr_filter_urls(search_page, extensions=extensions)
+                url_scroll_results = cmr_filter_urls(search_page, extensions=self.file_ext)
                 if not url_scroll_results:
                     break
                 if hits > self.cmr_page_size:
-                    print('.', end='')
                     sys.stdout.flush()
                 urls += url_scroll_results
 
