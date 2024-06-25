@@ -4,3 +4,4 @@ from .dwd import *
 from .ecmwf_opendata import *
 from .cds import *
 from .hsaf import *
+from .drops2 import *

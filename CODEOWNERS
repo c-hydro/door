@@ -7,3 +7,4 @@ door/data_sources/ecmwf_opendata/* @AndreaLibe
 door/data_sources/chirps/* @AndreaLibe @ltrotter
 door/data_sources/earthdata/* @ltrotter
 door/data_sources/cds/* @ltrotter
+door/data_sources/drops2/* @FrancescoAvanzi
