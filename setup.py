@@ -34,6 +34,7 @@ setup(
         'ecmwf-opendata >= 0.2.0',
         'cdsapi',
         'ftpretty',
+        'pandas'
     ],
     python_requires='>=3.10',
     test_suite='tests',
