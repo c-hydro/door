@@ -1,4 +1,5 @@
 from datetime import datetime
+import calendar
 
 from .cmr_downloader import CMRDownloader
 
@@ -81,7 +82,9 @@ class GRACEDownloader(CMRDownloader):
                 self.version = self.available_variables[self.variable][2]
 
             # get the data from the CMR
-            url_list = self.cmr_search(time, space_bounds)
+            last_day_of_month = calendar.monthrange(time.year, time.month)[1]
+            time_end = time.replace(day=last_day_of_month)
+            url_list = self.cmr_search((time,time_end), space_bounds)
             if not url_list:
                 self.log.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
                 continue
