@@ -163,7 +163,7 @@ class CMRDownloader(DOORDownloader):
 
         return filename_ls       
 
-    def build_cmr_query(self, time: datetime, bounding_box) -> str:
+    def build_cmr_query(self, time_start: datetime, time_end: datetime, bounding_box) -> str:
 
         cmr_base_url = ('{0}provider={1}'
                         '&sort_key=start_date&sort_key=producer_granule_id'
@@ -171,7 +171,7 @@ class CMRDownloader(DOORDownloader):
 
         product_query = self.fomat_product(self.product)
         version_query = self.format_version(self.version)
-        temporal_query = self.format_temporal(time)
+        temporal_query = self.format_temporal(time_start, time_end)
         spatial_query = self.format_spatial(bounding_box)
         #filter_query = self.format_filename_filter(time)
 
@@ -179,14 +179,20 @@ class CMRDownloader(DOORDownloader):
 
         return cmr_base_url + product_query + version_query + temporal_query + spatial_query + tail# + filter_query
 
-    def cmr_search(self, time: datetime, space_bounds: BoundingBox) -> dict:
+    def cmr_search(self, time: datetime|tuple[datetime], space_bounds: BoundingBox) -> dict:
         """
         Search CMR for files matching the query.
         """
 
         bounding_box = space_bounds.bbox
 
-        cmr_query_url = self.build_cmr_query(time, bounding_box)
+        if isinstance(time, tuple):
+            time_start, time_end = time
+        else:
+            time_start = time
+            time_end = time
+
+        cmr_query_url = self.build_cmr_query(time_start, time_end, bounding_box)
         cmr_scroll_id = None
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
@@ -244,14 +250,16 @@ class CMRDownloader(DOORDownloader):
         return query_params
 
     @staticmethod
-    def format_temporal(time: datetime) -> str:
+    def format_temporal(time_start: datetime, time_end:datetime) -> str:
         """
         Formats the time to be used in the CMR query.
         """
-        date_st = time.strftime('%Y-%m-%d')
-        time_start = date_st + 'T00:00:00Z'
-        time_end = date_st + 'T23:59:59Z'
-        return f'&temporal={time_start},{time_end}'
+        date_start_st = time_start.strftime('%Y-%m-%d')
+        time_start_st = date_start_st + 'T00:00:00Z'
+
+        date_end_st = time_end.strftime('%Y-%m-%d')
+        time_end_st = date_end_st + 'T23:59:59Z'
+        return f'&temporal={time_start_st},{time_end_st}'
     
     @staticmethod
     def format_spatial(bounding_box) -> str:
