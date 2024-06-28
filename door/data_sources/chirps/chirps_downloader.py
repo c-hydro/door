@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 import tempfile
+import rasterio
 
 import gzip
 import shutil
@@ -118,6 +119,10 @@ class CHIRPSDownloader(URLDownloader):
                         destination_now = time_now.strftime(destination)
                         crop_raster(tmp_destination, space_bounds, destination_now)
                         self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
+
+                        # Add a metadata field to specify it is preliminary
+                        with rasterio.open(destination_now, 'r+') as ds:
+                            ds.update_tags(PRELIMINARY = 'True')
         
         self.log.info(f'------------------------------------------')
 
