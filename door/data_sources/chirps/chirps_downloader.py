@@ -2,6 +2,7 @@ import os
 from typing import Optional
 import tempfile
 import rasterio
+import numpy as np
 
 import gzip
 import shutil
@@ -92,6 +93,14 @@ class CHIRPSDownloader(URLDownloader):
                     # Regrid the data
                     destination_now = time_now.strftime(destination)
                     crop_raster(tmp_destination[:-3], space_bounds, destination_now)
+
+                    # change the nodata value to np.nan
+                    with rasterio.open(destination_now, 'r+') as ds:
+                        data = ds.read(1)
+                        data = np.where(np.isclose(data, self.nodata, equal_nan=True), np.nan, data)
+                        ds.write(data, 1)
+                        ds.nodata = np.nan
+
                     self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
 
         # Fill with prelimnary data
@@ -119,11 +128,18 @@ class CHIRPSDownloader(URLDownloader):
                         # Regrid the data
                         destination_now = time_now.strftime(destination)
                         crop_raster(tmp_destination, space_bounds, destination_now)
-                        self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
 
                         # Add a metadata field to specify it is preliminary
                         with rasterio.open(destination_now, 'r+') as ds:
                             ds.update_tags(PRELIMINARY = 'True')
+                            # change the nodata value to np.nan
+                            #set the raster value to np.nan where it is equal to the preliminary nodata value
+                            data = ds.read(1)
+                            data = np.where(np.isclose(data, self.prelim_nodata, equal_nan=True), np.nan, data)
+                            ds.write(data, 1)
+                            ds.nodata = np.nan
+                        
+                        self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
         
         self.log.info(f'------------------------------------------')
 
