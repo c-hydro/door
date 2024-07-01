@@ -14,6 +14,8 @@ from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
 from ...utils.space import BoundingBox
 
+from ...tools import timestepping as ts
+
 class CMRDownloader(DOORDownloader):
     """
     This class is a downloader for through the Common Metadata Repository (CMR).
@@ -80,29 +82,34 @@ class CMRDownloader(DOORDownloader):
         
         return self.credentials
 
-    def get_last_published_date(self) -> datetime:
+    def get_last_published_ts(self) -> ts.TimeRange:
         """
         Get the last published date for the dataset.
         """
-        
         global_bounds = BoundingBox(-180, -90, 180, 90)
         now = datetime.now()
-        time = datetime(now.year, now.month, now.day)
+
+        if self.timesteps == 'viirs':
+            timestep = ts.ViirsModisTimeStep.from_date(now)
+        elif self.timesteps == 'annual':
+            timestep = ts.Year.from_date(now)
+        elif self.timesteps == 'daily':
+            timestep = ts.Day.from_date(now)
+        elif self.timesteps == 'monthly':
+            timestep = ts.Month.from_date(now)
+        else:
+            raise ValueError(f'Timesteps {self.timesteps} not recognized')
 
         while True:
-            urls = self.cmr_search(time, global_bounds)
+            urls = self.cmr_search(timestep, global_bounds)
             if urls:
                 break
-            time -= timedelta(days=1)
+            timestep -= 1
         
-        # time is now the end of the timestep that the data refers to
-        # we need to find the beginning, so we keep going back until the list of urls changes
-        new_urls = urls.copy()
-        while all([url in new_urls for url in urls]):
-            time -= timedelta(days=1)
-            new_urls = self.cmr_search(time, global_bounds)
-        
-        return time + timedelta(days=1)
+        return timestep
+    
+    def get_last_published_date(self) -> datetime:
+        return self.get_last_published_ts().start
 
     def download(self, url_list: list[str], destination: str, trials = 100) -> list[str]:
         """
@@ -179,18 +186,15 @@ class CMRDownloader(DOORDownloader):
 
         return cmr_base_url + product_query + version_query + temporal_query + spatial_query + tail# + filter_query
 
-    def cmr_search(self, time: datetime|tuple[datetime], space_bounds: BoundingBox) -> dict:
+    def cmr_search(self, time: ts.TimeRange, space_bounds: BoundingBox) -> dict:
         """
         Search CMR for files matching the query.
         """
 
         bounding_box = space_bounds.bbox
 
-        if isinstance(time, tuple):
-            time_start, time_end = time
-        else:
-            time_start = time
-            time_end = time
+        time_start = time.start
+        time_end = time.end
 
         cmr_query_url = self.build_cmr_query(time_start, time_end, bounding_box)
         cmr_scroll_id = None

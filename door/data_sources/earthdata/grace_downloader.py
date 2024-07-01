@@ -12,7 +12,7 @@ from typing import Optional
 from .cmr_downloader import CMRDownloader
 from ...utils.space import BoundingBox
 from ...utils.geotiff import crop_raster, save_raster
-from ...utils.time import TimeRange
+from ...tools.timestepping import TimeRange
 
 class GRACEDownloader(CMRDownloader):
 
@@ -71,10 +71,10 @@ class GRACEDownloader(CMRDownloader):
         
         # order timesteps decreasingly, this way once we hit 2018 we can change the product and version and keep them
         timesteps.sort(reverse=True)
-        for i,time in enumerate(timesteps):
-            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
+        for i,timestep in enumerate(timesteps):
+            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {timestep}')
 
-            if time.year < 2018:
+            if timestep.year < 2018:
                 self.product = self.pre2018_variables[self.variable]['product']
                 self.version = self.pre2018_variables[self.variable]['version']
             else:
@@ -82,12 +82,12 @@ class GRACEDownloader(CMRDownloader):
                 self.version = self.available_variables[self.variable][2]
 
             # get the data from the CMR
-            last_day_of_month = calendar.monthrange(time.year, time.month)[1]
-            time_end = time.replace(day=last_day_of_month)
-            url_list = self.cmr_search((time,time_end), space_bounds)
+            url_list = self.cmr_search(timestep, space_bounds)
             if not url_list:
-                self.log.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
+                self.log.info(f'  -> No data found for {timestep}, skipping to next timestep')
                 continue
+            
+            time = timestep.start
 
             # Do all of this inside a temporary folder
             tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
