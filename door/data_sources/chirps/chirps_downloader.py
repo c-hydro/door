@@ -22,19 +22,24 @@ class CHIRPSDownloader(URLDownloader):
     def __init__(self, product: str) -> None:
         self.product = product
         if self.product == "CHIRPSp25-daily":
-            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p25/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif.gz"
-            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p25/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif"
+            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p25/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif.gz"
+            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p25/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif"
             self.ts_per_year = 365 # daily
             self.prelim_nodata = -1
         elif self.product == "CHIRPSp05-daily":
-            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p05/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif.gz"
-            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p05/{time:%Y}/chirps-v2.0.{time:%Y.%m.%d}.tif.gz"
+            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p05/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif.gz"
+            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p05/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif.gz"
             self.ts_per_year  = 365 # daily
             self.prelim_nodata = -9999
         elif self.product == "CHIRPSp25-monthly":
-            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_monthly/tifs/chirps-v2.0.{time:%Y.%m}.tif.gz"
-            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_monthly/tifs/chirps-v2.0.{time:%Y.%m}.tif"
+            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_monthly/tifs/chirps-v2.0.{timestep.start:%Y.%m}.tif.gz"
+            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_monthly/tifs/chirps-v2.0.{timestep.start:%Y.%m}.tif"
             self.ts_per_year  = 12 # monthly
+            self.prelim_nodata = -9999
+        elif self.product == "CHIRPSp05-dekads":
+            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_dekad/tifs/chirps-v2.0.{timestep.start:%Y.%m}.{timestep.dekad_of_month}.tif.gz"
+            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_dekad/tifs/chirps-v2.0.{timestep.start:%Y.%m}.{timestep.dekad_of_month}.tif"
+            self.ts_per_year  = 36 # dekadly
             self.prelim_nodata = -9999
         else:
             url_blank = None
@@ -69,7 +74,7 @@ class CHIRPSDownloader(URLDownloader):
         # Download the data for the specified times
         for i, this_ts in enumerate(timesteps):
             time_now = this_ts.start
-            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {this_ts}')
 
             # Do all of this inside a temporary folder
             tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
@@ -80,12 +85,12 @@ class CHIRPSDownloader(URLDownloader):
 
                 # Download the data
                 if options['get_prelim']:
-                    success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', time = time_now)
+                    success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = this_ts)
                     if not success:
                         self.log.info(f'  -> Could not find data for {time_now:%Y-%m-%d}, will check preliminary folder later')
                         missing_times.append(time_now)
                 else:
-                    success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', time = time_now)
+                    success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', timestep = this_ts)
 
                 if success:
                     # Unzip the data
@@ -119,7 +124,7 @@ class CHIRPSDownloader(URLDownloader):
                     tmp_destination = os.path.join(tmp_path, tmp_filename) 
                                    
                     self.url_blank = self.url_prelim_blank
-                    success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', time = time_now)
+                    success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', timestep = this_ts)
                     if success:
                         if tmp_destination.endswith('.gz'):
                             self.extract(tmp_destination)
