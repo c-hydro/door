@@ -1,10 +1,9 @@
 from door.data_sources import HSAFDownloader
 
-from door.utils.time import TimeRange
 from door.utils.space import BoundingBox
 from door.utils import log
+from door.tools.timestepping import TimeRange
 
-import numpy as np
 
 HOME = '/home/luca/Documents/CIMA_code/tests/HSAF_dwl'
 GRID_FILE = '/home/luca/Documents/CIMA_code/door/workflow_examples/sample_grid_IT.tif'
