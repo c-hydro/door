@@ -7,11 +7,12 @@ from drops2.utils import DropsException
 from time import sleep
 
 from ...base_downloaders import DOORDownloader
-from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.auth import get_credentials_from_netrc
 from ...utils.csv import save_csv
 from ...utils.parse import format_string
+
+from ...tools.timestepping import TimeRange
 
 class DROPS2Downloader(DOORDownloader):
     
