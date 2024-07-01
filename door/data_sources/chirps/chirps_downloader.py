@@ -7,9 +7,9 @@ import gzip
 import shutil
 
 from ...base_downloaders import URLDownloader
-from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.geotiff import crop_raster
+from ...tools import timestepping as ts
 
 class CHIRPSDownloader(URLDownloader):
     
@@ -46,7 +46,7 @@ class CHIRPSDownloader(URLDownloader):
         self.nodata = -9999
             
     def get_data(self,
-                 time_range: TimeRange,
+                 time_range: ts.TimeRange,
                  space_bounds: BoundingBox,
                  destination: str,
                  options: Optional[dict] = None) -> None:
@@ -66,7 +66,8 @@ class CHIRPSDownloader(URLDownloader):
         self.log.info(f'Found {len(timesteps)} timesteps to download.')
 
         # Download the data for the specified times
-        for i, time_now in enumerate(timesteps):
+        for i, this_ts in enumerate(timesteps):
+            time_now = this_ts.start
             self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
 
             # Do all of this inside a temporary folder
