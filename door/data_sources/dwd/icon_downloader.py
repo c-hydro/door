@@ -8,10 +8,11 @@ import requests
 import subprocess
 
 from ...base_downloaders import URLDownloader
-from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.io import untar_file, decompress_bz2
 from ...utils.netcdf import save_netcdf
+
+from ...tools import timestepping as ts
 
 class ICONDownloader(URLDownloader):
     
@@ -56,7 +57,7 @@ class ICONDownloader(URLDownloader):
         return options
 
     def get_data(self,
-                 time_range: TimeRange,
+                 time_range: ts.TimeRange,
                  space_bounds: BoundingBox,
                  destination: str,
                  options: Optional[dict] = None) -> None:
@@ -91,7 +92,8 @@ class ICONDownloader(URLDownloader):
 
             self.log.info(f'Found {len(timesteps)} model issues to download.')
             # Download the data for the specified issue times
-            for i, run_time in enumerate(timesteps):
+            for i, timestep in enumerate(timesteps):
+                run_time = timestep.start
                 self.log.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
                 # Set forecast steps
                 self.frc_time_range, self.frc_steps = self.compute_model_steps(run_time, options['frc_max_step'])
@@ -109,6 +111,7 @@ class ICONDownloader(URLDownloader):
                         success = self.download(tmp_destination, min_size=200, missing_action='warn', run_time=run_time,
                                                 step=str(step).zfill(3), VAR=var_out.upper(), var=var_out)
                         if success:
+                            breakpoint()
                             temp_files.append(self.project_bin_file(tmp_destination))
                             self.log.debug(f'  ---> SUCCESS! Downloaded {var_out} data for +{step}h')
                         else:
@@ -137,8 +140,7 @@ class ICONDownloader(URLDownloader):
                         self.log.info(f'  -> SUCCESS! Data for {var_out} ({len(temp_files)} forecast steps) dowloaded and cropped to bounds.')
         self.log.info(f'------------------------------------------')
     
-    @staticmethod
-    def compute_model_steps(time_run: dt.datetime, max_steps: int) -> (list[dt.datetime], list[int]):
+    def compute_model_steps(self, time_run: dt.datetime, max_steps: int) -> tuple[list[dt.datetime], list[int]]:
         """
         extracts from a .gz file
         """
