@@ -1,10 +1,10 @@
 import datetime as dt
 import dateutil.relativedelta as dtr
 import numpy as np
-import pandas as pd
 
-from typing import Generator
-import logging
+from ..tools import timestepping as ts
+
+#TODO: deprecate this module
 
 class TimeRange():
 
@@ -12,121 +12,9 @@ class TimeRange():
                  start: dt.datetime|str,
                  end: dt.datetime|str):
         """
-        Object useful to define a time range to download data.
+        Use tools.timestepping.TimeRange instead
         """
-        self.check_inputs(start, end)
-
-    def check_inputs(self, start, end):
-        """
-        Check inputs
-        """
-
-        # make sure only one of start/end or timesteps is specified
-
-        if start is None or end is None:
-            raise ValueError('Both start and end time must be specified')
-        else:
-            if not isinstance(start, dt.datetime):
-                if isinstance(start, str):
-                    start = get_time_from_str(start, 'start')
-                else:
-                    raise ValueError('Invalid start time')
-            if not isinstance(end, dt.datetime):
-                if isinstance(end, str):
-                    end = get_time_from_str(end, 'end')
-                else:
-                    raise ValueError('Invalid end time')
-            if start <= end:
-                self.start = start
-                self.end = end
-            else:
-                logging.warning('Start time given is after end time, switching start and end')
-                self.start = end
-                self.end = start
-
-    def get_timesteps_from_tsnumber(self, timesteps_per_year: int, get_end = False) -> list[dt.datetime]:
-        return list(self.gen_timesteps_from_tsnumber(timesteps_per_year, get_end = get_end))
-    
-    def gen_timesteps_from_tsnumber(self, timesteps_per_year: int, get_end = False) -> Generator[dt.datetime, None, None]:
-        """
-        This will yield the timesteps to download on a regular frequency by the number of timesteps per year.
-        timesteps_per_year is expressed as an integer indicating the number of times per year (e.g. 12 for monthly data, 365 for daily data, etc.).
-        Allows hourly, daily, dekadly, monthly and yearly data.
-        """
-        if timesteps_per_year == 8760:
-            now = self.start.replace(minute = 0, second = 0)
-        elif timesteps_per_year == 12:
-            now = self.start.replace(day = 1, hour = 0, minute = 0, second = 0)
-        elif timesteps_per_year == 365:
-            now = self.start.replace(hour = 0, minute = 0, second = 0)
-        elif timesteps_per_year == 36:
-            start_day = self.start.day
-            if start_day <= 10:
-                now = self.start.replace(day = 1, hour = 0, minute = 0, second = 0)
-            elif start_day <= 20:
-                now = self.start.replace(day = 11, hour = 0, minute = 0, second = 0)
-            else:
-                now = self.start.replace(day = 21, hour = 0, minute = 0, second = 0)
-        elif timesteps_per_year == 1:
-            now = self.start.replace(month = 1, day = 1, hour = 0, minute = 0, second = 0)
-        else:
-            raise ValueError(f'Invalid data frequency: {timesteps_per_year} times per year is not supported')
-
-        while True:
-            yield now
-            if timesteps_per_year == 17520:
-                now += dt.timedelta(minutes = 30)
-            if timesteps_per_year == 8760:
-                now += dt.timedelta(hours = 1)
-            elif timesteps_per_year == 365:
-                now += dt.timedelta(days = 1)
-            elif timesteps_per_year == 36:
-                now = add_dekad(now)
-            elif timesteps_per_year == 12:
-                now += dtr.relativedelta(months = 1)
-            elif timesteps_per_year == 1:
-                now += dtr.relativedelta(years = 1)
-            else:
-                # dekads are not implemented here, because no data is available at this frequency to download
-                raise ValueError(f'Invalid data frequency: {timesteps_per_year} times per year is not supported')
-            if now > self.end:
-                if get_end:
-                    yield now
-                break
-
-    def get_timesteps_from_DOY(self, doy_list: list[int]) -> list[dt.datetime]:
-        return list(self.gen_timesteps_from_DOY(doy_list))
-    
-    def gen_timesteps_from_DOY(self, doy_list: list[int]) -> Generator[dt.datetime, None, None]:
-        """
-        This will yield the timesteps to download on a given list of days of the year.
-        This is useful for MODIS and VIIRS data that are available at preset DOYs.
-        """
-        start_year = self.start.year
-        end_year = self.end.year
-
-        for year in range(start_year, end_year+1):
-            for doy in doy_list:
-                date = dt.datetime(year, 1, 1) + dt.timedelta(days=doy-1)
-                if date >= self.start and date <= self.end:
-                    yield date
-
-    def get_timesteps_from_issue_hour(self, issue_hours: list[int]) -> list[dt.datetime]:
-        return list(self.gen_timesteps_from_issue_hour(issue_hours))
-    
-    def gen_timesteps_from_issue_hour(self, issue_hours: list) -> Generator[dt.datetime, None, None]:
-        """
-        This will yield the timesteps to download oa product issued daily at given hours
-        """
-        now = self.start
-        while now <= self.end:
-            for issue_hour in issue_hours:
-                issue_time = dt.datetime(now.year, now.month, now.day, issue_hour)
-                if now <= issue_time <= self.end:
-                    now = issue_time
-                    yield now
-            day_after = now + dt.timedelta(days=1)
-            now = dt.datetime(day_after.year, day_after.month, day_after.day, issue_hours[0])
+        return ts.TimeRange(start, end)
 
 def get_time_from_str(string: str, name = None) -> dt.datetime:
     available_formats = ['%Y-%m-%d', '%Y-%m-%d %H:%M:%S']
