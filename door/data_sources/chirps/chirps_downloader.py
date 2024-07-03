@@ -88,7 +88,7 @@ class CHIRPSDownloader(URLDownloader):
                     success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = this_ts)
                     if not success:
                         self.log.info(f'  -> Could not find data for {time_now:%Y-%m-%d}, will check preliminary folder later')
-                        missing_times.append(time_now)
+                        missing_times.append(this_ts)
                 else:
                     success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', timestep = this_ts)
 
@@ -112,12 +112,14 @@ class CHIRPSDownloader(URLDownloader):
         if len(missing_times) > 0 and options['get_prelim']:
             self.log.info(f'Checking preliminary folder for missing data for {len(missing_times)} timesteps.')
             
-            for i, time_now in enumerate(missing_times):
-                self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+            for i, this_ts in enumerate(missing_times):
+                self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {this_ts}')
 
+                time_now = this_ts.start
                 # Do all of this inside a temporary folder
                 with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
-                    if 'p05' in self.product:
+
+                    if self.url_prelim_blank.endswith('.gz'):
                         tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif.gz'
                     else:
                         tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif'
