@@ -82,11 +82,11 @@ class CMRDownloader(DOORDownloader):
         
         return self.credentials
 
-    def get_last_published_ts(self) -> ts.TimeRange:
+    def get_last_published_ts(self, bounds: BoundingBox = BoundingBox(-180, -90, 180, 90), expected_tiles: int = 1) -> ts.TimeRange:
         """
         Get the last published date for the dataset.
         """
-        global_bounds = BoundingBox(-180, -90, 180, 90)
+        #global_bounds = BoundingBox(-180, -90, 180, 90)
         now = datetime.now()
 
         if self.timesteps == 'viirs':
@@ -101,8 +101,8 @@ class CMRDownloader(DOORDownloader):
             raise ValueError(f'Timesteps {self.timesteps} not recognized')
 
         while True:
-            urls = self.cmr_search(timestep, global_bounds)
-            if urls:
+            urls = self.cmr_search(timestep, bounds)
+            if len(urls) >= expected_tiles:
                 break
             timestep -= 1
         
