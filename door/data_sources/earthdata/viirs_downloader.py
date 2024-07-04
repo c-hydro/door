@@ -23,7 +23,7 @@ class VIIRSDownloader(CMRDownloader):
     #  layers = [layer_id, name, valid_range, scale_factor]
     # ]
     available_variables = {
-        'fapar': ['LPDAAC_ECS', 'VNP15A2H', '001', 'viirs',
+        'fapar': ['LPDAAC_ECS', 'VNP15A2H', '002', 'viirs',
                   [[0, 'FAPAR',         (0,100), 0.01, 'cont'],
                    [2, 'FAPAR_QC',      (0,254), 1   , '8bit'],
                    [3, 'FAPAR_ExtraQC', (0,254), 1   , '8bit']]],
@@ -34,7 +34,7 @@ class VIIRSDownloader(CMRDownloader):
                        [24, 'GLSP_QC2',      (0,254),   1, '8bit'],
                        [28, 'GLSP_GSStart2', (1,32766), 1, 'cat'],
                        [30, 'GLSP_GSEnd2',   (1,32766), 1, 'cat'],]],
-        'snow': ['NSIDCDAAC_ECS', 'VNP10A1', '001', 'daily',
+        'snow': ['NSIDCDAAC_ECS', 'VNP10A1', '002', 'daily',
                  [[0, 'Snow_AlgQA',         (0,254), 1, '8bit'],
                   [1, 'Snow_QA',            (0,254), 1, '8bit'],
                   [3, 'NDSI_Snow_Cover',    (0,254), 1, '8bit'],
