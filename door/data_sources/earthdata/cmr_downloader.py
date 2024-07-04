@@ -108,8 +108,8 @@ class CMRDownloader(DOORDownloader):
         
         return timestep
     
-    def get_last_published_date(self) -> datetime:
-        return self.get_last_published_ts().start
+    def get_last_published_date(self, **kwargs) -> datetime:
+        return self.get_last_published_ts(**kwargs).start
 
     def download(self, url_list: list[str], destination: str, trials = 100) -> list[str]:
         """
