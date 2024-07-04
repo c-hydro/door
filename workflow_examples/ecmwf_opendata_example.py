@@ -1,8 +1,8 @@
 from door.data_sources import ECMWFOpenDataDownloader
 
-from door.utils.time import TimeRange
 from door.utils.space import BoundingBox
 from door.utils import log
+from door.tools.timestepping import TimeRange
 
 #GRID_FILE = '/home/andrea/Workspace/pyCharm/door/workflow_examples/sample_grid_IT.tif'
 HOME = '/home/luca/Documents/CIMA_code/tests/ecmwf_dwl'

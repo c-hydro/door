@@ -9,9 +9,9 @@ import shutil
 import datetime as dt
 
 from ...base_downloaders import URLDownloader
-from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.geotiff import crop_raster
+from ...tools.timestepping import TimeRange
 
 class IMERGDownloader(URLDownloader):
     
@@ -67,9 +67,10 @@ class IMERGDownloader(URLDownloader):
         # Do all of this inside a temporary folder
         with tempfile.TemporaryDirectory() as tmp_path:
             # Download the data for the specified times
-            for i, time_now in enumerate(timesteps):
-                self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+            for i, timestep in enumerate(timesteps):
+                self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {timestep}')
 
+                time_now = timestep.start
                 tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif.gz'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
                 # Download the data

@@ -6,12 +6,13 @@ import rioxarray as rxr
 from typing import Optional
 
 from ...base_downloaders import URLDownloader
-from ...utils.time import TimeRange
 from ...utils.space import BoundingBox
 from ...utils.netcdf import crop_netcdf
 from ...utils.geotiff import save_array_to_tiff
 from ...utils.auth import get_credentials
 from ...utils.io import decompress_bz2 
+
+from ...tools.timestepping import TimeRange
 
 # from dam.utils.io_geotiff import read_geotiff_asXarray, write_geotiff_fromXarray
 
@@ -137,8 +138,9 @@ class HSAFDownloader(URLDownloader):
                                       url = self.host)
 
         # Download the data for the specified times
-        for i, time_now in enumerate(timesteps):
-            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time_now:%Y-%m-%d}')
+        for i, timestep in enumerate(timesteps):
+            time_now = timestep.start
+            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {timestep}')
 
             # Do all of this inside a temporary folder
             with tempfile.TemporaryDirectory() as tmp_path:

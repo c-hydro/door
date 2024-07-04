@@ -1,8 +1,8 @@
 from door.data_sources import CHIRPSDownloader
 
-from door.utils.time import TimeRange
 from door.utils.space import BoundingBox
 from door.utils import log
+import door.tools.timestepping as ts
 
 import numpy as np
 
@@ -12,11 +12,16 @@ log_file = HOME+'/log.txt'
 
 log.set_logging(log_file)
 
-time_range = TimeRange(start='2023-12-30', end='2024-01-03')
-space_ref  = BoundingBox.from_file(GRID_FILE)
+time_range = ts.TimeRange(start='2024-05-10', end='2024-06-20')
+space_ref  = BoundingBox(5,35,20,50)
 
 test_downloader = CHIRPSDownloader(product='CHIRPSp25-daily')
 test_downloader.get_data(time_range, space_ref,
-                         destination=HOME+'/daily_rain_ITA_%Y%m%d.tif',
+                         destination=HOME+'/daily/rain_ITA_%Y%m%d.tif',
+                         options={'get_prelim': True})
+
+test_downloader = CHIRPSDownloader(product='CHIRPSp05-dekads')
+test_downloader.get_data(time_range, space_ref,
+                         destination=HOME+'/dekads/rain_ITA_%Y%m%d.tif',
                          options={'get_prelim': True})
 

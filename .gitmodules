@@ -1,0 +1,3 @@
+[submodule "door/tools"]
+	path = door/tools
+	url = https://github.com/c-hydro/d3tools.git

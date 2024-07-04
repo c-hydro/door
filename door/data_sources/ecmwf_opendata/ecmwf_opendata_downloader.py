@@ -6,9 +6,10 @@ from ecmwf.opendata import Client
 from requests.exceptions import HTTPError
 
 from ...base_downloaders import APIDownloader
-from ...utils.time import TimeRange, get_regular_steps
+from ...utils.time import get_regular_steps
 from ...utils.space import BoundingBox
 from ...utils.netcdf import save_netcdf
+from ...tools.timestepping import TimeRange
 
 class ECMWFOpenDataDownloader(APIDownloader):
     name = "ECMWF-OpenData_downloader"
@@ -68,11 +69,9 @@ class ECMWFOpenDataDownloader(APIDownloader):
 
         # Download the data for the specified issue times
         self.log.info(f'Found {len(timesteps)} model issues to download.')
-        for i, run_time in enumerate(timesteps):
+        for i, timestep in enumerate(timesteps):
+            run_time = timestep.start
             self.log.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
-
-            
-
             
             # Set forecast steps
             self.log.debug(" ----> Set forecast steps")

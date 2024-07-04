@@ -7,10 +7,11 @@ import numpy as np
 
 from .cds_downloader import CDSDownloader
 from ...utils.space import BoundingBox
-from ...utils.time import TimeRange
 from ...utils.netcdf import save_netcdf
 from ...utils.geotiff import save_array_to_tiff
 from ...utils.parse import format_string
+
+from ...tools import timestepping as ts
 
 class ERA5Downloader(CDSDownloader):
 
@@ -95,7 +96,7 @@ class ERA5Downloader(CDSDownloader):
 
     def build_request(self,
                       variables:list[str]|str,
-                      time:TimeRange,
+                      time:ts.TimeRange,
                       space_bounds:BoundingBox) -> dict:
         """
         Make a request for the CDS API.
@@ -147,7 +148,7 @@ class ERA5Downloader(CDSDownloader):
         return request
 
     def get_singledata(self,
-                       step_range: TimeRange,
+                       step_range: ts.TimeRange,
                        space_bounds: BoundingBox,
                        destination: str,
                        options: Optional[dict] = None) -> None:
@@ -182,7 +183,7 @@ class ERA5Downloader(CDSDownloader):
             else:
                 request_end = timestep_end
 
-            request = self.build_request(self.variables, TimeRange(timestep_start, request_end), space_bounds)
+            request = self.build_request(self.variables, ts.TimeRange(timestep_start, request_end), space_bounds)
             success = self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
 
             # if the download fail interrupt
@@ -292,7 +293,7 @@ class ERA5Downloader(CDSDownloader):
                         save_netcdf(aggdata, out_name)
 
     def get_data(self,
-                 time_range: TimeRange,
+                 time_range: ts.TimeRange,
                  space_bounds: BoundingBox,
                  destination: str,
                  options: Optional[dict] = None) -> None:
@@ -310,7 +311,7 @@ class ERA5Downloader(CDSDownloader):
         self.log.info(f'------------------------------------------')
 
         # Get the timesteps to download
-        timesteps = time_range.get_timesteps_from_tsnumber(options['timesteps_per_year'], get_end = True)
+        timesteps = time_range.get_timesteps_from_tsnumber(options['timesteps_per_year'])
         ntimesteps = len(timesteps) - 1
 
         # Download the data for the specified issue times
@@ -319,13 +320,13 @@ class ERA5Downloader(CDSDownloader):
         if options['n_processes'] > 1:
             import multiprocessing
             ds = self.dataset
-            step_ranges = [TimeRange(timesteps[i], timesteps[i+1] - dt.timedelta(days=1)) for i in range(0, ntimesteps)]
+            step_ranges = timesteps
             with multiprocessing.Pool(options['n_processes']) as p:
                 p.starmap(get_singledata, [(ds,step_ranges[i],space_bounds, destination, options) for i in range(0, ntimesteps)])
 
         else:
-            for i in range(0, ntimesteps):
-                step_range = TimeRange(timesteps[i], timesteps[i+1] - dt.timedelta(days=1))
+            for step_range in timesteps:
+                #step_range = TimeRange(timesteps[i], timesteps[i+1] - dt.timedelta(days=1))
                 self.get_singledata(step_range, space_bounds, destination, options)
                 
             self.log.info(f'  -> SUCCESS! Data for {len(self.variables)} variables downloaded.')

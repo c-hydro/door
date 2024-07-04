@@ -10,7 +10,7 @@ import re
 from .cmr_downloader import CMRDownloader
 from ...utils.space import BoundingBox
 from ...utils.geotiff import crop_raster, save_raster
-from ...utils.time import TimeRange
+from ...tools.timestepping import TimeRange
 
 class VIIRSDownloader(CMRDownloader):
 
@@ -193,16 +193,17 @@ class VIIRSDownloader(CMRDownloader):
 
         self.log.info(f'Found {len(timesteps)} timesteps to download.')
 
-        for i,time in enumerate(timesteps):
-            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {time:%Y-%m-%d}')
+        for i,timestep in enumerate(timesteps):
+            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {timestep}')
 
             # get the data from the CMR
-            url_list = self.cmr_search(time, space_bounds)
+            url_list = self.cmr_search(timestep, space_bounds)
 
             if not url_list:
-                self.log.info(f'  -> No data found for {time:%Y-%m-%d}, skipping to next timestep')
+                self.log.info(f'  -> No data found for {timestep}, skipping to next timestep')
                 continue
-
+            
+            time = timestep.start
             # Do all of this inside a temporary folder
             tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
             os.makedirs(tmpdirs, exist_ok=True)
@@ -226,7 +227,7 @@ class VIIRSDownloader(CMRDownloader):
                         else:
                             save_raster(dataset, file_out)
                         dataset = None
-                    self.log.info(f'  -> SUCCESS! data for {time:%Y-%m-%d} downloaded and combined into a single mosaic per layer')
+                    self.log.info(f'  -> SUCCESS! data for {timestep} downloaded and combined into a single mosaic per layer')
                 else:
                     for tile, file in enumerate(file_list):
                         these_hdf5_datasets = self.get_layers_from_hdf5(file, self.layers)
