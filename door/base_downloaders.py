@@ -1,19 +1,19 @@
 from typing import Optional
-import datetime as dt
-import os
 import logging
+from abc import ABC, abstractmethod
 
-import pandas as pd
-import numpy as np
 import xarray as xr
-import requests
+import os
 
-from .utils.time import TimeRange
 from .utils.space import BoundingBox
 from .utils.io import download_http, check_download, handle_missing, download_ftp
 from .utils.netcdf import crop_netcdf
 
-class DOORDownloader():
+from .tools import timestepping as ts
+from .tools.timestepping.timestep import TimeStep
+from .tools.data import Dataset
+
+class DOORDownloader(ABC):
     """
     Base class for all DOOR downloaders.
     """
@@ -25,18 +25,53 @@ class DOORDownloader():
         self.log = logging.getLogger(self.name)
 
     def get_data(self,
-                 time_range: TimeRange,
+                 time_range: ts.TimeRange,
                  space_bounds:  BoundingBox,
-                 destination: str,
-                 options:  Optional[dict] = None) -> xr.Dataset:
+                 destination: Dataset|dict|str,
+                 options:  Optional[dict] = None) -> None:
         """
-        Get data from this downloader as an xarray.Dataset.
-        The output dataset will have 3 dimensions: time, latitude (or y), longitude (or x),
-        and 1 or more variables as specified in the variables argument.
+        Get data from this downloader and saves it to a file
         """
-        raise NotImplementedError()
+        # get options and check them against the default options
+        self.set_options(options)
 
-    def check_options(self, options: dict) -> dict:
+        # ensure destination is a Dataset
+        if isinstance(destination, str):
+            path = os.path.dirname(destination)
+            filename = os.path.basename(destination)
+            destination = Dataset.from_options({'path': path, 'filename': filename})
+        elif isinstance(destination, dict):
+            destination = Dataset.from_options(destination)
+        
+        # get the timesteps to download
+        timesteps = self._get_timesteps(time_range)
+
+        for timestep in timesteps:
+            data_struct = self._get_data_ts(timestep, space_bounds)
+            if not data_struct:
+                self.log.warning(f'No data found for timestep {timestep}')
+                continue
+            for data, tags in data_struct:
+                destination.write_data(data, timestep, **tags)
+
+    @abstractmethod
+    def _get_data_ts(self, time_range: TimeStep, space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
+        """
+        Get data from this downloader as xr.Dataset.
+        The return structure is a list of tuples, where each tuple contains the data and a dictionary of tags related to that data.
+        """
+        raise NotImplementedError
+
+    def _get_timesteps(self, time_range: ts.TimeRange) -> list[TimeStep]:
+        """
+        Get the timesteps to download, assuming.
+        """
+        if hasattr(self, 'ts_per_year'):
+            return time_range.get_timesteps_from_tsnumber(self.ts_per_year)
+        else:
+            raise NotImplementedError
+
+    def check_options(self, options: Optional[dict] = None) -> dict:
         """
         Check options and set defaults.
         """
@@ -56,6 +91,32 @@ class DOORDownloader():
 
         return options
 
+    def set_options(self, options: dict) -> None:
+        options = self.check_options(options)
+        for key, value in options.items():
+            setattr(self, key, value)
+
+        if 'variables' in options:
+            varopts = options['variables']
+            self.set_variables(varopts)
+
+    def check_variables(self, varopts: dict) -> dict:
+        if not isinstance(varopts, list): 
+            varopts = [varopts]
+        if not hasattr(self, 'available_variables'):
+            return varopts
+        for variable in varopts:
+            if variable not in self.available_variables:
+                self.log.warning(f'Variable {variable} not available or not implemented/tested, removing from list')
+                varopts.remove(variable)
+        return varopts
+    
+    def set_variables(self, varopts: list) -> None:
+        varopts = self.check_variables(varopts)
+        self.variables = {}
+        for var in varopts:
+            self.variables[var] = self.available_variables[var]
+            
     #TODO: this is a bit of an akward spot to put this, but it is used by all forecast downloaders, so it makes some sense to have it here
     def postprocess_forecast(self, ds: xr.Dataset, space_bounds: BoundingBox) -> None:
         """
