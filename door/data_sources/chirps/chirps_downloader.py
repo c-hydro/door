@@ -1,160 +1,128 @@
 import os
-from typing import Optional
-import tempfile
-import rasterio
 import numpy as np
+import xarray as xr
+import rioxarray as rxr
 
 import gzip
 import shutil
 
 from ...base_downloaders import URLDownloader
+from ...tools import timestepping as ts
+from ...tools.timestepping.timestep import TimeStep
+
 from ...utils.space import BoundingBox
 from ...utils.geotiff import crop_raster
-from ...tools import timestepping as ts
+from ...utils.io import in_tmp_folder
 
 class CHIRPSDownloader(URLDownloader):
-    
     name = "CHIRPS_downloader"
     default_options = {
         'get_prelim' : True, # if True, will also download preliminary data if available
     }
-    
+
+    home = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/"
+    prelim_home = home + "prelim/"
+    available_products: dict = {
+        "CHIRPSp25-daily": {
+            "ts_per_year": 365,
+            "url" : home + 'global_daily/tifs/p25/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif.gz',
+            "nodata" : -9999,
+            "prelim_url" : prelim_home + 'global_daily/tifs/p25/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif',
+            "prelim_nodata": -1
+        },
+        "CHIRPSp05-daily": {
+            "ts_per_year": 365,
+            "url" : home + 'global_daily/tifs/p05/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif.gz',
+            "nodata" : -9999,
+            "prelim_url" : prelim_home + 'global_daily/tifs/p05/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif.gz',
+            "prelim_nodata": -9999
+        },
+        "CHIRPSp05-dekads": {
+            "ts_per_year": 36,
+            "url" : home + 'global_dekad/tifs/chirps-v2.0.{timestep.start:%Y.%m}.{timestep.dekad_of_month}.tif.gz',
+            "nodata" : -9999,
+            "prelim_url" : prelim_home + 'global_dekad/tifs/chirps-v2.0.{timestep.start:%Y.%m}.{timestep.dekad_of_month}.tif',
+            "prelim_nodata": -9999
+        },
+        "CHIRPSp25-monthly": {
+            "ts_per_year": 12,
+            "url" : home + 'global_monthly/tifs/chirps-v2.0.{timestep.start:%Y.%m}.tif.gz',
+            "nodata" : -9999,
+            "prelim_url" : prelim_home + 'global_monthly/tifs/chirps-v2.0.{timestep.start:%Y.%m}.tif',
+            "prelim_nodata": -9999
+        },
+    }
+
     def __init__(self, product: str) -> None:
+        self.set_product(product)
+        super().__init__(self.url_blank, protocol = 'http')
+
+    def set_product(self, product: str) -> None:
         self.product = product
-        if self.product == "CHIRPSp25-daily":
-            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p25/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif.gz"
-            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p25/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif"
-            self.ts_per_year = 365 # daily
-            self.prelim_nodata = -1
-        elif self.product == "CHIRPSp05-daily":
-            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p05/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif.gz"
-            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_daily/tifs/p05/{timestep.start:%Y}/chirps-v2.0.{timestep.start:%Y.%m.%d}.tif.gz"
-            self.ts_per_year  = 365 # daily
-            self.prelim_nodata = -9999
-        elif self.product == "CHIRPSp25-monthly":
-            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_monthly/tifs/chirps-v2.0.{timestep.start:%Y.%m}.tif.gz"
-            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_monthly/tifs/chirps-v2.0.{timestep.start:%Y.%m}.tif"
-            self.ts_per_year  = 12 # monthly
-            self.prelim_nodata = -9999
-        elif self.product == "CHIRPSp05-dekads":
-            url_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_dekad/tifs/chirps-v2.0.{timestep.start:%Y.%m}.{timestep.dekad_of_month}.tif.gz"
-            self.url_prelim_blank = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/prelim/global_dekad/tifs/chirps-v2.0.{timestep.start:%Y.%m}.{timestep.dekad_of_month}.tif"
-            self.ts_per_year  = 36 # dekadly
-            self.prelim_nodata = -9999
+        if product not in self.available_products:
+            raise ValueError(f'Product {product} not available. Choose one of {self.available_products.keys()}')
+        self.ts_per_year = self.available_products[product]["ts_per_year"]
+        self.url_blank = self.available_products[product]["url"]
+        self.url_prelim_blank = self.available_products[product]["prelim_url"]
+        self.nodata = self.available_products[product]["nodata"]
+        self.prelim_nodata = self.available_products[product]["prelim_nodata"]
+
+    @in_tmp_folder('tmp_path')
+    def _get_data_ts(self,
+                     timestep: TimeStep,
+                     space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
+        ts_end = timestep.end
+        tmp_filename_raw = f'temp_{self.product}{ts_end:%Y%m%d}'
+        tmp_filename = f'{tmp_filename_raw}.tif.gz'
+        tmp_destination = os.path.join(tmp_path, tmp_filename)
+        success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep)
+        nodata = self.nodata
+        isprelim = False
+        if not success and self.get_prelim:
+            tmp_filename = f'{tmp_filename_raw}.tif.gz' if self.url_prelim_blank.endswith('.gz') else f'{tmp_filename_raw}.tif'
+            tmp_destination = os.path.join(tmp_path, tmp_filename)
+            success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, prelim = True)
+            nodata = self.prelim_nodata
+            isprelim = True
+
+        if success:
+            # Unzip the data
+            unzipped = self.extract(tmp_destination)
+            # Regrid the data
+            cropped = unzipped.replace('tif', '_cropped.tif')
+            crop_raster(unzipped, space_bounds, cropped)
+
+            # change the nodata value to np.nan and return the data
+            data = rxr.open_rasterio(cropped)
+            data = data.where(~np.isclose(data, nodata, equal_nan=True), np.nan)
+            data.rio.no_data = np.nan
+
+            if isprelim:
+                data.attrs['PRELIMINARY'] = 'True'
+
+            return [(data, {})]
+    
+    def format_url(self, prelim = False, **kwargs):
+        """
+        Format the url for the download
+        """
+        if prelim:
+            url = self.url_prelim_blank.format(**kwargs)
         else:
-            url_blank = None
-
-        super().__init__(url_blank, protocol = 'http')
-        if url_blank is None:
-            self.log.error(" --> ERROR! Only CHIRPSp25-daily, CHIRPSp05-daily and CHIRPSp25-monthly has been implemented until now!")
-            raise NotImplementedError()
-        
-        self.nodata = -9999
-            
-    def get_data(self,
-                 time_range: ts.TimeRange,
-                 space_bounds: BoundingBox,
-                 destination: str,
-                 options: Optional[dict] = None) -> None:
-
-        # Check options
-        options = self.check_options(options)
-
-        self.log.info(f'------------------------------------------')
-        self.log.info(f'Starting download of {self.product} data')
-        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        self.log.info(f'Bounding box: {space_bounds.bbox}')
-        self.log.info(f'------------------------------------------')
-
-        # Get the timesteps to download
-        timesteps = time_range.get_timesteps_from_tsnumber(self.ts_per_year)
-        missing_times = []
-        self.log.info(f'Found {len(timesteps)} timesteps to download.')
-
-        # Download the data for the specified times
-        for i, this_ts in enumerate(timesteps):
-            time_now = this_ts.start
-            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {this_ts}')
-
-            # Do all of this inside a temporary folder
-            tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
-            os.makedirs(tmpdirs, exist_ok=True)
-            with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
-                tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif.gz'
-                tmp_destination = os.path.join(tmp_path, tmp_filename)
-
-                # Download the data
-                if options['get_prelim']:
-                    success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = this_ts)
-                    if not success:
-                        self.log.info(f'  -> Could not find data for {time_now:%Y-%m-%d}, will check preliminary folder later')
-                        missing_times.append(this_ts)
-                else:
-                    success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', timestep = this_ts)
-
-                if success:
-                    # Unzip the data
-                    self.extract(tmp_destination)
-                    # Regrid the data
-                    destination_now = time_now.strftime(destination)
-                    crop_raster(tmp_destination[:-3], space_bounds, destination_now)
-
-                    # change the nodata value to np.nan
-                    with rasterio.open(destination_now, 'r+') as ds:
-                        data = ds.read(1)
-                        data = np.where(np.isclose(data, self.nodata, equal_nan=True), np.nan, data)
-                        ds.write(data, 1)
-                        ds.nodata = np.nan
-
-                    self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
-
-        # Fill with prelimnary data
-        if len(missing_times) > 0 and options['get_prelim']:
-            self.log.info(f'Checking preliminary folder for missing data for {len(missing_times)} timesteps.')
-            
-            for i, this_ts in enumerate(missing_times):
-                self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {this_ts}')
-
-                time_now = this_ts.start
-                # Do all of this inside a temporary folder
-                with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
-
-                    if self.url_prelim_blank.endswith('.gz'):
-                        tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif.gz'
-                    else:
-                        tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.tif'
-                    tmp_destination = os.path.join(tmp_path, tmp_filename) 
-                                   
-                    self.url_blank = self.url_prelim_blank
-                    success = self.download(tmp_destination, min_size = 200, missing_action = 'warn', timestep = this_ts)
-                    if success:
-                        if tmp_destination.endswith('.gz'):
-                            self.extract(tmp_destination)
-                            tmp_destination = tmp_destination[:-3]
-                            
-                        # Regrid the data
-                        destination_now = time_now.strftime(destination)
-                        crop_raster(tmp_destination, space_bounds, destination_now)
-
-                        # Add a metadata field to specify it is preliminary
-                        with rasterio.open(destination_now, 'r+') as ds:
-                            ds.update_tags(PRELIMINARY = 'True')
-                            # change the nodata value to np.nan
-                            #set the raster value to np.nan where it is equal to the preliminary nodata value
-                            data = ds.read(1)
-                            data = np.where(np.isclose(data, self.prelim_nodata, equal_nan=True), np.nan, data)
-                            ds.write(data, 1)
-                            ds.nodata = np.nan
-                        
-                        self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
-        
-        self.log.info(f'------------------------------------------')
+            url = self.url_blank.format(**kwargs)
+        return url
 
     def extract(self, filename: str):
         """
         extracts from a .gz file
         """
+
+        if not filename.endswith('.gz'):
+            return filename
+        
         file_out = filename[:-3]
         with gzip.open(filename, 'rb') as f_in:
             with open(file_out, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
+        
+        return file_out
