@@ -1,36 +1,34 @@
 import datetime as dt
-from typing import Optional
-import tempfile
 import os
 import xarray as xr
 import numpy as np
 
 from .cds_downloader import CDSDownloader
 from ...utils.space import BoundingBox
-from ...utils.netcdf import save_netcdf
-from ...utils.geotiff import save_array_to_tiff
-from ...utils.parse import format_string
+from ...utils.io import in_tmp_folder
 
 from ...tools import timestepping as ts
+from ...tools.timestepping.timestep import TimeStep
 
 class ERA5Downloader(CDSDownloader):
 
     name = "ERA5_downloader"
 
     available_products = ['reanalysis-era5-single-levels', 'reanalysis-era5-land']
-    available_variables = {'total_precipitation': 'tp',
-                           '2m_temperature': 't2m',
-                           'volumetric_soil_water_layer_1': 'swvl1',
-                           'volumetric_soil_water_layer_2': 'swvl2',
-                           'volumetric_soil_water_layer_3': 'swvl3',
-                           'volumetric_soil_water_layer_4': 'swvl4',}
+
+    available_variables = {'total_precipitation': {'varname': 'tp',  'agg_method': 'sum'},
+                           '2m_temperature':      {'varname': 't2m', 'agg_method': 'mean'},
+                           'volumetric_soil_water_layer_1': {'varname': 'swvl1', 'agg_method': 'mean'},
+                           'volumetric_soil_water_layer_2': {'varname': 'swvl2', 'agg_method': 'mean'},
+                           'volumetric_soil_water_layer_3': {'varname': 'swvl3', 'agg_method': 'mean'},
+                           'volumetric_soil_water_layer_4': {'varname': 'swvl4', 'agg_method': 'mean'}}
+    
+    available_agg_methods = ['mean', 'max', 'min', 'sum']
     
     default_options = {
-        'variables':         'total_precipitation',
-        'output_format':     'netcdf',   # one of netcdf, GeoTIFF
-        'aggregate_in_time':  None,      # one of 'mean', 'max', 'min', 'sum'
-        'timesteps_per_year': 365,       # the number of timesteps per year to split the download over #365=daily, 12=monthly, 36=10-daily
-        'n_processes':        1,         # number of parallel processes to use
+        'variables'   : 'total_precipitation',
+        'agg_method'  : None,
+        'ts_per_year' : 365, # the number of timesteps per year to split the download over #365=daily, 12=monthly, 36=10-daily
     }
 
     spatial_ref =  'GEOGCRS["WGS 84",\
@@ -68,46 +66,51 @@ class ERA5Downloader(CDSDownloader):
             self.log.error(msg)
             raise ValueError(msg)
 
-    def check_options(self, options: dict) -> dict:
-        options = super().check_options(options)
+    def set_variables(self, variables: list[str]) -> None:
+        """
+        Set the variables to download.
+        """
 
-        if 'necdf' in options['output_format'].lower():
-            options['output_format'] = 'netcdf'
-        elif 'tif' in options['output_format'].lower():
-            options['output_format'] = 'GeoTIFF'
-        else:
-            self.log.warning(f'Output format {options["output_format"]} not supported. Using netcdf')
-            options['output_format'] = 'netcdf'
+        super().set_variables(variables)
 
-        if options['aggregate_in_time'] is not None and not isinstance(options['aggregate_in_time'], list):
-            options['aggregate_in_time'] = [options['aggregate_in_time']]
+        agg_options = self.agg_method
+        if not isinstance(agg_options, list):
+            agg_options = [agg_options]
 
-        for aggregation in options['aggregate_in_time']:
-            if aggregation not in ['mean', 'max', 'min', 'sum']:
-                self.log.warning(f'Unknown method {aggregation}, won\'t aggregate')
-                options['aggregate_in_time'].remove(aggregation)
+        if len(agg_options) != len(variables):
+            msg = 'The number of aggregation methods must be the same as the number of variables'
+            self.log.error(msg)
+            raise ValueError(msg)
+        
+        for agg, var in zip(agg_options, variables):
+            agg = self.check_agg(agg)
+            self.variables[var].update({'agg_method': agg})
 
-        for variable in options['variables']:
-            if variable not in self.available_variables:
-                self.log.warning(f'Variable {variable} not available for ERA5 or not implemented/tested, removing from list')
-                options['variables'].remove(variable)
-
-        return options
+    def check_agg(self, agg):
+        if not isinstance(agg, list): agg = [agg]
+        for a in agg:
+            if a not in self.available_agg_methods:
+                msg = f'Aggregation method {a} not available'
+                self.log.error(msg)
+                raise ValueError(msg)
+        return agg
 
     def build_request(self,
-                      variables:list[str]|str,
                       time:ts.TimeRange,
                       space_bounds:BoundingBox) -> dict:
         """
         Make a request for the CDS API.
         """
-        if isinstance(variables, str):
-            variables = [variables]
+        variables = [var for var in self.variables.keys()]
 
         # get the correct timesteps
         start = time.start
         end = time.end
 
+        # If in the variable list we have total precipitation, we need to download the data for the next day as well
+        if 'total_precipitation' in self.variables:
+            end += dt.timedelta(days=1)
+        
         years = set()
         months = set()
         days = set()
@@ -147,191 +150,120 @@ class ERA5Downloader(CDSDownloader):
         }
         return request
 
-    def get_singledata(self,
-                       step_range: ts.TimeRange,
-                       space_bounds: BoundingBox,
-                       destination: str,
-                       options: Optional[dict] = None) -> None:
+    @in_tmp_folder('tmp_path')
+    def _get_data_ts(self,
+                     timestep: TimeStep,
+                     space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
 
         import cfgrib
 
-        # Check options
-        options = self.check_options(options)
-        self.variables = options['variables']
+        timestep_start = timestep.start
+        timestep_end   = timestep.end
 
-        self.aggregations = options['aggregate_in_time']
+        tmp_filename = f'temp_{self.dataset}_{timestep_start:%Y%m%d}-{timestep_end:%Y%m%d}.grib2'
+        tmp_destination = os.path.join(tmp_path, tmp_filename)
 
-        timestep_start = step_range.start #timesteps[i]
-        timestep_end   = step_range.end #timesteps[i+1] - dt.timedelta(days=1)
-        #self.log.info(f' - Block {i+1}/{ntimesteps}: starting at {timestep_start:%Y-%m-%d}')
 
-        # Do all of this inside a temporary folder
-        tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
-        os.makedirs(tmpdirs, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
-            self.working_path = tmp_path
+        request = self.build_request(timestep, space_bounds)
+        success = self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
 
-            self.log.debug(f' ----> Downloading data')
+        # if the download fail interrupt
+        if not success:
+            self.log.error(f'Download failed, skipping block')
+            return
 
-            tmp_filename = f'temp_{self.dataset}_{timestep_start:%Y%m%d}-{timestep_end:%Y%m%d}.grib2'
-            tmp_destination = os.path.join(tmp_path, tmp_filename)
+        # this will create a list of xarray datasets, one for each "well-formed" cube in the grib file,
+        # this is needed because requesting multiple variables at once will return a single grib file that might contain multiple cubes
+        # (if the variable have different dimensions)
+        all_data = cfgrib.open_datasets(tmp_destination)
 
-            # If in the variable list we have total precipitation, we need to download the data for the next day as well
-            # we need to add 1 day to the end time to get all the data for the last day (23h-00h is included in the next day's data)
-            if 'total_precipitation' in self.variables:
-                request_end = timestep_end + dt.timedelta(days=1)
+        # prepare the output
+        output = list()
+
+        # loop over the variables
+        for var, varopts in self.variables.items():
+            varname = varopts['varname']
+
+            # find the data for the variable
+            for this_data in all_data:
+                if varname in this_data:
+                    data = this_data
+                    break
+
+            # check if we are using any preliminary data, or if it is all final
+            if 'expver' in data.dims:
+                self.log.warning('  -> Some of the data is preliminary, we will use the final version where available')
+                data_final  = data.sel(expver=1)
+                data_prelim = data.sel(expver=5)
+                data = xr.where(np.isnan(data_final), data_prelim, data_final)
+
+            vardata = data[varname]
+
+            #Handle the time dimension:
+            # Valid times, is the value that we want to use for the time dimension.
+            if varname == 'tp':
+                # For precipitation, we remove 1 hour to make it easier to filter for the day later
+                # the original time is the end time of the step so a step that ends at midnight is actally from the previous day
+                valid_times = vardata.valid_time.values.flatten() - np.timedelta64(1, 'h')
             else:
-                request_end = timestep_end
+                valid_times = vardata.valid_time.values.flatten() 
 
-            request = self.build_request(self.variables, ts.TimeRange(timestep_start, request_end), space_bounds)
-            success = self.download(request, tmp_destination, min_size = 200,  missing_action = 'w')
+            # for some products we have a time and a step dimension, we need to combine them, for others we don't and we only have time
+            if 'step' in vardata.dims:
+                vardata = vardata.rename({'time': 'time_orig'})
+                vardata = vardata.stack(time=('time_orig', 'step'))
+                vardata = vardata.drop_vars(['time', 'time_orig', 'step'])
 
-            # if the download fail interrupt
-            if not success:
-                self.log.error(f'  -> Download failed, skipping block')
-                return
+            vardata = vardata.assign_coords(time=valid_times)
 
-            # this will create a list of xarray datasets, one for each "well-formed" cube in the grib file,
-            # this is needed because requesting multiple variables at once will return a single grib file that might contain multiple cubes
-            # (if the variable have different dimensions)
-            all_data = cfgrib.open_datasets(tmp_destination)
+            # filter data to the selected days (we have to do this because the API returns data for longer periods than we actually need)
+            inrange = (vardata.time.dt.date >= timestep_start.date()) & (vardata.time.dt.date <= timestep_end.date())
+            vardata = vardata.sel(time = inrange)
 
-            for var in self.variables:
-                self.log.debug(f' --> Variable {var}')
-                varname = self.available_variables[var]
+            # Convert Kelvin to Celsius if we are dealing with temperatures
+            if varname == 't2m':
+                vardata = vardata - 273.15
 
-                # get the data for the variable from the list of datasets
-                for this_data in all_data:
-                    if varname in this_data:
-                        data = this_data
-                        break
+            # finally, remove non needed dimensions
+            vardata = vardata.squeeze()
 
-                # check if we are using any preliminary data, or if it is all final
-                if 'expver' in data.dims:
-                    self.log.warning('  -> Some of the data is preliminary, we will use the final version where available')
-                    data_final  = data.sel(expver=1)
-                    data_prelim = data.sel(expver=5)
+            # verify that we have all the data we need (i.e. no timesteps of complete nans)!
+            time_to_check = timestep_start
+            while time_to_check <= timestep_end:
+                istoday = vardata.time.dt.date == time_to_check.date()
+                this_data = vardata.sel(time = istoday)
+                for time in this_data.time:
+                    if this_data.sel(time = time).isnull().all():
+                        self.log.error(f'  -> Missing data for {var} at time {time:%Y-%m-%d %H:%M}')
+                        raise ValueError(f'Missing data for {var} at time {time:%Y-%m-%d %H:%M}')
 
-                    data = xr.where(np.isnan(data_final), data_prelim, data_final)
+                time_to_check += dt.timedelta(days=1)
 
-                vardata = data[varname]
+            # remove all GRIB attributes
+            for attr in vardata.attrs.copy():
+                if attr.startswith('GRIB'):
+                    del vardata.attrs[attr]
+            # add start and end time as attributes
+            vardata.attrs['start_time'] = timestep_start
+            vardata.attrs['end_time'] = timestep_end
 
-                # We need to handle the time dimention:
+            # do the necessary aggregations:
+            for agg in varopts['agg_method']:
 
-                # Valid times, is the value that we want to use for the time dimension.
-                if varname == 'tp':
-                    # For precipitation, we remove 1 hour to make it easier to filter for the day later
-                    # the original time is the end time of the step so a step that ends at midnight is actally from the previous day
-                    valid_times = vardata.valid_time.values.flatten() - np.timedelta64(1, 'h')
-                else:
-                    valid_times = vardata.valid_time.values.flatten() 
+                vardata.attrs['agg_function'] = agg
+                if agg == 'mean':
+                    aggdata = vardata.mean(dim='time', skipna = False)
+                elif agg == 'max':
+                    aggdata = vardata.max(dim='time', skipna = False)
+                elif agg == 'min':
+                    aggdata = vardata.min(dim='time', skipna = False)
+                elif agg == 'sum':
+                    aggdata = vardata.sum(dim='time', skipna = False)
 
-                # for some products we have a time and a step dimension, we need to combine them, for others we don't and we only have time
-                if 'step' in vardata.dims:
-                    vardata = vardata.rename({'time': 'time_orig'})
-                    vardata = vardata.stack(time=('time_orig', 'step'))
+                aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
+                aggdata = aggdata.rio.write_crs(self.spatial_ref)
 
-                vardata = vardata.assign_coords(time=valid_times)
-
-                # filter data to the selected days (we have to do this because the API returns data for 36 hours)
-                inrange = (vardata.time.dt.date >= timestep_start.date()) & (vardata.time.dt.date <= timestep_end.date())
-                vardata = vardata.sel(time = inrange)
-
-                if varname == 't2m':
-                    # Convert Kelvin to Celsius
-                    vardata = vardata - 273.15
-
-                # remove non needed dimensions
-                vardata = vardata.squeeze()
-
-                # verify that we have all the data we need (i.e. no timesteps of complete nans)!
-                time_to_check = timestep_start
-                while time_to_check <= timestep_end:
-                    istoday = vardata.time.dt.date == time_to_check.date()
-                    this_data = vardata.sel(time = istoday)
-                    for time in this_data.time:
-                        if this_data.sel(time = time).isnull().all():
-                            self.log.error(f'  -> Missing data for {var} at time {time:%Y-%m-%d %H:%M}')
-                            raise ValueError(f'Missing data for {var} at time {time:%Y-%m-%d %H:%M}')
-
-                    time_to_check += dt.timedelta(days=1)
-
-                # add start and end time as attributes
-                vardata.attrs['start_time'] = timestep_start
-                vardata.attrs['end_time'] = timestep_end
-
-                for agg in self.aggregations:
-                    vardata.attrs['agg_function'] = agg
-                    if agg == 'mean':
-                        self.log.debug(f' ----> Aggregating data to mean')
-                        aggdata = vardata.mean(dim='time')
-                    elif agg == 'max':
-                        self.log.debug(f' ----> Aggregating data to max')
-                        aggdata = vardata.max(dim='time')
-                    elif agg == 'min':
-                        self.log.debug(f' ----> Aggregating data to min')
-                        aggdata = vardata.min(dim='time')
-                    elif agg == 'sum':
-                        self.log.debug(f' ----> Aggregating data to sum')
-                        aggdata = vardata.sum(dim='time')
-                    else:
-                        self.log.debug(f' ----> No aggregation needed')
-                        aggdata = vardata
-
-                    aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
-                    aggdata = aggdata.rio.write_crs(self.spatial_ref)
-
-                    out_name = format_string(destination, {'variable': var})
-                    out_name = format_string(out_name, {'aggregation': agg})
-                    out_name = timestep_end.strftime(out_name)
-
-                    if options['output_format'] == 'GeoTIFF':
-                        self.log.debug(f' ----> Saving to GeoTIFF')
-                        save_array_to_tiff(aggdata, out_name)
-                    else:
-                        self.log.debug(f' ----> Saving to netcdf')
-                        save_netcdf(aggdata, out_name)
-
-    def get_data(self,
-                 time_range: ts.TimeRange,
-                 space_bounds: BoundingBox,
-                 destination: str,
-                 options: Optional[dict] = None) -> None:
-
-        # Check options
-        options = self.check_options(options)
-
-        # set the bounding box to EPSG:4326
-        space_bounds.transform('EPSG:4326')
-
-        self.log.info(f'------------------------------------------')
-        self.log.info(f'Starting download of {self.dataset} data from {self.name}')
-        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        self.log.info(f'Bounding box: {space_bounds.bbox}')
-        self.log.info(f'------------------------------------------')
-
-        # Get the timesteps to download
-        timesteps = time_range.get_timesteps_from_tsnumber(options['timesteps_per_year'])
-        ntimesteps = len(timesteps) - 1
-
-        # Download the data for the specified issue times
-        self.log.info(f'Found {ntimesteps} blocks of data to download.')
-
-        if options['n_processes'] > 1:
-            import multiprocessing
-            ds = self.dataset
-            step_ranges = timesteps
-            with multiprocessing.Pool(options['n_processes']) as p:
-                p.starmap(get_singledata, [(ds,step_ranges[i],space_bounds, destination, options) for i in range(0, ntimesteps)])
-
-        else:
-            for step_range in timesteps:
-                #step_range = TimeRange(timesteps[i], timesteps[i+1] - dt.timedelta(days=1))
-                self.get_singledata(step_range, space_bounds, destination, options)
-                
-            self.log.info(f'  -> SUCCESS! Data for {len(self.variables)} variables downloaded.')
-        self.log.info(f'------------------------------------------')
-
-def get_singledata(dataset, step_range, space_bounds, destination, options):
-    downloader = ERA5Downloader(dataset)
-    downloader.get_singledata(step_range, space_bounds, destination, options)
+                tags = {'variable': var, 'agg_method': agg}
+                output.append((aggdata, tags))
+        
+        return output
