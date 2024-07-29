@@ -115,7 +115,7 @@ class BoundingBox():
             self.wkt_datum = new_wkt
             self.epsg_code = new_epsg
         else:
-            return BoundingBox(min_x, min_y, max_x, max_y, datum = new_epsg)
+            return BoundingBox(min_x, min_y, max_x, max_y, datum = new_wkt)
 
 
 def get_wkt(proj_string: str) -> str:
