@@ -34,40 +34,29 @@ class CMRDownloader(DOORDownloader):
     cmr_page_size = 200 #TODO: check if true
 
     default_options = {
-        'layers': None,
+        'variables': None,
         'make_mosaic': True,
         'crop_to_bounds': True,
         'keep_tiles_naming': False,
     }
 
     file_ext = ['.hdf', '.h5']
-
-    def __init__(self) -> None:
+    
+    def __init__(self, product: str) -> None:
+        self.set_product(product)
         super().__init__()
-    
-    @property
-    def variable(self):
-        return self._variable
-    
-    @variable.setter
-    def variable(self, variable: str):
-        available_list = self.get_available_variables().keys()
-        # check if the variable is available
-        if variable.lower() not in available_list:
-            msg = f'Variable {variable} is not available. Available variables are: '
-            msg += ', '.join(available_list)
-            raise ValueError(msg)
-        
-        # set the variable
-        self._variable = variable.lower()
 
-        # add the variable-specific parameters
-        varopts = self.get_available_variables()[self._variable]
-        self.provider  = varopts['provider']
-        self.product   = varopts['product']
-        self.version   = varopts['version']
-        self.timesteps = varopts['timesteps']
-        self.layers = varopts['layers']
+    def set_product(self, product: str) -> None:
+        self.product = product.lower()
+        if self.product not in self.available_products:
+            raise ValueError(f'Product {product} not available. Choose one of {self.available_products.keys()}')
+        for key in self.available_products[self.product]:
+            setattr(self, key, self.available_products[self.product][key])
+
+    def set_variables(self, variables: list[str] | None) -> None:
+        if variables is None:
+            variables = self.available_variables[self.product].keys()
+        super().set_variables(variables)
 
     def get_credentials(self, url: str) -> str:
 
@@ -88,25 +77,14 @@ class CMRDownloader(DOORDownloader):
         """
         #global_bounds = BoundingBox(-180, -90, 180, 90)
         now = datetime.now()
+        all_times = ts.TimeRange(self.start, now)
+        all_timesteps = self._get_timesteps(all_times)
+        all_timesteps.sort(reverse=True)
 
-        if self.timesteps == 'viirs':
-            timestep = ts.ViirsModisTimeStep.from_date(now)
-        elif self.timesteps == 'annual':
-            timestep = ts.Year.from_date(now)
-        elif self.timesteps == 'daily':
-            timestep = ts.Day.from_date(now)
-        elif self.timesteps == 'monthly':
-            timestep = ts.Month.from_date(now)
-        else:
-            raise ValueError(f'Timesteps {self.timesteps} not recognized')
-
-        while True:
+        for timestep in all_timesteps:
             urls = self.cmr_search(timestep, bounds)
             if len(urls) >= expected_tiles:
-                break
-            timestep -= 1
-        
-        return timestep
+                return timestep
     
     def get_last_published_date(self, **kwargs) -> datetime:
         return self.get_last_published_ts(**kwargs).start
@@ -148,8 +126,8 @@ class CMRDownloader(DOORDownloader):
                     if filename_save.find('s3credentials') < 0:
                         filename_ls.append(filename_save)
 
-                    if n % log_step == 0 or n == len(url_list)-1:
-                        self.log.info(f'  -> Downloaded {n+1} of {len(url_list)} files')
+                    # if n % log_step == 0 or n == len(url_list)-1:
+                    #     self.log.info(f'  -> Downloaded {n+1} of {len(url_list)} files')
                     
                     break
 
@@ -158,7 +136,7 @@ class CMRDownloader(DOORDownloader):
                     trial += 1
                 except URLError as e:
                     self.log.error('URL error {0}'.format(e.reason))
-                    raise
+                    trial += 1
                 except OSError as e:
                     self.log.error('IO error {0}'.format(e))
                     raise
@@ -176,14 +154,13 @@ class CMRDownloader(DOORDownloader):
                         '&sort_key=start_date&sort_key=producer_granule_id'
                         '&scroll=true&page_size={2}'.format(self.cmr_url, self.provider, self.cmr_page_size))
 
-        product_query = self.fomat_product(self.product)
+        product_query = self.fomat_product(self.product_id)
         version_query = self.format_version(self.version)
         temporal_query = self.format_temporal(time_start, time_end)
         spatial_query = self.format_spatial(bounding_box)
         #filter_query = self.format_filename_filter(time)
 
         tail = '&options[producer_granule_id][pattern]=true'
-
         return cmr_base_url + product_query + version_query + temporal_query + spatial_query + tail# + filter_query
 
     def cmr_search(self, time: ts.TimeRange, space_bounds: BoundingBox) -> dict:
@@ -248,7 +225,7 @@ class CMRDownloader(DOORDownloader):
                 padded_version = version.zfill(desired_pad_length)
                 query_params += f'&version={padded_version}'
                 desired_pad_length -= 1
-        except ValueError:
+        except ValueError or TypeError:
             query_params = f'&version={version}'
 
         return query_params
@@ -281,22 +258,7 @@ class CMRDownloader(DOORDownloader):
         filename_filter = time.strftime('*A%Y%j*')
         return f'&producer_granule_id[]={filename_filter}&options[producer_granule_id][pattern]=true'
     
-    @classmethod
-    def get_available_variables(cls) -> dict:
-        available_variables = cls.available_variables
-        return {v: {'provider' : available_variables[v][0],\
-                    'product'  : available_variables[v][1],
-                    'version'  : available_variables[v][2],
-                    'timesteps': available_variables[v][3],
-                    'layers'   : [{'id'   : l[0],
-                                   'name' : l[1],
-                                   #'range': l[2],
-                                   #'scale': l[3],
-                                   #'type' : l[4]
-                                   } for l in available_variables[v][4]]}\
-                for v in available_variables}
-    
-def cmr_filter_urls(search_results, extensions=['.hdf', '.h5']):
+def cmr_filter_urls(search_results, extensions=['.hdf', '.h5']) -> list[str]:
     """Select only the desired data files from CMR response."""
     if 'feed' not in search_results or 'entry' not in search_results['feed']:
         return []
@@ -306,7 +268,6 @@ def cmr_filter_urls(search_results, extensions=['.hdf', '.h5']):
                if 'links' in e]
     # Flatten "entries" to a simple list of links
     links = list(itertools.chain(*entries))
-
     urls = []
     unique_filenames = set()
     for link in links:
@@ -319,7 +280,6 @@ def cmr_filter_urls(search_results, extensions=['.hdf', '.h5']):
         if 'rel' in link and 'data#' not in link['rel']:
             # Exclude links which are not classified by CMR as "data" or "metadata"
             continue
-
         if 'title' in link and 'opendap' in link['title'].lower():
             # Exclude OPeNDAP links--they are responsible for many duplicates
             # This is a hack; when the metadata is updated to properly identify
