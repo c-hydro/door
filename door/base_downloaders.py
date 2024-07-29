@@ -113,27 +113,19 @@ class DOORDownloader(ABC):
         options = self.check_options(options)
         for key, value in options.items():
             setattr(self, key, value)
-
+        
         if 'variables' in options:
-            varopts = options['variables']
-            self.set_variables(varopts)
-
-    def check_variables(self, varopts: dict) -> dict:
-        if not isinstance(varopts, list): 
-            varopts = [varopts]
-        if not hasattr(self, 'available_variables'):
-            return varopts
-        for variable in varopts:
-            if variable not in self.available_variables:
-                self.log.warning(f'Variable {variable} not available or not implemented/tested, removing from list')
-                varopts.remove(variable)
-        return varopts
+            variables = options['variables']
+            self.set_variables(variables)
     
-    def set_variables(self, varopts: list) -> None:
-        varopts = self.check_variables(varopts)
+    def set_variables(self, variables: list) -> None:
+        available_variables = self.available_variables
+        if hasattr(self, 'product') and self.product in available_variables:
+            available_variables = available_variables[self.product]
         self.variables = {}
-        for var in varopts:
-            self.variables[var] = self.available_variables[var]
+        for var in variables:
+            if var in available_variables:
+                self.variables[var] = available_variables[var]
             
     #TODO: this is a bit of an akward spot to put this, but it is used by all forecast downloaders, so it makes some sense to have it here
     def postprocess_forecast(self, ds: xr.Dataset, space_bounds: BoundingBox) -> None:
