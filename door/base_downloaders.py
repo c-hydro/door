@@ -68,8 +68,26 @@ class DOORDownloader(ABC):
         """
         if hasattr(self, 'ts_per_year'):
             return time_range.get_timesteps_from_tsnumber(self.ts_per_year)
+        elif hasattr(self, 'frequency') or hasattr(self, 'freq'):
+            self.freq = getattr(self, 'frequency', None) or self.freq
         else:
-            raise NotImplementedError
+            raise ValueError('No frequency or ts_per_year attribute found')
+
+        freq = self.freq.lower()
+        if freq in ['d', 'days', 'day', 'daily']:
+            return time_range.days
+        elif freq in ['t', 'dekads', 'dekad', 'dekadly', '10-day', '10-days']:
+            return time_range.dekads
+        elif freq in ['m', 'months', 'month', 'monthly']:
+            return time_range.months
+        elif freq in ['y', 'years', 'year', 'yearly', 'a', 'annual']:
+            return time_range.years
+        elif freq in ['8-days', '8day', '8dayly', '8-day', 'viirs']:
+            return time_range.viirstimes
+        # elif freq in ['h', 'hours', 'hour', 'hourly']:
+        #     return time_range.hours
+        else:
+            raise ValueError(f'Frequency {freq} not supported')
 
     def check_options(self, options: Optional[dict] = None) -> dict:
         """
