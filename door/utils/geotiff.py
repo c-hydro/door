@@ -4,15 +4,21 @@ import os
 import xarray as xr
 import rasterio as rio
 import rioxarray as rxr
+import tempfile
 
 from .space import BoundingBox
 
-def crop_raster(src: str|gdal.Dataset, BBox: BoundingBox, output_file: str) -> None:
+def crop_raster(src: str|gdal.Dataset|xr.DataArray, BBox: BoundingBox, output_file: str) -> None:
     """
     Cut a geotiff to a bounding box.
     """
-    
-    if isinstance(src, str):
+
+    if isinstance(src, xr.DataArray):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpfile = os.path.join(tmpdir, 'tmpfile.tif')
+            src.rio.to_raster(tmpfile)
+            src_ds = gdal.Open(tmpfile, gdalconst.GA_ReadOnly)
+    elif isinstance(src, str):
         src_ds = gdal.Open(src, gdalconst.GA_ReadOnly)
     else:
         src_ds = src
@@ -46,7 +52,6 @@ def crop_raster(src: str|gdal.Dataset, BBox: BoundingBox, output_file: str) -> N
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     gdal.Warp(output_file, src_ds, outputBounds=(min_x_real, min_y_real, max_x_real, max_y_real),
             outputType = src_ds.GetRasterBand(1).DataType, creationOptions = ['COMPRESS=LZW'])
-
     # Close the datasets
     src_ds = None
 
