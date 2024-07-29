@@ -2,10 +2,11 @@ import os
 from typing import Optional
 
 import numpy as np
+import tempfile
 
 from osgeo import gdal, gdalconst, osr
-# I very much prefer rasterio over gdal, but gdal has less overhead (rasterio is built on top of gdal)
-#TODO: consider using gdal in DRYES as well...
+import xarray as xr
+import rioxarray as rxr
 
 class BoundingBox():
 
@@ -159,3 +160,105 @@ def get_datum(value: str|int) -> tuple[str]:
             raise ValueError(f'Unknown datum type: {value}, please provide an EPSG code ("EPSG:#####") or a WKT string.')
 
     return epsg_code, wkt_datum
+
+def crop_to_bb(src: str|gdal.Dataset|xr.DataArray|xr.Dataset,
+               BBox: BoundingBox,
+               out: str = 'xarray') -> None:
+    """
+    Cut a map to a bounding box.
+    """
+    if isinstance(src, gdal.Dataset):
+        with tempfile.TemporaryDirectory() as tmp_path:
+            tmp_file = os.path.join(tmp_path, 'tmp.tif')
+            crop_raster(src, BBox, tmp_file)
+            if out == 'xarray':
+                return rxr.open_rasterio(tmp_file)
+            elif out == 'gdal':
+                return gdal.Open(tmp_file, gdalconst.GA_ReadOnly)
+
+    elif isinstance(src, str) and src.endswith(".tif"):
+        src = rxr.open_rasterio(src)
+
+    cropped_xarray = crop_netcdf(src, BBox)
+    if out == 'xarray':
+        return cropped_xarray
+    elif out == 'gdal':
+        with tempfile.TemporaryDirectory() as tmp_path:
+            tmp_file = os.path.join(tmp_path, 'tmp.tif')
+            cropped_xarray.rio.to_raster(tmp_file)
+            return gdal.Open(tmp_file, gdalconst.GA_ReadOnly)
+
+def crop_netcdf(src: str|xr.DataArray|xr.Dataset,
+                BBox: BoundingBox) -> xr.DataArray:
+    """
+    Cut a geotiff to a bounding box.
+    """
+    if isinstance(src, str):
+        if src.endswith(".nc"):
+            src_ds = xr.load_dataset(src, engine="netcdf4")
+        elif src.endswith(".grib"):
+            src_ds = xr.load_dataset(src, engine="cfgrib")
+    elif isinstance(src, xr.DataArray) or isinstance(src, xr.Dataset):
+        src_ds = src
+
+    x_dim = src_ds.rio.x_dim
+    lon_values = src_ds[x_dim].values
+    if (lon_values > 180).any():
+        new_lon_values = xr.where(lon_values > 180, lon_values - 360, lon_values)
+        new = src_ds.assign_coords({x_dim:new_lon_values}).sortby(x_dim)
+        src_ds = new.rio.set_spatial_dims(x_dim, new.rio.y_dim)
+
+    # transform the bounding box to the geotiff projection
+    if src_ds.rio.crs is not None:
+        transformed_BBox = BBox.transform(src_ds.rio.crs.to_wkt())
+    else:
+        src_ds = src_ds.rio.write_crs(BBox.wkt_datum, inplace=True)
+    # otherwise, let's assume that the bounding box is already in the right projection
+    #TODO: eventually fix this...
+
+    # Crop the raster
+    cropped = src_ds.rio.clip_box(*transformed_BBox.bbox)
+
+    return cropped
+
+def crop_raster(src: str|gdal.Dataset, BBox: BoundingBox, output_file: str) -> None:
+    """
+    Cut a geotiff to a bounding box.
+    """
+
+    if isinstance(src, str):
+        src_ds = gdal.Open(src, gdalconst.GA_ReadOnly)
+    else:
+        src_ds = src
+
+    ## TODO: check the longitude values and transform them if necessary
+
+    geoprojection = src_ds.GetProjection()
+    geotransform = src_ds.GetGeoTransform()
+
+    # transform the bounding box to the geotiff projection
+    BBox_trans = BBox.transform(geoprojection, inplace = False)
+
+    min_x, min_y, max_x, max_y = BBox_trans.bbox
+    # in order to not change the grid, we need to make sure that the new bounds were also in the old grid
+    in_min_x = geotransform[0]
+    in_res_x = geotransform[1]
+    in_num_x = src_ds.RasterXSize
+    in_min_y = geotransform[3]
+    in_res_y = geotransform[5]
+    in_num_y = src_ds.RasterYSize
+    xcoords_in = np.arange(in_min_x, in_min_x + (in_num_x +1) * in_res_x, in_res_x)
+    ycoords_in = np.arange(in_min_y, in_min_y + (in_num_y +1) * in_res_y, in_res_y)
+
+    # the if else statements are used to make sure that the new bounds are not larger than the original ones
+    min_x_real = max(xcoords_in[xcoords_in <= min_x]) if any(xcoords_in <= min_x) else min(xcoords_in)
+    max_x_real = min(xcoords_in[xcoords_in >= max_x]) if any(xcoords_in >= max_x) else max(xcoords_in)
+    min_y_real = max(ycoords_in[ycoords_in <= min_y]) if any(ycoords_in <= min_y) else min(ycoords_in)
+    max_y_real = min(ycoords_in[ycoords_in >= max_y]) if any(ycoords_in >= max_y) else max(ycoords_in)
+
+    # Create the output file
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    gdal.Warp(output_file, src_ds, outputBounds=(min_x_real, min_y_real, max_x_real, max_y_real),
+            outputType = src_ds.GetRasterBand(1).DataType, creationOptions = ['COMPRESS=LZW'])
+    # Close the datasets
+    src_ds = None

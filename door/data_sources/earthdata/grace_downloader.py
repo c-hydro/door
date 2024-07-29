@@ -6,8 +6,7 @@ import os
 import datetime as dt
 
 from .cmr_downloader import CMRDownloader
-from ...utils.space import BoundingBox
-from ...utils.geotiff import crop_raster
+from ...utils.space import BoundingBox, crop_to_bb
 from ...utils.io import in_tmp_folder
 
 from ...tools.timestepping import TimeRange
@@ -83,10 +82,7 @@ class GRACEDownloader(CMRDownloader):
             data = all_data.sel(band=variable['id'] + 1).drop('band')
 
             # Crop this band and save it
-            tmp_output = os.path.join(tmp_path, f'{varname}_{timestep.end}.tif')
-            crop_raster(data, space_bounds, tmp_output)
-
-            cropped_data = rxr.open_rasterio(tmp_output)
+            cropped_data = crop_to_bb(data, space_bounds)
             output.append((cropped_data, {'variable': varname}))
 
         return output

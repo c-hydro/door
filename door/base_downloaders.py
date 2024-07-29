@@ -5,9 +5,8 @@ from abc import ABC, abstractmethod
 import xarray as xr
 import os
 
-from .utils.space import BoundingBox
+from .utils.space import BoundingBox, crop_to_bb
 from .utils.io import download_http, check_download, handle_missing, download_ftp
-from .utils.netcdf import crop_netcdf
 
 from .tools import timestepping as ts
 from .tools.timestepping.timestep import TimeStep
@@ -139,7 +138,7 @@ class DOORDownloader(ABC):
         ds = ds.assign_coords({self.frc_dims["time"]: self.frc_time_range}).rename({v: k for k, v in self.frc_dims.items()})
 
         # Crop with bounding box
-        ds = crop_netcdf(ds, space_bounds)
+        ds = crop_to_bb(ds, space_bounds)
 
         # If lat is a decreasing vector, flip it and the associated variables vertically
         if ds.lat.values[0] > ds.lat.values[-1]:

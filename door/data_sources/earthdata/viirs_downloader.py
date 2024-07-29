@@ -8,8 +8,7 @@ import xarray as xr
 import rioxarray as rxr
 
 from .cmr_downloader import CMRDownloader
-from ...utils.space import BoundingBox
-from ...utils.geotiff import crop_raster
+from ...utils.space import BoundingBox, crop_to_bb
 from ...utils.io import in_tmp_folder
 
 from ...tools.timestepping.timestep import TimeStep
@@ -209,13 +208,14 @@ class VIIRSDownloader(CMRDownloader):
             # from here on, we work on layers (i.e. variables) individually
             for varname, variable in self.variables.items():
                 dataset = mosaics[variable['id']]
-                tmp_file = os.path.join(tmp_path, f'mosaic_{varname}.tif')
                 if self.crop_to_bounds:
-                    crop_raster(dataset, space_bounds, tmp_file)
+                    data = crop_to_bb(dataset, space_bounds, 'xarray')
                 else:
+                    tmp_file = os.path.join(tmp_path, f'mosaic_{varname}_{tile}.tif')
                     gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions='COMPRESS=LZW'))
+                    data = rxr.open_rasterio(tmp_file)
+
                 dataset = None
-                data = rxr.open_rasterio(tmp_file)
                 data = self.set_attributes(data, variable)
                 output.append((data, {'variable': varname}))
         else:
@@ -229,13 +229,13 @@ class VIIRSDownloader(CMRDownloader):
                         tile_name = re.search(pattern, file).group()
                     else:
                         tile_name = str(tile)
-                    tmp_file = os.path.join(tmp_path, f'mosaic_{varname}_{tile}.tif')
                     if self.crop_to_bounds:
-                        crop_raster(dataset, space_bounds, tmp_file)
+                        data = crop_to_bb(dataset, space_bounds, 'xarray')
                     else:
+                        tmp_file = os.path.join(tmp_path, f'mosaic_{varname}_{tile}.tif')
                         gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions='COMPRESS=LZW'))
+                        data = rxr.open_rasterio(tmp_file)
                     dataset = None
-                    data = rxr.open_rasterio(tmp_file)
                     data = self.set_attributes(data, variable)
                     output.append((data, {'variable': varname, 'tile': tile_name}))
 

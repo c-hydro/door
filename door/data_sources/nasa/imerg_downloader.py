@@ -2,6 +2,7 @@ import os
 from typing import Optional
 from osgeo import gdal
 import tempfile
+import rioxarray
 
 import gzip
 import netrc
@@ -9,8 +10,7 @@ import shutil
 import datetime as dt
 
 from ...base_downloaders import URLDownloader
-from ...utils.space import BoundingBox
-from ...utils.geotiff import crop_raster
+from ...utils.space import BoundingBox, crop_to_bb
 from ...tools.timestepping import TimeRange
 
 class IMERGDownloader(URLDownloader):
@@ -83,7 +83,8 @@ class IMERGDownloader(URLDownloader):
                     self.extract(tmp_destination)
                     # Regrid the data
                     destination_now = time_now.strftime(destination)
-                    crop_raster(tmp_destination[:-3], space_bounds, destination_now)
+                    cropped = crop_to_bb(tmp_destination[:-3], space_bounds)
+                    cropped.rio.to_raster(destination_now)
                     self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
 
             # Fill with prelimnary data
@@ -99,7 +100,8 @@ class IMERGDownloader(URLDownloader):
                     if success:
                         # Regrid the data
                         destination_now = time_now.strftime(destination)
-                        crop_raster(tmp_destination, space_bounds, destination_now)
+                        cropped = crop_to_bb(tmp_destination[:-3], space_bounds)
+                        cropped.rio.to_raster(destination_now)
                         self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} dowloaded and cropped to bounds')
         
         self.log.info(f'------------------------------------------')

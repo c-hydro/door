@@ -1,18 +1,12 @@
 import os
 import numpy as np
 import xarray as xr
-import rioxarray as rxr
-
-import gzip
-import shutil
 
 from ...base_downloaders import URLDownloader
-from ...tools import timestepping as ts
 from ...tools.timestepping.timestep import TimeStep
 
-from ...utils.space import BoundingBox
-from ...utils.geotiff import crop_raster
-from ...utils.io import in_tmp_folder
+from ...utils.space import BoundingBox, crop_to_bb
+from ...utils.io import in_tmp_folder, decompress_gz
 
 class CHIRPSDownloader(URLDownloader):
     name = "CHIRPS_downloader"
@@ -87,20 +81,19 @@ class CHIRPSDownloader(URLDownloader):
 
         if success:
             # Unzip the data
-            unzipped = self.extract(tmp_destination)
-            # Regrid the data
-            cropped = unzipped.replace('tif', '_cropped.tif')
-            crop_raster(unzipped, space_bounds, cropped)
+            unzipped = decompress_gz(tmp_destination)
+            
+            # crop the data
+            cropped = crop_to_bb(unzipped, space_bounds)
 
             # change the nodata value to np.nan and return the data
-            data = rxr.open_rasterio(cropped)
-            data = data.where(~np.isclose(data, nodata, equal_nan=True), np.nan)
-            data.rio.no_data = np.nan
+            cropped = cropped.where(~np.isclose(cropped, nodata, equal_nan=True), np.nan)
+            cropped.rio.no_data = np.nan
 
             if isprelim:
-                data.attrs['PRELIMINARY'] = 'True'
+                cropped.attrs['PRELIMINARY'] = 'True'
 
-            return [(data, {})]
+            return [(cropped, {})]
     
     def format_url(self, prelim = False, **kwargs):
         """
@@ -111,18 +104,3 @@ class CHIRPSDownloader(URLDownloader):
         else:
             url = self.url_blank.format(**kwargs)
         return url
-
-    def extract(self, filename: str):
-        """
-        extracts from a .gz file
-        """
-
-        if not filename.endswith('.gz'):
-            return filename
-        
-        file_out = filename[:-3]
-        with gzip.open(filename, 'rb') as f_in:
-            with open(file_out, 'wb') as f_out:
-                shutil.copyfileobj(f_in, f_out)
-        
-        return file_out
