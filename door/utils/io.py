@@ -1,6 +1,7 @@
 import tarfile
 import os
 import shutil
+import gzip
 import bz2
 import requests
 from urllib.parse import urlparse
@@ -44,6 +45,21 @@ def decompress_bz2(filepath):
     data = zipfile.read()  # get the decompressed data
     newfilepath = filepath[:-4]  # assuming the filepath ends with .bz2
     open(newfilepath, 'wb').write(data)
+
+def decompress_gz(filename: str):
+        """
+        extracts from a .gz file
+        """
+
+        if not filename.endswith('.gz'):
+            return filename
+        
+        file_out = filename[:-3]
+        with gzip.open(filename, 'rb') as f_in:
+            with open(file_out, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        
+        return file_out
 
 def download_http(url, destination, auth=None):
     """
