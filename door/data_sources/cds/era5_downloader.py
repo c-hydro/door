@@ -5,7 +5,6 @@ import numpy as np
 
 from .cds_downloader import CDSDownloader
 from ...utils.space import BoundingBox
-from ...utils.io import in_tmp_folder
 
 from ...tools import timestepping as ts
 from ...tools.timestepping.timestep import TimeStep
@@ -150,10 +149,10 @@ class ERA5Downloader(CDSDownloader):
         }
         return request
 
-    @in_tmp_folder('tmp_path')
     def _get_data_ts(self,
                      timestep: TimeStep,
-                     space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
+                     space_bounds: BoundingBox,
+                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
 
         import cfgrib
 

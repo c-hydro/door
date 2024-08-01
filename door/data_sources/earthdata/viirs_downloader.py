@@ -9,7 +9,6 @@ import rioxarray as rxr
 
 from .cmr_downloader import CMRDownloader
 from ...utils.space import BoundingBox, crop_to_bb
-from ...utils.io import in_tmp_folder
 
 from ...tools.timestepping.timestep import TimeStep
 from ...tools import timestepping as ts
@@ -184,10 +183,10 @@ class VIIRSDownloader(CMRDownloader):
         keep      = [year == timestep.year for year in years]
         return [url for url, k in zip(url_list, keep) if k]
 
-    @in_tmp_folder('tmp_path')
     def _get_data_ts(self,
                      timestep: TimeStep,
-                     space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
+                     space_bounds: BoundingBox,
+                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
         """
         Get data from the CMR.
         """
@@ -232,7 +231,7 @@ class VIIRSDownloader(CMRDownloader):
                     if self.crop_to_bounds:
                         data = crop_to_bb(dataset, space_bounds, 'xarray')
                     else:
-                        tmp_file = os.path.join(tmp_path, f'mosaic_{varname}_{tile}.tif')
+                        tmp_file = os.path.join(tmp_path, f'{varname}_{tile}.tif')
                         gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions='COMPRESS=LZW'))
                         data = rxr.open_rasterio(tmp_file)
                     dataset = None

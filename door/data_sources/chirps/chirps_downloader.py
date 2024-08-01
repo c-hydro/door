@@ -6,7 +6,7 @@ from ...base_downloaders import URLDownloader
 from ...tools.timestepping.timestep import TimeStep
 
 from ...utils.space import BoundingBox, crop_to_bb
-from ...utils.io import in_tmp_folder, decompress_gz
+from ...utils.io import decompress_gz
 
 class CHIRPSDownloader(URLDownloader):
     name = "CHIRPS_downloader"
@@ -61,10 +61,11 @@ class CHIRPSDownloader(URLDownloader):
         self.nodata = self.available_products[product]["nodata"]
         self.prelim_nodata = self.available_products[product]["prelim_nodata"]
 
-    @in_tmp_folder('tmp_path')
     def _get_data_ts(self,
                      timestep: TimeStep,
-                     space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
+                     space_bounds: BoundingBox,
+                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
+        
         ts_end = timestep.end
         tmp_filename_raw = f'temp_{self.product}{ts_end:%Y%m%d}'
         tmp_filename = f'{tmp_filename_raw}.tif.gz'

@@ -7,7 +7,6 @@ import datetime as dt
 
 from .cmr_downloader import CMRDownloader
 from ...utils.space import BoundingBox, crop_to_bb
-from ...utils.io import in_tmp_folder
 
 from ...tools.timestepping import TimeRange
 from ...tools.timestepping.timestep import TimeStep
@@ -46,10 +45,10 @@ class GRACEDownloader(CMRDownloader):
     def start(self):
         return dt.datetime(2002,4,1)
 
-    @in_tmp_folder('tmp_path')
     def _get_data_ts(self,
                      timestep: TimeStep,
-                     space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
+                     space_bounds: BoundingBox,
+                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
         """
         Get data from the CMR.
         """

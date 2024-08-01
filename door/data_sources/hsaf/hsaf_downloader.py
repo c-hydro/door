@@ -8,7 +8,7 @@ from typing import Optional
 from ...base_downloaders import URLDownloader
 from ...utils.space import BoundingBox, crop_to_bb
 from ...utils.auth import get_credentials
-from ...utils.io import decompress_bz2, in_tmp_folder
+from ...utils.io import decompress_bz2
 
 from ...tools.timestepping import TimeRange
 from ...tools.timestepping.timestep import TimeStep
@@ -126,10 +126,10 @@ class HSAFDownloader(URLDownloader):
                 
         return parents
 
-    @in_tmp_folder('tmp_path')
     def _get_data_ts(self,
                      timestep: TimeStep,
-                     space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
+                     space_bounds: BoundingBox,
+                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
        
         tmp_filename = f'temp_{self.product}.nc' if self.format == 'nc' else f'temp_{self.product}.grib.bz2'
         tmp_file = os.path.join(tmp_path, tmp_filename)
