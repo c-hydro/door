@@ -1,14 +1,12 @@
 import rioxarray as rxr
 import xarray as xr
-import numpy as np
-import os
+from typing import Generator
 
 import datetime as dt
 
 from .cmr_downloader import CMRDownloader
 from ...utils.space import BoundingBox, crop_to_bb
 
-from ...tools.timestepping import TimeRange
 from ...tools.timestepping.timestep import TimeStep
 
 class GRACEDownloader(CMRDownloader):
@@ -48,7 +46,7 @@ class GRACEDownloader(CMRDownloader):
     def _get_data_ts(self,
                      timestep: TimeStep,
                      space_bounds: BoundingBox,
-                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
+                     tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
         """
         Get data from the CMR.
         """
@@ -71,8 +69,6 @@ class GRACEDownloader(CMRDownloader):
         # download the data (only one file)
         file = self.download(url_list, tmp_path)[0]
 
-        output = []
-
         # open the file with rasterio
         all_data = rxr.open_rasterio(file)   
         for varname, variable in self.variables.items():
@@ -82,7 +78,5 @@ class GRACEDownloader(CMRDownloader):
 
             # Crop this band and save it
             cropped_data = crop_to_bb(data, space_bounds)
-            output.append((cropped_data, {'variable': varname}))
-
-        return output
+            yield cropped_data, {'variable': varname}
             

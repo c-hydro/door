@@ -1,16 +1,13 @@
 import os
-import tempfile
 import numpy as np
 import xarray as xr
-import rioxarray as rxr
-from typing import Optional
+from typing import Generator
 
 from ...base_downloaders import URLDownloader
 from ...utils.space import BoundingBox, crop_to_bb
 from ...utils.auth import get_credentials
 from ...utils.io import decompress_bz2
 
-from ...tools.timestepping import TimeRange
 from ...tools.timestepping.timestep import TimeStep
 
 # from dam.utils.io_geotiff import read_geotiff_asXarray, write_geotiff_fromXarray
@@ -129,7 +126,7 @@ class HSAFDownloader(URLDownloader):
     def _get_data_ts(self,
                      timestep: TimeStep,
                      space_bounds: BoundingBox,
-                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
+                     tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
        
         tmp_filename = f'temp_{self.product}.nc' if self.format == 'nc' else f'temp_{self.product}.grib.bz2'
         tmp_file = os.path.join(tmp_path, tmp_filename)
@@ -148,7 +145,6 @@ class HSAFDownloader(URLDownloader):
 
         file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
 
-        output   = []
         all_vars = {}
         for varname, variable in self.variables.items():
             if variable['alt_name'] in file_handle:
@@ -166,7 +162,7 @@ class HSAFDownloader(URLDownloader):
             cropped = crop_to_bb(src=var_data, BBox=space_bounds)
             
             if varname in self.original_variables:
-                output.append((cropped.squeeze(), {'variable': varname}))
+                yield cropped.squeeze(), {'variable': varname}
             
             all_vars[varname] = cropped
 
@@ -174,40 +170,7 @@ class HSAFDownloader(URLDownloader):
             for custom_variable in self.custom_variables:
                 variables, weights = self.custom_variables[custom_variable]['variables'], self.custom_variables[custom_variable]['weights']
                 new_var = sum([all_vars[var] * weight for var, weight in zip(variables, weights)])
-                output.append((new_var.squeeze(), {'variable': custom_variable}))
-            
-        return output
-                
-            #     var_paths = {}
-            #     for var_name in self.variables:
-            #         if var_name in original_vars:
-            #             destination_now = time_now.strftime(destination).replace('{variable}', var_name).replace('{var}', var_name)
-            #         else:
-            #             tmp_var_name = f'temp_{var_name}_{time_now:%Y%m%d}.tif'
-            #             destination_now = os.path.join(tmp_path, tmp_var_name)
-
-            #         var_data = file_handle[var_name]
-
-            #         # turn self.nodata into np.nan
-            #         var_data = var_data.where(var_data != self.nodata, np.nan)
-            #         var_data = var_data.rio.write_nodata(np.nan)
-
-            #         # assign geoprojection to var_data from space_bounds
-            #         var_data = var_data.rio.write_crs(self.spatial_ref)
-
-            #         cropped = crop_netcdf(src=var_data, BBox=space_bounds)
-            #         save_array_to_tiff(cropped.squeeze(), destination_now)
-            #         var_paths[var_name] = destination_now
-
-            #     if self.custom_variables is not None:
-            #         for custom_var in self.custom_variables:
-            #             # calculate the new variable
-            #             variables, weights = self.custom_variables[custom_var]['variables'], self.custom_variables[custom_var]['weights']
-            #             new_var = sum([rxr.open_rasterio(var_paths[var]) * weight for var, weight in zip(variables, weights)])
-                        
-            #             destination_now = time_now.strftime(destination).replace('{variable}', custom_var).replace('{var}', custom_var)
-
-            #             save_array_to_tiff(new_var.squeeze(), destination_now)
+                yield new_var.squeeze(), {'variable': custom_variable}
 
     def remapgrib(self, file_path: str) -> str:
         '''

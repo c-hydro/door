@@ -1,4 +1,5 @@
 import os
+from typing import Generator
 import numpy as np
 import xarray as xr
 
@@ -64,7 +65,7 @@ class CHIRPSDownloader(URLDownloader):
     def _get_data_ts(self,
                      timestep: TimeStep,
                      space_bounds: BoundingBox,
-                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
+                     tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
         
         ts_end = timestep.end
         tmp_filename_raw = f'temp_{self.product}{ts_end:%Y%m%d}'
@@ -94,7 +95,7 @@ class CHIRPSDownloader(URLDownloader):
             if isprelim:
                 cropped.attrs['PRELIMINARY'] = 'True'
 
-            return [(cropped, {})]
+            yield cropped, {}
     
     def format_url(self, prelim = False, **kwargs):
         """

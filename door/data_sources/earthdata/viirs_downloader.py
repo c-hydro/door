@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Generator
 
 import h5py
 from osgeo import gdal
@@ -186,7 +187,7 @@ class VIIRSDownloader(CMRDownloader):
     def _get_data_ts(self,
                      timestep: TimeStep,
                      space_bounds: BoundingBox,
-                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
+                     tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
         """
         Get data from the CMR.
         """
@@ -196,11 +197,10 @@ class VIIRSDownloader(CMRDownloader):
 
         if not url_list:
             return None
-            
-        file_list = self.download(url_list, tmp_path)
 
-        output = []
         if self.make_mosaic:
+            # download the files (all together)
+            file_list = self.download(url_list, tmp_path)
             # build the mosaic (one for each layer)
             # this is better to do all at once, so that we open the HDF5 file only once
             mosaics = self.build_mosaics_from_hdf5(file_list, self.variables)
@@ -216,9 +216,10 @@ class VIIRSDownloader(CMRDownloader):
 
                 dataset = None
                 data = self.set_attributes(data, variable)
-                output.append((data, {'variable': varname}))
+                yield data, {'variable': varname}
         else:
-            for tile, file in enumerate(file_list):
+            for tile, url in enumerate(url_list):
+                file = self.download([url], tmp_path)[0]
                 ids = [variable['id'] for variable in self.variables.values()]
                 these_hdf5_datasets = self.get_layers_from_hdf5(file, ids)
                 for varname, variable in self.variables.items():
@@ -236,9 +237,7 @@ class VIIRSDownloader(CMRDownloader):
                         data = rxr.open_rasterio(tmp_file)
                     dataset = None
                     data = self.set_attributes(data, variable)
-                    output.append((data, {'variable': varname, 'tile': tile_name}))
-
-        return output             
+                    yield data, {'variable': varname, 'tile': tile_name}           
 
     def set_attributes(self, dataset: xr.DataArray, varopts: dict) -> xr.DataArray:
         """

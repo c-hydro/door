@@ -1,5 +1,6 @@
 import datetime as dt
 import os
+from typing import Generator
 import xarray as xr
 import numpy as np
 
@@ -152,7 +153,7 @@ class ERA5Downloader(CDSDownloader):
     def _get_data_ts(self,
                      timestep: TimeStep,
                      space_bounds: BoundingBox,
-                     tmp_path: str) -> list[tuple[xr.DataArray, dict]]:
+                     tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
 
         import cfgrib
 
@@ -175,9 +176,6 @@ class ERA5Downloader(CDSDownloader):
         # this is needed because requesting multiple variables at once will return a single grib file that might contain multiple cubes
         # (if the variable have different dimensions)
         all_data = cfgrib.open_datasets(tmp_destination)
-
-        # prepare the output
-        output = list()
 
         # loop over the variables
         for var, varopts in self.variables.items():
@@ -262,7 +260,4 @@ class ERA5Downloader(CDSDownloader):
                 aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
                 aggdata = aggdata.rio.write_crs(self.spatial_ref)
 
-                tags = {'variable': var, 'agg_method': agg}
-                output.append((aggdata, tags))
-        
-        return output
+                yield aggdata, {'variable': var, 'agg_method': agg}
