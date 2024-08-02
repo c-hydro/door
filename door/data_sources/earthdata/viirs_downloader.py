@@ -12,7 +12,6 @@ from .cmr_downloader import CMRDownloader
 from ...utils.space import BoundingBox, crop_to_bb
 
 from ...tools.timestepping.timestep import TimeStep
-from ...tools import timestepping as ts
 
 class VIIRSDownloader(CMRDownloader):
 
