@@ -46,12 +46,13 @@ class DOORDownloader(ABC):
         timesteps = self._get_timesteps(time_range)
 
         for timestep in timesteps:
-            data_struct = self._get_data_ts(timestep, space_bounds)
-            if not data_struct:
-                self.log.warning(f'No data found for timestep {timestep}')
-                continue
-            for data, tags in data_struct:
-                destination.write_data(data, timestep, **tags)
+            with tempfile.TemporaryDirectory() as tmp_path:
+                data_struct = self._get_data_ts(timestep, space_bounds, tmp_path)
+                if not data_struct:
+                    self.log.warning(f'No data found for timestep {timestep}')
+                    continue
+                for data, tags in data_struct:
+                    destination.write_data(data, timestep, **tags)
 
     @abstractmethod
     def _get_data_ts(self, time_range: TimeStep, space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
