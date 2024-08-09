@@ -2,6 +2,7 @@ from typing import Optional
 import logging
 from abc import ABC, abstractmethod
 
+import tempfile
 import xarray as xr
 import os
 
@@ -84,8 +85,8 @@ class DOORDownloader(ABC):
             return time_range.years
         elif freq in ['8-days', '8day', '8dayly', '8-day', 'viirs']:
             return time_range.viirstimes
-        # elif freq in ['h', 'hours', 'hour', 'hourly']:
-        #     return time_range.hours
+        elif freq in ['h', 'hours', 'hour', 'hourly']:
+            return time_range.hours
         else:
             raise ValueError(f'Frequency {freq} not supported')
 
