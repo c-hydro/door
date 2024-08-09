@@ -12,6 +12,7 @@ from ...tools.timestepping.timestep import TimeStep
 
 class ERA5Downloader(CDSDownloader):
 
+    source = "ERA5"
     name = "ERA5_downloader"
 
     available_products = ['reanalysis-era5-single-levels', 'reanalysis-era5-land']
@@ -148,6 +149,7 @@ class ERA5Downloader(CDSDownloader):
             ],
         'area': [N, W, S, E],
         }
+
         return request
 
     def _get_data_ts(self,

@@ -10,7 +10,9 @@ from ...utils.space import BoundingBox, crop_to_bb
 from ...utils.io import decompress_gz
 
 class CHIRPSDownloader(URLDownloader):
+    source = "CHIRPS"
     name = "CHIRPS_downloader"
+    
     default_options = {
         'get_prelim' : True, # if True, will also download preliminary data if available
     }

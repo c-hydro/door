@@ -14,7 +14,9 @@ from ...tools.timestepping.timestep import TimeStep
 
 class HSAFDownloader(URLDownloader):
 
+    source = "HSAF"
     name = "HSAF_downloader"
+    
     default_options = {
         "variables": [], #["var40", "var41", "var42", "var43"],
         "custom_variables": None,
