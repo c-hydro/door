@@ -213,6 +213,7 @@ def crop_netcdf(src: str|xr.DataArray|xr.Dataset,
         transformed_BBox = BBox.transform(src_ds.rio.crs.to_wkt())
     else:
         src_ds = src_ds.rio.write_crs(BBox.wkt_datum, inplace=True)
+        transformed_BBox = BBox
     # otherwise, let's assume that the bounding box is already in the right projection
     #TODO: eventually fix this...
 
