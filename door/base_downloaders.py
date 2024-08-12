@@ -53,6 +53,8 @@ class DOORDownloader(ABC):
                     self.log.warning(f'No data found for timestep {timestep}')
                     continue
                 for data, tags in data_struct:
+                    if 'timestep' in tags:
+                        timestep = tags.pop('timestep')
                     destination.write_data(data, timestep, **tags)
 
     @abstractmethod

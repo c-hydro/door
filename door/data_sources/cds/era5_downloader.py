@@ -29,7 +29,8 @@ class ERA5Downloader(CDSDownloader):
     default_options = {
         'variables'   : 'total_precipitation',
         'agg_method'  : None,
-        'ts_per_year' : 365, # the number of timesteps per year to split the download over #365=daily, 12=monthly, 36=10-daily
+        'ts_per_year' : 12, # the number of timesteps per year to split the download over #365=daily, 12=monthly, 36=10-daily
+        'ts_per_year_agg' : 365
     }
 
     spatial_ref =  'GEOGCRS["WGS 84",\
@@ -242,24 +243,32 @@ class ERA5Downloader(CDSDownloader):
             for attr in vardata.attrs.copy():
                 if attr.startswith('GRIB'):
                     del vardata.attrs[attr]
-            # add start and end time as attributes
-            vardata.attrs['start_time'] = timestep_start
-            vardata.attrs['end_time'] = timestep_end
 
-            # do the necessary aggregations:
-            for agg in varopts['agg_method']:
+            ts_as_tr = ts.TimeRange(start = timestep_start, end = timestep_end)
+            agg_timesteps = ts_as_tr.get_timesteps_from_tsnumber(self.ts_per_year_agg)
 
-                vardata.attrs['agg_function'] = agg
-                if agg == 'mean':
-                    aggdata = vardata.mean(dim='time', skipna = False)
-                elif agg == 'max':
-                    aggdata = vardata.max(dim='time', skipna = False)
-                elif agg == 'min':
-                    aggdata = vardata.min(dim='time', skipna = False)
-                elif agg == 'sum':
-                    aggdata = vardata.sum(dim='time', skipna = False)
+            for agg_timestep in agg_timesteps:
+                timestep_start = agg_timestep.start
+                timestep_end   = agg_timestep.end
 
-                aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
-                aggdata = aggdata.rio.write_crs(self.spatial_ref)
+                # add start and end time as attributes
+                vardata.attrs['start_time'] = timestep_start
+                vardata.attrs['end_time'] = timestep_end
 
-                yield aggdata, {'variable': var, 'agg_method': agg}
+                # do the necessary aggregations:
+                for agg in varopts['agg_method']:
+
+                    vardata.attrs['agg_function'] = agg
+                    if agg == 'mean':
+                        aggdata = vardata.mean(dim='time', skipna = False)
+                    elif agg == 'max':
+                        aggdata = vardata.max(dim='time', skipna = False)
+                    elif agg == 'min':
+                        aggdata = vardata.min(dim='time', skipna = False)
+                    elif agg == 'sum':
+                        aggdata = vardata.sum(dim='time', skipna = False)
+
+                    aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
+                    aggdata = aggdata.rio.write_crs(self.spatial_ref)
+
+                    yield aggdata, {'variable': var, 'agg_method': agg, 'timestep': agg_timestep}
