@@ -10,12 +10,10 @@ log_file = HOME+'/log.txt'
 log.set_logging(log_file)
 
 time_range = TimeRange(start='2017-06-01', end='2018-06-30')
-space_ref  = BoundingBox(-18, -9, 18, 9, datum = 'EPSG:4326')
+space_ref  = BoundingBox(6.6, 42.6, 14.2, 46.4, datum = 'EPSG:4326')
 
 test_downloader = GRACEDownloader('TWS')
-test_downloader.get_last_published_date()
+print(test_downloader.get_last_published_date())
 test_downloader.get_data(time_range, space_ref,
-                         destination=HOME+'/%Y/%m/%d/GRACE-{layer}_%Y%m%d.tif',
-                        # options={'layers': [0,1],
-                        #         }
+                         destination=HOME+'/%Y/%m/%d/GRACE-{variable}_%Y%m%d.tif',
                                   )

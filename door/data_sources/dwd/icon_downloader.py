@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Iterable
 import tempfile
 import numpy as np
 import datetime as dt
@@ -13,6 +13,7 @@ from ...utils.io import untar_file, decompress_bz2
 from ...utils.netcdf import save_netcdf
 
 from ...tools import timestepping as ts
+from ...tools.timestepping.timestep import TimeStep
 
 class ICONDownloader(URLDownloader):
     
@@ -55,6 +56,9 @@ class ICONDownloader(URLDownloader):
             options['frc_max_step'] = 180
         
         return options
+
+    def _get_data_ts(self, time_range: TimeStep, space_bounds: BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:
+        pass
 
     def get_data(self,
                  time_range: ts.TimeRange,

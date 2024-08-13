@@ -5,16 +5,7 @@ import numpy as np
 from ..tools import timestepping as ts
 
 #TODO: deprecate this module
-
-class TimeRange():
-
-    def __init__(self, 
-                 start: dt.datetime|str,
-                 end: dt.datetime|str):
-        """
-        Use tools.timestepping.TimeRange instead
-        """
-        return ts.TimeRange(start, end)
+TimeRange = ts.TimeRange
 
 def get_time_from_str(string: str, name = None) -> dt.datetime:
     available_formats = ['%Y-%m-%d', '%Y-%m-%d %H:%M:%S']

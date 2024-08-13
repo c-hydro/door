@@ -1,19 +1,19 @@
-from typing import Optional
-import datetime as dt
-import os
+from typing import Optional, Iterable
 import logging
+from abc import ABC, abstractmethod
 
-import pandas as pd
-import numpy as np
+import tempfile
 import xarray as xr
-import requests
+import os
 
-from .utils.time import TimeRange
-from .utils.space import BoundingBox
+from .utils.space import BoundingBox, crop_to_bb
 from .utils.io import download_http, check_download, handle_missing, download_ftp
-from .utils.netcdf import crop_netcdf
 
-class DOORDownloader():
+from .tools import timestepping as ts
+from .tools.timestepping.timestep import TimeStep
+from .tools.data import Dataset
+
+class DOORDownloader(ABC):
     """
     Base class for all DOOR downloaders.
     """
@@ -25,18 +25,74 @@ class DOORDownloader():
         self.log = logging.getLogger(self.name)
 
     def get_data(self,
-                 time_range: TimeRange,
+                 time_range: ts.TimeRange,
                  space_bounds:  BoundingBox,
-                 destination: str,
-                 options:  Optional[dict] = None) -> xr.Dataset:
+                 destination: Dataset|dict|str,
+                 options:  Optional[dict] = None) -> None:
         """
-        Get data from this downloader as an xarray.Dataset.
-        The output dataset will have 3 dimensions: time, latitude (or y), longitude (or x),
-        and 1 or more variables as specified in the variables argument.
+        Get data from this downloader and saves it to a file
         """
-        raise NotImplementedError()
+        # get options and check them against the default options
+        self.set_options(options)
 
-    def check_options(self, options: dict) -> dict:
+        # ensure destination is a Dataset
+        if isinstance(destination, str):
+            path = os.path.dirname(destination)
+            filename = os.path.basename(destination)
+            destination = Dataset.from_options({'path': path, 'filename': filename})
+        elif isinstance(destination, dict):
+            destination = Dataset.from_options(destination)
+        
+        # get the timesteps to download
+        timesteps = self._get_timesteps(time_range)
+
+        for timestep in timesteps:
+            with tempfile.TemporaryDirectory() as tmp_path:
+                data_struct = self._get_data_ts(timestep, space_bounds, tmp_path)
+                if not data_struct:
+                    self.log.warning(f'No data found for timestep {timestep}')
+                    continue
+                for data, tags in data_struct:
+                    if 'timestep' in tags:
+                        timestep = tags.pop('timestep')
+                    destination.write_data(data, timestep, **tags)
+
+    @abstractmethod
+    def _get_data_ts(self, time_range: TimeStep, space_bounds: BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:
+        """
+        Get data from this downloader as xr.Dataset.
+        The return structure is a list of tuples, where each tuple contains the data and a dictionary of tags related to that data.
+        """
+        raise NotImplementedError
+
+    def _get_timesteps(self, time_range: ts.TimeRange) -> list[TimeStep]:
+        """
+        Get the timesteps to download, assuming.
+        """
+        if hasattr(self, 'ts_per_year'):
+            return time_range.get_timesteps_from_tsnumber(self.ts_per_year)
+        elif hasattr(self, 'frequency') or hasattr(self, 'freq'):
+            self.freq = getattr(self, 'frequency', None) or self.freq
+        else:
+            raise ValueError('No frequency or ts_per_year attribute found')
+
+        freq = self.freq.lower()
+        if freq in ['d', 'days', 'day', 'daily']:
+            return time_range.days
+        elif freq in ['t', 'dekads', 'dekad', 'dekadly', '10-day', '10-days']:
+            return time_range.dekads
+        elif freq in ['m', 'months', 'month', 'monthly']:
+            return time_range.months
+        elif freq in ['y', 'years', 'year', 'yearly', 'a', 'annual']:
+            return time_range.years
+        elif freq in ['8-days', '8day', '8dayly', '8-day', 'viirs']:
+            return time_range.viirstimes
+        elif freq in ['h', 'hours', 'hour', 'hourly']:
+            return time_range.hours
+        else:
+            raise ValueError(f'Frequency {freq} not supported')
+
+    def check_options(self, options: Optional[dict] = None) -> dict:
         """
         Check options and set defaults.
         """
@@ -56,6 +112,24 @@ class DOORDownloader():
 
         return options
 
+    def set_options(self, options: dict) -> None:
+        options = self.check_options(options)
+        for key, value in options.items():
+            setattr(self, key, value)
+        
+        if 'variables' in options:
+            variables = options['variables']
+            self.set_variables(variables)
+    
+    def set_variables(self, variables: list) -> None:
+        available_variables = self.available_variables
+        if hasattr(self, 'product') and self.product in available_variables:
+            available_variables = available_variables[self.product]
+        self.variables = {}
+        for var in variables:
+            if var in available_variables:
+                self.variables[var] = available_variables[var]
+            
     #TODO: this is a bit of an akward spot to put this, but it is used by all forecast downloaders, so it makes some sense to have it here
     def postprocess_forecast(self, ds: xr.Dataset, space_bounds: BoundingBox) -> None:
         """
@@ -68,7 +142,7 @@ class DOORDownloader():
         ds = ds.assign_coords({self.frc_dims["time"]: self.frc_time_range}).rename({v: k for k, v in self.frc_dims.items()})
 
         # Crop with bounding box
-        ds = crop_netcdf(ds, space_bounds)
+        ds = crop_to_bb(ds, space_bounds)
 
         # If lat is a decreasing vector, flip it and the associated variables vertically
         if ds.lat.values[0] > ds.lat.values[-1]:

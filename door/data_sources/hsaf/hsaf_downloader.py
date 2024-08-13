@@ -1,40 +1,51 @@
 import os
-import tempfile
 import numpy as np
 import xarray as xr
-import rioxarray as rxr
-from typing import Optional
+from typing import Generator
 
 from ...base_downloaders import URLDownloader
-from ...utils.space import BoundingBox
-from ...utils.netcdf import crop_netcdf
-from ...utils.geotiff import save_array_to_tiff
+from ...utils.space import BoundingBox, crop_to_bb
 from ...utils.auth import get_credentials
-from ...utils.io import decompress_bz2 
+from ...utils.io import decompress_bz2
 
-from ...tools.timestepping import TimeRange
+from ...tools.timestepping.timestep import TimeStep
 
 # from dam.utils.io_geotiff import read_geotiff_asXarray, write_geotiff_fromXarray
 
 class HSAFDownloader(URLDownloader):
 
+    source = "HSAF"
     name = "HSAF_downloader"
+    
     default_options = {
-        "variables": ["var40", "var41", "var42", "var43"],
+        "variables": [], #["var40", "var41", "var42", "var43"],
         "custom_variables": None,
         "cdo_path": "/usr/bin/cdo"
     }
 
-    credential_env_vars = {'username' : 'HSAF_LOGIN', 'password' : 'HSAF_PWD'}
-
-    var_depth = {
-        "var40": [0   , 0.07], # 0-7 cm
-        "var41": [0.07, 0.28], # 7-28 cm
-        "var42": [0.28, 0.72], # 28-72 cm
-        "var43": [0.72, 1.89], # 72-189 cm
+    available_products: dict = {
+        "HSAF-h141": {
+            "ts_per_year": 365,
+            "url" : "/products/h141/h141/netCDF4/{timestep.start:%Y}/h141_{timestep.start:%Y%m%d}00_R01.nc",
+            "nodata" : -9999,
+            "format" : 'nc'
+        },
+        "HSAF-h14": {
+            "ts_per_year": 365,
+            "url" : "/hsaf_archive/h14/{timestep.start:%Y/%m/%d}/h14_{timestep.start:%Y%m%d}_0000.grib.bz2",
+            "nodata" : -9999,
+            "format" : 'bz2'
+        },
     }
 
-    variable_mapping = {'var40': 'swi1', 'var41': 'swi2', 'var42': 'swi3', 'var43': 'swi4'}
+    available_variables: dict = {
+        "var40": {'alt_name' : "swi1", 'depth': [0   , 0.07]}, # 0-7 cm
+        "var41": {'alt_name' : "swi2", 'depth': [0.07, 0.28]}, # 7-28 cm
+        "var42": {'alt_name' : "swi3", 'depth': [0.28, 0.72]}, # 28-72 cm
+        "var43": {'alt_name' : "swi4", 'depth': [0.72, 1.89]}, # 72-189 cm
+    }
+
+    credential_env_vars = {'username' : 'HSAF_LOGIN', 'password' : 'HSAF_PWD'}
 
     spatial_ref =  'GEOGCRS["WGS 84",\
                 ENSEMBLE["World Geodetic System 1984 ensemble",\
@@ -64,26 +75,36 @@ class HSAFDownloader(URLDownloader):
                 ID["EPSG",4326]]'
 
     def __init__(self, product: str) -> None:
-        self.product = product
+        self.set_product(product)
         url_host = "ftp://ftphsaf.meteoam.it"
-        if self.product == "HSAF-h141":
-            url_blank = "/products/h141/h141/netCDF4/{time:%Y}/h141_{time:%Y%m%d}00_R01.nc"
-            self.ts_per_year = 365 # daily
-            self.format = 'nc'
-        elif self.product == "HSAF-h14":
-            url_blank = "/hsaf_archive/h14/{time:%Y/%m/%d}/h14_{time:%Y%m%d}_0000.grib.bz2"
-            self.ts_per_year  = 365 # daily
-            self.format = 'bz2'
+
+        super().__init__(self.url_blank, protocol = 'ftp', host = url_host)
+        self.credentials = get_credentials(env_variables=self.credential_env_vars, url = url_host)
+
+    def set_product(self, product: str) -> None:
+        self.product = product
+        if product not in self.available_products:
+            raise ValueError(f'Product {product} not available. Choose one of {self.available_products.keys()}')
+        self.ts_per_year = self.available_products[product]["ts_per_year"]
+        self.url_blank = self.available_products[product]["url"]
+        self.nodata = self.available_products[product]["nodata"]
+        self.format = self.available_products[product]["format"]
+
+    def set_variables(self, variables: list) -> None:
+        if self.custom_variables:
+            self.custom_variables = self.find_parents_of_custom_variables(self.custom_variables)
+            parent_variables = []
+            for var in self.custom_variables:
+                parent_variables.extend(self.custom_variables[var]['variables'])
         else:
-            url_blank = None
+            self.custom_variables = None
+            parent_variables = []
 
-        super().__init__(url_blank, protocol = 'ftp', host = url_host)
-        if url_blank is None:
-            self.log.error(" --> ERROR! Only HSAF-h141-daily and HSAF-h14-daily has been implemented until now!")
-            raise NotImplementedError()
+        self.original_variables = variables.copy()
+        variables.extend(parent_variables)
+        variables = np.unique(variables)
 
-        
-        self.nodata = -9999
+        super().set_variables(variables)
 
     def find_parents_of_custom_variables(self, custom_variables: dict) -> dict:
         '''
@@ -95,8 +116,8 @@ class HSAFDownloader(URLDownloader):
             parents[var] = {'variables': [], 'weights': []}
             depth_start, depth_end = custom_variables[var]
             size = depth_end - depth_start
-            for parent_var in self.var_depth:
-                parent_depth_start, parent_depth_end = self.var_depth[parent_var]
+            for parent_var in self.available_variables:
+                parent_depth_start, parent_depth_end = self.available_variables[parent_var]['depth']
                 overlap = min(depth_end, parent_depth_end) - max(depth_start, parent_depth_start)
                 if overlap > 0:
                     parents[var]['variables'].append(parent_var)
@@ -104,120 +125,59 @@ class HSAFDownloader(URLDownloader):
                 
         return parents
 
-    def get_data(self,
-                 time_range: TimeRange,
-                 space_bounds: BoundingBox,
-                 destination: str,
-                 options: Optional[dict] = None) -> None:
+    def _get_data_ts(self,
+                     timestep: TimeStep,
+                     space_bounds: BoundingBox,
+                     tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
+       
+        tmp_filename = f'temp_{self.product}.nc' if self.format == 'nc' else f'temp_{self.product}.grib.bz2'
+        tmp_file = os.path.join(tmp_path, tmp_filename)
 
-        # Check options
-        self.custom_variables = self.find_parents_of_custom_variables(options['custom_variables'])
-        if 'variables' not in options or options['variables'] is None:
-            options['variables'] = []
+        # Download the data
+        success = self.download(tmp_file, timestep = timestep, auth = self.credentials, missing_action = 'ignore', min_size = 500000)
+
+        # if not success
+        if not success:
+            return
         
-        original_vars = options['variables'].copy() # we keep this to know what we actually need to save
-        
-        for var in self.custom_variables:
-            options['variables'].extend(self.custom_variables[var]['variables'])
+        # otherwise
+        if self.format == 'bz2':
+            decompress_bz2(tmp_file)
+            tmp_file = self.remapgrib(tmp_file[:-4])
 
-        options = self.check_options(options)
-        self.cdo_path = options['cdo_path']
-        self.variables = options['variables']
+        file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
 
-        self.log.info(f'------------------------------------------')
-        self.log.info(f'Starting download of {self.product} data')
-        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d} and {time_range.end:%Y-%m-%d}')
-        self.log.info(f'Bounding box: {space_bounds.bbox}')
-        self.log.info(f'------------------------------------------')
+        all_vars = {}
+        for varname, variable in self.variables.items():
+            if variable['alt_name'] in file_handle:
+                var_data = file_handle[variable['alt_name']]
+            elif varname in file_handle:
+                var_data = file_handle[varname]
+            else:
+                return
+            
+            var_data = var_data.where(~np.isclose(var_data, self.nodata, equal_nan=True), np.nan)
+            var_data = var_data.rio.write_nodata(np.nan)
 
-        # Get the timesteps to download
-        timesteps = time_range.get_timesteps_from_tsnumber(self.ts_per_year)
-        self.log.info(f'Found {len(timesteps)} timesteps to download.')
+            var_data = var_data.rio.write_crs(self.spatial_ref)
 
-        credentials = get_credentials(env_variables=self.credential_env_vars,
-                                      url = self.host)
+            cropped = crop_to_bb(src=var_data, BBox=space_bounds)
+            
+            if varname in self.original_variables:
+                yield cropped.squeeze(), {'variable': varname}
+            
+            all_vars[varname] = cropped
 
-        # Download the data for the specified times
-        for i, timestep in enumerate(timesteps):
-            time_now = timestep.start
-            self.log.info(f' - Timestep {i+1}/{len(timesteps)}: {timestep}')
-
-            # Do all of this inside a temporary folder
-            with tempfile.TemporaryDirectory() as tmp_path:
-                tmp_filename = f'temp_{self.product}{time_now:%Y%m%d}.nc' if self.format == 'nc' else f'temp_{self.product}{time_now:%Y%m%d}.grib.bz2'
-                tmp_file = os.path.join(tmp_path, tmp_filename)
-
-                # Download the data
-                success = self.download(tmp_file, time = time_now, auth = credentials, missing_action = 'ignore', min_size = 500000)
-
-                # if not succes
-                if not success:
-                    self.log.info(f'  -> Could not find data for {time_now:%Y-%m-%d}')
-                    continue
-
-                elif success:
-                    # Unzip the data
-                    if self.format == 'bz2':
-                        decompress_bz2(tmp_file)
-                        tmp_file = self.remapgrib(tmp_file[:-4])
-
-                    try:
-                        file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
-                    except Exception as e:
-                        self.log.error(f' --> ERROR! The file {tmp_file} is corrupted')
-                        continue
-
-                    # if present change names swi1, swi2, swi3, swi4 to var40, var41, var42, var43
-                    for var_name in self.variables:
-                        # get the variable name from the mapping
-                        alternative_name = self.variable_mapping[var_name]
-                        # if both var_name and alternative_name are not present in the file then the file is corrupted
-                        if alternative_name in file_handle:
-                            file_handle = file_handle.rename_vars({alternative_name: var_name})
-                        elif var_name not in file_handle:
-                            self.log.error(f' --> ERROR! The variable {var_name} is not present in the file {tmp_file}')
-                            continue
-                    
-                    var_paths = {}
-                    for var_name in self.variables:
-                        if var_name in original_vars:
-                            destination_now = time_now.strftime(destination).replace('{variable}', var_name).replace('{var}', var_name)
-                        else:
-                            tmp_var_name = f'temp_{var_name}_{time_now:%Y%m%d}.tif'
-                            destination_now = os.path.join(tmp_path, tmp_var_name)
-
-                        var_data = file_handle[var_name]
-
-                        # turn self.nodata into np.nan
-                        var_data = var_data.where(var_data != self.nodata, np.nan)
-                        var_data = var_data.rio.write_nodata(np.nan)
-
-                        # assign geoprojection to var_data from space_bounds
-                        var_data = var_data.rio.write_crs(self.spatial_ref)
-
-                        cropped = crop_netcdf(src=var_data, BBox=space_bounds)
-                        save_array_to_tiff(cropped.squeeze(), destination_now)
-                        var_paths[var_name] = destination_now
-
-                    if self.custom_variables is not None:
-                        for custom_var in self.custom_variables:
-                            # calculate the new variable
-                            variables, weights = self.custom_variables[custom_var]['variables'], self.custom_variables[custom_var]['weights']
-                            new_var = sum([rxr.open_rasterio(var_paths[var]) * weight for var, weight in zip(variables, weights)])
-                            
-                            destination_now = time_now.strftime(destination).replace('{variable}', custom_var).replace('{var}', custom_var)
-
-                            save_array_to_tiff(new_var.squeeze(), destination_now)
-
-                    self.log.info(f'  -> SUCCESS! Data for {time_now:%Y-%m-%d} saved to destination folder')
-
-        self.log.info(f'------------------------------------------')
+        if self.custom_variables is not None:
+            for custom_variable in self.custom_variables:
+                variables, weights = self.custom_variables[custom_variable]['variables'], self.custom_variables[custom_variable]['weights']
+                new_var = sum([all_vars[var] * weight for var, weight in zip(variables, weights)])
+                yield new_var.squeeze(), {'variable': custom_variable}
 
     def remapgrib(self, file_path: str) -> str:
         '''
         Remap the grib file to a regular grid.
         '''
-
         cdo_path = self.cdo_path
         
         # if last 3 characters are .bz2 then decompress the file

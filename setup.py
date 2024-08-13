@@ -35,7 +35,9 @@ setup(
         'cdsapi',
         'ftpretty',
         'pandas',
-        'drops2 @ git+https://github.com/CIMAFoundation/drops2.git'
+        'drops2 @ git+https://github.com/CIMAFoundation/drops2.git',
+        'matplotlib',
+        'geopandas'
     ],
     python_requires='>=3.10',
     test_suite='tests',

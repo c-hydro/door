@@ -7,7 +7,8 @@ from urllib.parse import urlparse
 from urllib.request import Request, build_opener, HTTPCookieProcessor, HTTPError
 
 def get_credentials(*, env_variables: Optional[dict] = None,
-                    url: Optional[str] = None, test_url: Optional[str] = None) -> str:
+                    url: Optional[str] = None, test_url: Optional[str] = None,
+                    encode = True) -> str:
 
     # Check if credentials are provided in the environment variables
     credentials = get_credentials_from_env(env_variables)
@@ -19,7 +20,8 @@ def get_credentials(*, env_variables: Optional[dict] = None,
     if credentials is None:
         raise RuntimeError(f'No credentials provided, either provide them as environment variables {env_variables.values()} or in the netrc file')
     
-    credentials = base64.b64encode(credentials.encode('ascii')).decode('ascii')
+    if encode:
+        credentials = base64.b64encode(credentials.encode('ascii')).decode('ascii')
     if test_url:
         test_credentials(credentials, test_url)
 
