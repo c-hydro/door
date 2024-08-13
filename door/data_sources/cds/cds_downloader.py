@@ -7,7 +7,7 @@ class CDSDownloader(APIDownloader):
 
     name = "CDS_downloader"
     apikey_env_vars = 'CDSAPI_KEY' # this should be in the form UID:API_KEY already
-    cds_url = 'https://cds.climate.copernicus.eu/api/v2'
+    cds_url = 'https://cds-beta.climate.copernicus.eu/api'
 
     def __init__(self, dataset) -> None:
 
