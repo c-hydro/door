@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Iterable
 import logging
 from abc import ABC, abstractmethod
 
@@ -58,7 +58,7 @@ class DOORDownloader(ABC):
                     destination.write_data(data, timestep, **tags)
 
     @abstractmethod
-    def _get_data_ts(self, time_range: TimeStep, space_bounds: BoundingBox) -> list[tuple[xr.DataArray, dict]]:
+    def _get_data_ts(self, time_range: TimeStep, space_bounds: BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:
         """
         Get data from this downloader as xr.Dataset.
         The return structure is a list of tuples, where each tuple contains the data and a dictionary of tags related to that data.
