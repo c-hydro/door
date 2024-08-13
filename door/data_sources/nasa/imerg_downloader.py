@@ -1,13 +1,16 @@
 import os
-from typing import Optional
+from typing import Optional, Iterable
 from osgeo import gdal
 import tempfile
 import rioxarray
+import xarray as xr
 
 import gzip
 import netrc
 import shutil
 import datetime as dt
+
+from door.tools.timestepping.timestep import TimeStep
 
 from ...base_downloaders import URLDownloader
 from ...utils.space import BoundingBox, crop_to_bb
@@ -44,7 +47,10 @@ class IMERGDownloader(URLDownloader):
             raise NotImplementedError()
         
         self.nodata = -9999
-            
+    
+    def _get_data_ts(self, time_range: TimeStep, space_bounds: BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:
+        pass
+
     def get_data(self,
                  time_range: TimeRange,
                  space_bounds: BoundingBox,
