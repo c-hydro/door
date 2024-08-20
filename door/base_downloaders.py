@@ -1,6 +1,6 @@
 from typing import Optional, Iterable
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 
 import tempfile
 import xarray as xr
@@ -13,7 +13,15 @@ from .tools import timestepping as ts
 from .tools.timestepping.timestep import TimeStep
 from .tools.data import Dataset
 
-class DOORDownloader(ABC):
+class MetaDOORDownloader(ABCMeta):
+    def __init__(cls, name, bases, attrs):
+        super().__init__(name, bases, attrs)
+        if not hasattr(cls, 'subclasses'):
+            cls.subclasses = {}
+        elif 'source' in attrs:
+            cls.subclasses[attrs['source']] = cls
+
+class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
     """
     Base class for all DOOR downloaders.
     """
@@ -23,6 +31,34 @@ class DOORDownloader(ABC):
 
     def __init__(self) -> None:
         self.log = logging.getLogger(self.name)
+
+    ## CLASS METHODS FOR FACTORY
+    @classmethod
+    def from_options(cls, source: dict|str, *args, **kwargs) -> 'Dataset':
+        if isinstance(source, dict):
+            options = source
+            options.update(kwargs)
+            source = options.pop('source', None)
+        else:
+            options = kwargs
+        source = cls.get_source(source)
+        Subclass: 'Dataset' = cls.get_subclass(source)
+        return Subclass(*args, **kwargs)
+
+    @classmethod
+    def get_subclass(cls, source: str):
+        source = cls.get_source(source)
+        Subclass: 'Dataset'|None = cls.subclasses.get(source)
+        if Subclass is None:
+            raise ValueError(f"Invalid data source: {source}")
+        return Subclass
+    
+    @classmethod
+    def get_source(cls, source: Optional[str] = None):
+        if source is not None:
+            return source
+        elif hasattr(cls, 'source'):
+            return cls.source
 
     def get_data(self,
                  time_range: ts.TimeRange,
@@ -262,8 +298,4 @@ class APIDownloader(DOORDownloader):
     def retrieve(self, **kwargs):
         return self.client.retrieve(**kwargs)
 
-
-
-
-
-
+Downloader = DOORDownloader
