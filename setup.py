@@ -6,7 +6,7 @@ gdalconfig_version = check_output('gdal-config --version', shell=True).decode('u
 
 setup(
     name='door',
-    version='0.1',
+    version='2.1.1',
     packages=find_packages(),
     description='A package for operational retrieval of raster data from different sources',
     author='Luca Trotter',
