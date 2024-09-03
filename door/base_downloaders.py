@@ -1,6 +1,6 @@
 from typing import Optional, Iterable
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 
 import tempfile
 import xarray as xr
@@ -13,7 +13,15 @@ from .tools import timestepping as ts
 from .tools.timestepping.timestep import TimeStep
 from .tools.data import Dataset
 
-class DOORDownloader(ABC):
+class MetaDOORDownloader(ABCMeta):
+    def __init__(cls, name, bases, attrs):
+        super().__init__(name, bases, attrs)
+        if not hasattr(cls, 'subclasses'):
+            cls.subclasses = {}
+        elif 'source' in attrs:
+            cls.subclasses[attrs['source']] = cls
+
+class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
     """
     Base class for all DOOR downloaders.
     """
@@ -24,24 +32,97 @@ class DOORDownloader(ABC):
     def __init__(self) -> None:
         self.log = logging.getLogger(self.name)
 
-    def get_data(self,
-                 time_range: ts.TimeRange,
-                 space_bounds:  BoundingBox,
-                 destination: Dataset|dict|str,
-                 options:  Optional[dict] = None) -> None:
-        """
-        Get data from this downloader and saves it to a file
-        """
-        # get options and check them against the default options
-        self.set_options(options)
+    ## CLASS METHODS FOR FACTORY
+    @classmethod
+    def from_options(cls, source: dict|str, *args, **kwargs) -> 'Dataset':
+        if isinstance(source, dict):
+            init_options = source
+            init_options.update(kwargs)
+            source = init_options.pop('source', None)
+        else:
+            init_options = kwargs
+        source = cls.get_source(source)
+        Subclass: 'Dataset' = cls.get_subclass(source)
 
-        # ensure destination is a Dataset
-        if isinstance(destination, str):
+        bdo = {}
+        bdo['bounds'] = init_options.pop('bounds', None)
+        bdo['destination'] = init_options.pop('destination', None)
+        bdo['options'] = init_options.pop('options', {})
+        
+        downloader = Subclass(*args, **init_options)
+        downloader.set_bounds(bdo['bounds'])
+        downloader.set_destination(bdo['destination'])
+        downloader.set_options(bdo['options'])
+
+        return downloader
+
+    @classmethod
+    def get_subclass(cls, source: str):
+        source = cls.get_source(source)
+        Subclass: 'Dataset'|None = cls.subclasses.get(source)
+        if Subclass is None:
+            raise ValueError(f"Invalid data source: {source}")
+        return Subclass
+    
+    @classmethod
+    def get_source(cls, source: Optional[str] = None):
+        if source is not None:
+            return source
+        elif hasattr(cls, 'source'):
+            return cls.source
+
+    def set_bounds(self, bounds: None|BoundingBox|list[float]|tuple[float]) -> None:
+        """
+        Set the bounds of the data to download.
+        """
+        if bounds is None:
+            return
+        elif isinstance(bounds, (list, tuple)):
+            bounds = BoundingBox(*bounds)
+        
+        self.bounds = bounds
+
+    def set_destination(self, destination: Dataset|dict|str|None) -> None:
+        """
+        Set the destination of the data to download.
+        """
+        if destination is None:
+            return
+        elif isinstance(destination, str):
             path = os.path.dirname(destination)
             filename = os.path.basename(destination)
             destination = Dataset.from_options({'path': path, 'filename': filename})
         elif isinstance(destination, dict):
             destination = Dataset.from_options(destination)
+        
+        self.destination = destination
+
+    def get_data(self,
+                 time_range: ts.TimeRange,
+                 space_bounds:  Optional[BoundingBox] = None,
+                 destination: Optional[Dataset|dict|str] = None,
+                 options:  Optional[dict] = None) -> None:
+        """
+        Get data from this downloader and saves it to a file
+        """
+        # get options and check them against the default options
+        if options is not None: 
+            self.set_options(options)
+
+        # set the space bounds
+        if space_bounds is None:
+            if hasattr(self, 'bounds'):
+                space_bounds = self.bounds
+            else:
+                raise ValueError('No space bounds specified')
+            
+        if destination is not None:
+            self.set_destination(destination)
+        
+        if hasattr(self, 'destination'):
+            destination = self.destination
+        else:
+            raise ValueError('No destination specified')
         
         # get the timesteps to download
         timesteps = self._get_timesteps(time_range)
@@ -262,8 +343,4 @@ class APIDownloader(DOORDownloader):
     def retrieve(self, **kwargs):
         return self.client.retrieve(**kwargs)
 
-
-
-
-
-
+Downloader = DOORDownloader

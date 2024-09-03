@@ -6,7 +6,7 @@ gdalconfig_version = check_output('gdal-config --version', shell=True).decode('u
 
 setup(
     name='door',
-    version='2.1.1',
+    version='2.2.0-alpha',
     packages=find_packages(),
     description='A package for operational retrieval of raster data from different sources',
     author='Luca Trotter',
@@ -38,6 +38,7 @@ setup(
         'drops2 @ git+https://github.com/CIMAFoundation/drops2.git',
         'matplotlib',
         'geopandas'
+        'boto3'
     ],
     python_requires='>=3.10',
     test_suite='tests',
