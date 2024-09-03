@@ -36,14 +36,25 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
     @classmethod
     def from_options(cls, source: dict|str, *args, **kwargs) -> 'Dataset':
         if isinstance(source, dict):
-            options = source
-            options.update(kwargs)
-            source = options.pop('source', None)
+            init_options = source
+            init_options.update(kwargs)
+            source = init_options.pop('source', None)
         else:
-            options = kwargs
+            init_options = kwargs
         source = cls.get_source(source)
         Subclass: 'Dataset' = cls.get_subclass(source)
-        return Subclass(*args, **kwargs)
+
+        bdo = {}
+        bdo['bounds'] = init_options.pop('bounds', None)
+        bdo['destination'] = init_options.pop('destination', None)
+        bdo['options'] = init_options.pop('options', {})
+        
+        downloader = Subclass(*args, **init_options)
+        downloader.set_bounds(bdo['bounds'])
+        downloader.set_destination(bdo['destination'])
+        downloader.set_options(bdo['options'])
+
+        return downloader
 
     @classmethod
     def get_subclass(cls, source: str):
@@ -60,24 +71,58 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         elif hasattr(cls, 'source'):
             return cls.source
 
-    def get_data(self,
-                 time_range: ts.TimeRange,
-                 space_bounds:  BoundingBox,
-                 destination: Dataset|dict|str,
-                 options:  Optional[dict] = None) -> None:
+    def set_bounds(self, bounds: None|BoundingBox|list[float]|tuple[float]) -> None:
         """
-        Get data from this downloader and saves it to a file
+        Set the bounds of the data to download.
         """
-        # get options and check them against the default options
-        self.set_options(options)
+        if bounds is None:
+            return
+        elif isinstance(bounds, (list, tuple)):
+            bounds = BoundingBox(*bounds)
+        
+        self.bounds = bounds
 
-        # ensure destination is a Dataset
-        if isinstance(destination, str):
+    def set_destination(self, destination: Dataset|dict|str|None) -> None:
+        """
+        Set the destination of the data to download.
+        """
+        if destination is None:
+            return
+        elif isinstance(destination, str):
             path = os.path.dirname(destination)
             filename = os.path.basename(destination)
             destination = Dataset.from_options({'path': path, 'filename': filename})
         elif isinstance(destination, dict):
             destination = Dataset.from_options(destination)
+        
+        self.destination = destination
+
+    def get_data(self,
+                 time_range: ts.TimeRange,
+                 space_bounds:  Optional[BoundingBox] = None,
+                 destination: Optional[Dataset|dict|str] = None,
+                 options:  Optional[dict] = None) -> None:
+        """
+        Get data from this downloader and saves it to a file
+        """
+        # get options and check them against the default options
+        if options is not None: 
+            self.set_options(options)
+
+        # set the space bounds
+        if space_bounds is None:
+            if hasattr(self, 'bounds'):
+                space_bounds = self.bounds
+            else:
+                raise ValueError('No space bounds specified')
+            
+        if destination is not None:
+            self.set_destination(destination)
+        
+        if hasattr(self, 'destination'):
+            destination = self.destination
+        else:
+            raise ValueError('No destination specified')
         
         # get the timesteps to download
         timesteps = self._get_timesteps(time_range)
