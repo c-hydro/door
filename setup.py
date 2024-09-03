@@ -37,7 +37,7 @@ setup(
         'pandas',
         'drops2 @ git+https://github.com/CIMAFoundation/drops2.git',
         'matplotlib',
-        'geopandas'
+        'geopandas',
         'boto3'
     ],
     python_requires='>=3.10',
