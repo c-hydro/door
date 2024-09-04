@@ -6,9 +6,8 @@ import json
 import itertools
 import sys
 import numpy as np
-from datetime import datetime, timedelta
-
-from osgeo import gdal
+from datetime import datetime
+from typing import Optional
 
 from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
@@ -71,11 +70,27 @@ class CMRDownloader(DOORDownloader):
         
         return self.credentials
 
-    def get_last_published_ts(self, bounds: BoundingBox = BoundingBox(-180, -90, 180, 90), expected_tiles: int = 1) -> ts.TimeRange:
+    def get_last_published_ts(self,
+                              bounds: Optional[BoundingBox] = None,
+                              expected_tiles: Optional[int] = None) -> ts.TimeRange:
+        
         """
         Get the last published date for the dataset.
         """
-        #global_bounds = BoundingBox(-180, -90, 180, 90)
+        # get the space bounds
+        if bounds is None:
+            if hasattr(self, 'bounds'):
+                bounds = self.bounds
+            else:
+                raise ValueError('No space bounds specified')
+            
+        # get the number of tiles
+        if expected_tiles is None:
+            if hasattr(self, 'destination'):
+                expected_tiles = self.destination.ntiles
+            else:
+                raise ValueError('No expected number of tiles specified')
+        
         now = datetime.now()
         all_times = ts.TimeRange(self.start, now)
         all_timesteps = self._get_timesteps(all_times)
