@@ -3,7 +3,7 @@
     "flags": {
       "downloading_mp": true,
       "clean_dynamic_data_ancillary": true,
-      "regrid_with_map": true,
+      "regrid_with_map": false,
       "crop_with_bounding_box": false,
       "fill_with_preliminary_version": true
     },

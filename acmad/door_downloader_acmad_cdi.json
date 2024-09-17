@@ -1,8 +1,7 @@
 {
   "algorithm": {
     "flags": {
-      "overwrite_output": true,
-      "fill_with_preliminary_version": true
+      "overwrite_output": false
     },
     "ancillary": {
       "domain": "acmad",

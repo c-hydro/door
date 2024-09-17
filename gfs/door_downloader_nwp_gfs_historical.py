@@ -113,7 +113,7 @@ def main():
     logging.info(' ---> Connect to UCAR archive...')
     session_manager.set_session_options(auth=(UCARuser, UCARpwd))
     archiveFrc = TDSCatalog(
-        'https://rda.ucar.edu/thredds/catalog/files/g/ds084.1/' + timeRun.strftime('%Y') + '/' + timeRun.strftime(
+        'https://thredds.rda.ucar.edu/thredds/catalog/files/g/ds084.1/' + timeRun.strftime('%Y') + '/' + timeRun.strftime(
             '%Y%m%d') + '/catalog.xml')
     listFrc = [i for i in list(archiveFrc.datasets.values()) if timeRun.strftime('%Y%m%d%H') in i.name and  int(i.name[-9:-6])<=data_settings["data"]["dynamic"]["time"]["time_forecast_period"]]
     outVarName = [varGFS for varHMC in variables.keys() for varGFS in variables[varHMC]]

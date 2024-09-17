@@ -313,16 +313,17 @@ def main():
 # Function for download IMERG Early Run
 def dload_early_run(time_now, downloader_settings):
     global missing_steps_early
-    # versioning of 07 imerg final
-    if time_now <= dt.datetime(2024,4,30,23,30,0):
-        vers = "07B"
-    elif time_now <= dt.datetime(2024, 5, 31, 23, 00, 0):
-        vers = "06E"
-        logging.warning(" WARNING! " + time_now.strftime("%Y-%m-%d %H:%M") + "... Still available only as v06E")
+    # versioning of 06 imerg final
+    if time_now <= dt.datetime(2022,5,9,1,30,0):
+        vers = "06B"
+    elif time_now <= dt.datetime(2023,7,1,23,30,0):
+        vers = "06C"
+    elif time_now <= dt.datetime(2023, 11, 8, 12, 30, 0):
+        vers = "06D"
     else:
-        vers = "07B"
+        vers = "06E"
 
-    url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/early/' + time_now.strftime("%Y/%m") + '/' + \
+    url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/early/V06/' + time_now.strftime("%Y/%m") + '/' + \
           '3B-HHR-E.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
           '-S' + time_now.strftime("%H%M%S") + \
           '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
@@ -352,33 +353,21 @@ def dload_late_run(time_now,downloader_settings):
     global missing_steps_late
 
     # versioning of 06 imerg late
-    if time_now <= dt.datetime(2024,4,30,23,30,0):
-        vers = "07B"
-        url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/' + time_now.strftime("%Y/%m") + '/' + \
-              '3B-HHR-L.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
-              '-S' + time_now.strftime("%H%M%S") + \
-              '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
-              '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(
-            4) + '.V' + vers + '.30min.tif'
-    elif time_now <= dt.datetime(2024, 5, 31, 23, 00, 0):
-        vers = "06E"
-        url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/' + time_now.strftime("%Y") + '/V06/' + time_now.strftime("%m") +  \
-              '3B-HHR-L.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
-              '-S' + time_now.strftime("%H%M%S") + \
-              '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
-              '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(
-            4) + '.V' + vers + '.30min.tif'
-        logging.warning(" WARNING! " + time_now.strftime("%Y-%m-%d %H:%M") + "... Still available only as v06E")
+    if time_now <= dt.datetime(2022,5,8,15,30,0):
+        vers = "06B"
+    elif time_now <= dt.datetime(2023,7,1,13,30,0):
+        vers = "06C"
+    elif time_now <= dt.datetime(2023, 11, 8, 1, 30, 0):
+        vers = "06D"
     else:
-        vers = "07B"
-        url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/' + time_now.strftime("%Y/%m") + '/' + \
-              '3B-HHR-L.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
-              '-S' + time_now.strftime("%H%M%S") + \
-              '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
-              '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(
-            4) + '.V' + vers + '.30min.tif'
+        vers = "06E"
 
-
+    url = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/' + time_now.strftime("%Y/%m") + '/' + \
+          '3B-HHR-L.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
+          '-S' + time_now.strftime("%H%M%S") + \
+          '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \
+          '.' + str(int((time_now - time_now.replace(hour=0, minute=0)).total_seconds() / 60.0)).zfill(
+        4) + '.V' + vers  + '.30min.tif'
     ancillary_filename = os.path.join(downloader_settings["ancillary_path"], url.split('/')[-1])
     with requests.get(url, auth=(downloader_settings["early_late_user"], downloader_settings["early_late_pwd"])) as r:
         if r.status_code == 404:
@@ -401,7 +390,7 @@ def dload_late_run(time_now,downloader_settings):
 # Function for download IMERG Final Run
 def dload_final_run(time_now, downloader_settings):
     global missing_steps_final
-    url = 'https://arthurhouhttps.pps.eosdis.nasa.gov/gpmdata/' + time_now.strftime("%Y/%m/%d") + '/gis/' + \
+    url = 'https://arthurhouhttps.pps.eosdis.nasa.gov/gpmallversions/V06/' + time_now.strftime("%Y/%m/%d") + '/gis/' + \
           '3B-HHR-GIS.MS.MRG.3IMERG.' + time_now.strftime("%Y%m%d") + \
           '-S' + time_now.strftime("%H%M%S") + \
           '-E' + (time_now + pd.Timedelta("+ 29 min + 59 sec")).strftime("%H%M%S") + \

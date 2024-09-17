@@ -44,11 +44,11 @@
       },
       "outcome": {
         "folder": "/home/andrea/Desktop/Working_dir/meteo/ecmwf/outcome/{outcome_datetime}",
-        "filename": "{filename_datetime}_ecmwf0p4-{domain}.nc"
+        "filename": "{filename_datetime}_ecmwf0p25-{domain}.nc"
       },
       "ancillary": {
         "folder": "/home/andrea/Desktop/Working_dir/meteo/ecmwf/ancillary/{ancillary_datetime}",
-        "filename": "{filename_datetime}_ecmwf0p4-{domain}.grib2"
+        "filename": "{filename_datetime}_ecmwf0p25-{domain}.grib2"
       }
     },
     "log": {

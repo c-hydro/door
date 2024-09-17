@@ -2,8 +2,8 @@
 """
 door - NWP GFS 0.25 OPeNDAP
 
-__date__ = '20230630'
-__version__ = '1.0.1'
+__date__ = '20240527'
+__version__ = '1.0.2'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'door'
@@ -12,6 +12,7 @@ General command line:
 python3 door_downloader_nwp_gfs_opendap.py -settings_file configuration.json -time YYYY-MM-DD HH:MM
 
 Version(s):
+20240527 (1.0.2) --> Add final check for all nan values in the downloaded file
 20230630 (1.0.1) --> Fixed longitude value for georeferenced plot
 20220512 (1.0.0) --> Beta release
 """
@@ -38,8 +39,8 @@ from math import floor, ceil
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - NWP GFS - OPeNDAP'
-alg_version = '1.0.1'
-alg_release = '2023-06-30'
+alg_version = '1.0.2'
+alg_release = '2024-05-27'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -186,6 +187,13 @@ def main():
 
     logging.info(" ---> Rename variables and save...")
     outcome_file = os.path.join(outcome_fld, data_settings["data"]["outcome"]["filename"]).format(**template_filled)
+    logging.info(" ---> Check for all nan variables in the downloaded file...")
+    for var in ds_sub.keys():
+        if np.isnan(ds_sub[var]).all():
+            logging.error("ERROR! " + var + " is composed of only nan values! Something was wrong in the download")
+            raise ValueError
+        else:
+            logging.info(" ---> Check for all nan variables in the downloaded file...DONE! File is OK!")
     ds_sub.rename(data_settings['data']['dynamic']["variables"]).to_netcdf(outcome_file)
     os.remove(ancillary_file)
     logging.info(" ---> Rename variables and save...DONE")
