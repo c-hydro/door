@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 
 """
-door - Download ECMWF open data High Resolution (0.4 degree) single run
+door - Download ECMWF open data High Resolution (0.25 degree) single run
 
-__date__ = '20230923'
-__version__ = '1.1.0'
+__date__ = '20240313'
+__version__ = '2.0.0'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'door'
@@ -13,6 +13,7 @@ General command line:
 python3 door_downloader_ecmwf_opendata_single_hires.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
+20240313 (2.0.0) --> Update to new 0.25 resoulution
 20230923 (1.1.0) --> Fix flipped latitude, removes unused dimensions from output
 20230731 (1.0.0) --> Beta release
 """
@@ -39,15 +40,12 @@ from requests.exceptions import HTTPError
 
 # -------------------------------------------------------------------------------------
 # Algorithm information
-alg_name = 'DOOR - ECMWF open data SINGLE RUN 0.4'
-alg_version = '1.1.0'
-alg_release = '2023-09-23'
+alg_name = 'DOOR - ECMWF open data SINGLE RUN 0.25'
+alg_version = '2.0.0'
+alg_release = '2024-03-13'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
-
-
 # -------------------------------------------------------------------------------------
-
 
 # -------------------------------------------------------------------------------------
 # Script Main
@@ -119,7 +117,8 @@ def main():
     # Setup client
     client = Client(
         source="ecmwf",
-        beta=True,
+        model="ifs",
+        resol="0p25",
         preserve_request_order=False,
         infer_stream_keyword=True,
     )

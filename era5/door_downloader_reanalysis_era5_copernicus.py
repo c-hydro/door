@@ -225,7 +225,7 @@ def cds_download(month, download_info):
 
     df_forcing = df_forcing.rename({"ssrd": "downward_radiation"})
     df_forcing['downward_radiation'] = df_forcing['downward_radiation']/3600
-    df_forcing.downward_radiation.attrs["units"] = 'W m**-2'
+    df_forcing.downward_radiation.attrs["units"] = 'W m **-2'
 
     df_forcing = df_forcing.drop_vars(['v10', 'u10', 't2m', 'd2m', 'tp'])
 

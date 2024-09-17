@@ -3,8 +3,8 @@
 """
 HyDE Downloading Tool - NWP GEFS 0.25
 
-__date__ = '20210914'
-__version__ = '1.0.0'
+__date__ = '20240524'
+__version__ = '1.0.2'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
         'Fabio Delogu (fabio.delogu@cimafoundation.org',
@@ -14,6 +14,7 @@ General command line:
 python3 hyde_downloader_nwp_gefs_nomads.py -settings_file configuration.json -time YYYY-MM-DD HH:MM
 
 Version(s):
+20240524 (1.0.2) --> Fix request issues
 20200227 (1.0.0) --> Beta release
 """
 # -------------------------------------------------------------------------------------
@@ -21,10 +22,12 @@ Version(s):
 # -------------------------------------------------------------------------------------
 # Complete library
 import logging
+import socket
 import os
 import time
 import json
 import urllib.request
+import requests
 import tempfile
 import xarray as xr
 
@@ -46,8 +49,8 @@ from argparse import ArgumentParser
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'HYDE DOWNLOADING TOOL - NWP GEFS'
-alg_version = '1.0.0'
-alg_release = '2021-09-14'
+alg_version = '1.0.2'
+alg_release = '2024-05-24'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -566,10 +569,23 @@ def request_data_source(data_list):
     logging.info(' :: Outcome data will be dumped in: ' + split(data_list[1])[1] + ' ... ')
 
     try:
-        urllib.request.urlretrieve(data_list[0], filename=data_list[1])
+        request = requests.get(data_list[0], timeout=200, stream=True)
+        with open(data_list[1], 'wb') as fh:
+            fh.write(request.content)
+        if os.path.getsize(data_list[1]) < 1000:
+            request = requests.get(data_list[0], timeout=1000, stream=True)
+            with open(data_list[1], 'wb') as fh:
+                fh.write(request.content)
+            if os.path.getsize(data_list[1]) < 1000:
+                raise FileNotFoundError("ERROR! File : " + data_list[1] + " is too small!")
+        #urllib.request.urlretrieve(data_list[0], filename=data_list[1])
         logging.info(' :: Outcome data will be dumped in: ' + split(data_list[1])[1] + ' ... DONE')
         logging.info(' :: Http request for downloading: ' + data_list[0] + ' ... DONE')
         return True
+    except FileNotFoundError:
+        logging.warning(' :: Outcome data will be dumped in: ' + split(data_list[1])[1] + ' ... FAILED')
+        logging.error(' :: Http request for downloading: ' + data_list[0] + ' ... FAILED. IO error.')
+        raise FileNotFoundError(' :: Http request for downloading: ' + data_list[0] + ' ... FAILED. Downloaded data is too small.')
     except IOError:
         logging.warning(' :: Outcome data will be dumped in: ' + split(data_list[1])[1] + ' ... FAILED')
         logging.error(' :: Http request for downloading: ' + data_list[0] + ' ... FAILED. IO error.')

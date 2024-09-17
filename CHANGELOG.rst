@@ -2,16 +2,6 @@
 Changelog
 =========
 
-Version 1.1.4 [2024-01-15]
-**************************
-APP: **door_downloader_hsaf_h60.sh**
-	- Add the script mode "realtime" and "history"
-	- Fix cycles over days and hours
-
-APP: **door_downloader_hsaf_h61.sh**
-	- Add the script mode "realtime" and "history"
-	- Fix cycles over days and hours
-
 Version 1.1.3 [2024-01-09]
 **************************
 APP: **door_downloader_acmad_cdi.py**

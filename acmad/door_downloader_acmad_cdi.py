@@ -4,7 +4,7 @@
 door Tool - ACFRICA CDI ACMAD
 
 __date__ = '20220705'
-__version__ = '1.0.0'
+__version__ = '1.0.2'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
         'Alessandro Masoero (alessandro.masoero@cimafoundation.org'
@@ -14,6 +14,8 @@ General command line:
 python3 door_downloader_satellite_chirps.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
+20230307 (1.0.2) --> Fix download of data when effectively available
+20230214 (1.0.1) --> Fix download of data without FAPAR
 20220705 (1.0.0) --> Beta release
 """
 # -------------------------------------------------------------------------------------
@@ -129,6 +131,24 @@ def main():
 
     # -------------------------------------------------------------------------------------
     # Download
+    if str(date_ref.year) in available_datasets.keys():
+        # If it's last month, I check if the reference dekad has been computed
+        if date_ref.strftime("%m") == available_datasets[str(date_ref.year)]["months"][-1]:
+            if str(date_ref.day) in available_datasets[str(date_ref.year)]["dekads"]:
+                logging.info(" --> File available on server")
+            else:
+                logging.error(" --> File not available yet on server")
+                raise FileNotFoundError()
+        # If I am not in the last month all the dekads should be available
+        elif date_ref.strftime("%m") in available_datasets[str(date_ref.year)]["months"]:
+            logging.info(" --> File available on server")
+        else:
+             logging.error(" --> File not available on server")
+             raise FileNotFoundError()
+    else:
+        logging.error(" --> File not available on server")
+        raise FileNotFoundError()
+
     logging.info(" --> Download the data from remote server")
 
     logging.info(" --> Setup connection")

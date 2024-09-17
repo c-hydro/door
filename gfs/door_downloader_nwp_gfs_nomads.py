@@ -3,8 +3,8 @@
 """
 HyDE Downloading Tool - NWP GFS 0.25
 
-__date__ = '20200428'
-__version__ = '2.0.0'
+__date__ = '20240524'
+__version__ = '2.0.1'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
         'Fabio Delogu (fabio.delogu@cimafoundation.org',
@@ -15,6 +15,7 @@ General command line:
 python3 hyde_downloader_nwp_gfs_nomads.py -settings_file configuration.json -time YYYY-MM-DD HH:MM
 
 Version(s):
+20240521 (2.0.1) --> Change request function for avoid timeout error
 20210428 (2.0.0) --> Add hit per minute limit for new NOAA policy compatibility
                      Fix time step problems. Modified output format for decreasing number of hits to the server.
 20200325 (1.8.0) --> Fix time accumulation for Continuum forcing compatibility
@@ -39,7 +40,7 @@ Version(s):
 import logging
 import os
 import time
-import json
+import json, requests
 import urllib.request
 import tempfile
 import xarray as xr
@@ -62,8 +63,8 @@ from argparse import ArgumentParser
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'HYDE DOWNLOADING TOOL - NWP GFS'
-alg_version = '2.0.0'
-alg_release = '2021-04-28'
+alg_version = '2.0.1'
+alg_release = '2024-05-24'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -395,6 +396,12 @@ def arrange_data_outcome(src_data, dst_data_global, dst_data_domain,
                     except:
                         pass
 
+                    try:
+                        out_file = out_file.squeeze(dim="reftime", drop=True)
+                        logging.info(' ------> Remove reftime dimensions ... ')
+                    except:
+                        pass
+
                     # Reindex time axis by padding last available map over the time range
                     out_file=out_file.reindex(time=data_range, method='nearest')
                     out_file.to_netcdf(dst_data_global_step)
@@ -567,10 +574,23 @@ def request_data_source(data_list):
     logging.info(' :: Outcome data will be dumped in: ' + split(data_list[1])[1] + ' ... ')
 
     try:
-        urllib.request.urlretrieve(data_list[0], filename=data_list[1])
+        request = requests.get(data_list[0], timeout=200, stream=True)
+        with open(data_list[1], 'wb') as fh:
+            fh.write(request.content)
+        if os.path.getsize(data_list[1]) < 1000:
+            request = requests.get(data_list[0], timeout=1000, stream=True)
+            with open(data_list[1], 'wb') as fh:
+                fh.write(request.content)
+            if os.path.getsize(data_list[1]) < 1000:
+                raise FileNotFoundError("ERROR! File : " + data_list[1] + " is too small!")
+        #urllib.request.urlretrieve(data_list[0], filename=data_list[1])
         logging.info(' :: Outcome data will be dumped in: ' + split(data_list[1])[1] + ' ... DONE')
         logging.info(' :: Http request for downloading: ' + data_list[0] + ' ... DONE')
         return True
+    except FileNotFoundError:
+        logging.warning(' :: Outcome data will be dumped in: ' + split(data_list[1])[1] + ' ... FAILED')
+        logging.error(' :: Http request for downloading: ' + data_list[0] + ' ... FAILED. IO error.')
+        raise FileNotFoundError(' :: Http request for downloading: ' + data_list[0] + ' ... FAILED. Downloaded data is too small.')
     except IOError:
         logging.warning(' :: Outcome data will be dumped in: ' + split(data_list[1])[1] + ' ... FAILED')
         logging.error(' :: Http request for downloading: ' + data_list[0] + ' ... FAILED. IO error.')
