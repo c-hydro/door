@@ -9,6 +9,7 @@ from ...utils.space import BoundingBox
 
 from ...tools import timestepping as ts
 from ...tools.timestepping.timestep import TimeStep
+from ...tools.timestepping.fixed_num_timestep import FixedNTimeStep
 
 class ERA5Downloader(CDSDownloader):
 
@@ -152,7 +153,28 @@ class ERA5Downloader(CDSDownloader):
         }
 
         return request
+    
+    def get_last_published_ts(self, ts_per_year = None, **kwargs) -> ts.TimeRange:
+        
+        """
+        Get the last published date for the dataset.
+        """
+        if ts_per_year is None:
+            ts_per_year = self.ts_per_year
 
+        # get the last published timestep
+        last_published = self.get_last_published_date()
+        if ts_per_year == 365:
+            TimeStep = ts.Day
+        else:
+            TimeStep = FixedNTimeStep.get_subclass(ts_per_year)
+        return TimeStep.from_date(last_published + dt.timedelta(days=1)) - 1
+
+    def get_last_published_date(self, **kwargs) -> dt.datetime:
+        now = dt.datetime.now()
+        now = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return now - dt.timedelta(days=6)
+         
     def _get_data_ts(self,
                      timestep: TimeStep,
                      space_bounds: BoundingBox,

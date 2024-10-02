@@ -2,9 +2,13 @@ import os
 from typing import Generator
 import numpy as np
 import xarray as xr
+import datetime as dt
+import requests
 
 from ...base_downloaders import URLDownloader
+from ...tools import timestepping as ts
 from ...tools.timestepping.timestep import TimeStep
+from ...tools.timestepping.fixed_num_timestep import FixedNTimeStep
 
 from ...utils.space import BoundingBox, crop_to_bb
 from ...utils.io import decompress_gz
@@ -63,6 +67,42 @@ class CHIRPSDownloader(URLDownloader):
         self.url_prelim_blank = self.available_products[product]["prelim_url"]
         self.nodata = self.available_products[product]["nodata"]
         self.prelim_nodata = self.available_products[product]["prelim_nodata"]
+
+    def get_last_published_ts(self, prelim = None, product = None, **kwargs) -> ts.TimeRange:
+        
+        """
+        Get the last published date for the dataset.
+        """
+        if prelim is None:
+            prelim = self.get_prelim
+        
+        if product is None:
+            product = self.product
+
+        ts_per_year = self.available_products[product]["ts_per_year"]
+        url = self.available_products[product]["url"] if not prelim else self.available_products[product]["prelim_url"]
+
+        if ts_per_year == 365:
+            TimeStep = ts.Day
+        else:
+            TimeStep = FixedNTimeStep.get_subclass(ts_per_year)
+
+        current_timestep = TimeStep.from_date(dt.datetime.now())
+        while True:
+            current_url = url.format(timestep = current_timestep)
+            
+            # send a request to the url
+            response = requests.head(current_url)
+
+            # if the request is successful, the last published timestep is the current timestep
+            if response.status_code == 200:
+                return current_timestep
+            
+            # if the request is not successful, move to the previous timestep
+            current_timestep -= 1
+
+    def get_last_published_date(self, **kwargs) -> dt.datetime:
+        return self.get_last_published_ts(**kwargs).end
 
     def _get_data_ts(self,
                      timestep: TimeStep,
