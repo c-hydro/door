@@ -273,22 +273,26 @@ class ERA5Downloader(CDSDownloader):
                 timestep_start = agg_timestep.start
                 timestep_end   = agg_timestep.end
 
+                # filter data to the aggregation timestep
+                inrange = (vardata.time.dt.date >= timestep_start.date()) & (vardata.time.dt.date <= timestep_end.date())
+                vardata_ts = vardata.sel(time = inrange)
+
                 # add start and end time as attributes
-                vardata.attrs['start_time'] = timestep_start
-                vardata.attrs['end_time'] = timestep_end
+                vardata_ts.attrs['start_time'] = timestep_start
+                vardata_ts.attrs['end_time'] = timestep_end
 
                 # do the necessary aggregations:
                 for agg in varopts['agg_method']:
 
-                    vardata.attrs['agg_function'] = agg
+                    vardata_ts.attrs['agg_function'] = agg
                     if agg == 'mean':
-                        aggdata = vardata.mean(dim='time', skipna = False)
+                        aggdata = vardata_ts.mean(dim='time', skipna = False)
                     elif agg == 'max':
-                        aggdata = vardata.max(dim='time', skipna = False)
+                        aggdata = vardata_ts.max(dim='time', skipna = False)
                     elif agg == 'min':
-                        aggdata = vardata.min(dim='time', skipna = False)
+                        aggdata = vardata_ts.min(dim='time', skipna = False)
                     elif agg == 'sum':
-                        aggdata = vardata.sum(dim='time', skipna = False)
+                        aggdata = vardata_ts.sum(dim='time', skipna = False)
 
                     aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
                     aggdata = aggdata.rio.write_crs(self.spatial_ref)
