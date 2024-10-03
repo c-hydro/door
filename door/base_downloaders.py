@@ -78,9 +78,13 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         if bounds is None:
             return
         elif isinstance(bounds, (list, tuple)):
-            bounds = BoundingBox(*bounds)
+            _bounds = BoundingBox(*bounds)
+        elif isinstance(bounds, Dataset):
+            _bounds = BoundingBox.from_dataset(bounds)
+        elif isinstance(bounds, str):
+            _bounds = BoundingBox.from_file(bounds)
         
-        self.bounds = bounds
+        self.bounds = _bounds
 
     def set_destination(self, destination: Dataset|dict|str|None) -> None:
         """

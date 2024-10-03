@@ -8,6 +8,8 @@ from osgeo import gdal, gdalconst, osr
 import xarray as xr
 import rioxarray as rxr
 
+from ..tools.data import Dataset
+
 class BoundingBox():
 
     default_datum = 'EPSG:4326'
@@ -34,6 +36,15 @@ class BoundingBox():
 
         # buffer the bounding box
         self.buffer_bbox(buffer)
+
+    @staticmethod
+    def from_dataset(dataset: Dataset, buffer: float = 0.0):
+        data:xr.DataArray = dataset.get_data()
+
+        # get the bounding box of the data
+        left, bottom, right, top = data.rio.bounds()
+
+        return BoundingBox(left, bottom, right, top, datum = data.rio.crs.to_wkt(), buffer = buffer)
     
     @staticmethod
     def from_file(grid_file, buffer: float = 0.0):
