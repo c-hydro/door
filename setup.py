@@ -32,13 +32,14 @@ setup(
         'dask',
         'scipy',
         'ecmwf-opendata >= 0.2.0',
-        'cdsapi',
+        'cdsapi >= 0.7.2',
         'ftpretty',
         'pandas',
         'drops2 @ git+https://github.com/CIMAFoundation/drops2.git',
         'matplotlib',
         'geopandas',
-        'boto3'
+        'boto3',
+        'img2pdf'
     ],
     python_requires='>=3.10',
     test_suite='tests',
