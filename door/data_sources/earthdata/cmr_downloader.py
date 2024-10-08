@@ -37,6 +37,7 @@ class CMRDownloader(DOORDownloader):
         'make_mosaic': True,
         'crop_to_bounds': True,
         'keep_tiles_naming': False,
+        'selected_tiles' : None
     }
 
     file_ext = ['.hdf', '.h5']
@@ -207,7 +208,7 @@ class CMRDownloader(DOORDownloader):
                     hits = int(headers['cmr-hits'])
                 search_page = response.read()
                 search_page = json.loads(search_page.decode('utf-8'))
-                url_scroll_results = cmr_filter_urls(search_page, extensions=self.file_ext)
+                url_scroll_results = cmr_filter_urls(search_page, extensions=self.file_ext, selected_tiles=self.selected_tiles)
                 if not url_scroll_results:
                     break
                 if hits > self.cmr_page_size:
@@ -273,7 +274,7 @@ class CMRDownloader(DOORDownloader):
         filename_filter = time.strftime('*A%Y%j*')
         return f'&producer_granule_id[]={filename_filter}&options[producer_granule_id][pattern]=true'
     
-def cmr_filter_urls(search_results, extensions=['.hdf', '.h5']) -> list[str]:
+def cmr_filter_urls(search_results, extensions=['.hdf', '.h5'], selected_tiles = None) -> list[str]:
     """Select only the desired data files from CMR response."""
     if 'feed' not in search_results or 'entry' not in search_results['feed']:
         return []
@@ -311,6 +312,10 @@ def cmr_filter_urls(search_results, extensions=['.hdf', '.h5']) -> list[str]:
             # Exclude links with duplicate filenames (they would overwrite)
             continue
         unique_filenames.add(filename)
+
+        if selected_tiles is not None:
+            if not any(tile in filename for tile in selected_tiles):
+                continue
 
         urls.append(link['href'])
 
