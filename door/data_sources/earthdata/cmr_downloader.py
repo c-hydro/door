@@ -168,7 +168,7 @@ class CMRDownloader(DOORDownloader):
 
         cmr_base_url = ('{0}provider={1}'
                         '&sort_key=start_date&sort_key=producer_granule_id'
-                        '&scroll=true&page_size={2}'.format(self.cmr_url, self.provider, self.cmr_page_size))
+                        '&page_size={2}'.format(self.cmr_url, self.provider, self.cmr_page_size))
 
         product_query = self.fomat_product(self.product_id)
         version_query = self.format_version(self.version)
@@ -190,7 +190,7 @@ class CMRDownloader(DOORDownloader):
         time_end = time.end
 
         cmr_query_url = self.build_cmr_query(time_start, time_end, bounding_box)
-        cmr_scroll_id = None
+        cmr_searchafter = None
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -198,25 +198,23 @@ class CMRDownloader(DOORDownloader):
             urls = []
             while True:
                 req = Request(cmr_query_url)
-                if cmr_scroll_id:
-                    req.add_header('cmr-scroll-id', cmr_scroll_id)
+                if cmr_searchafter:
+                    req.add_header('CMR-Search-After', cmr_searchafter)
                 response = urlopen(req, context=ctx)
-                if not cmr_scroll_id:
-                    # Python 2 and 3 have different case for the http headers
-                    headers = {k.lower(): v for k, v in dict(response.info()).items()}
-                    cmr_scroll_id = headers['cmr-scroll-id']
-                    hits = int(headers['cmr-hits'])
+
+                # the header 'cmr-search-after' is used to get the next page of results
+                # once we hit a page with no 'cmr-search-after' header, we have all the results
+                headers = {k.lower(): v for k, v in dict(response.info()).items()}
+                cmr_searchafter = headers.get('cmr-search-after', None)
+                if not cmr_searchafter:
+                    break
+
                 search_page = response.read()
                 search_page = json.loads(search_page.decode('utf-8'))
-                url_scroll_results = cmr_filter_urls(search_page, extensions=self.file_ext, selected_tiles=self.selected_tiles)
-                if not url_scroll_results:
-                    break
-                if hits > self.cmr_page_size:
-                    sys.stdout.flush()
-                urls += url_scroll_results
+                valid_results = cmr_filter_urls(search_page, extensions=self.file_ext, selected_tiles=self.selected_tiles)
 
-            if hits > self.cmr_page_size:
-                print()
+                urls += valid_results
+
             return urls
         except KeyboardInterrupt:
             quit()
