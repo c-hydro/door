@@ -71,7 +71,7 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         elif hasattr(cls, 'source'):
             return cls.source
 
-    def set_bounds(self, bounds: None|BoundingBox|list[float]|tuple[float]) -> None:
+    def set_bounds(self, bounds: None|BoundingBox|list[float]|tuple[float]|Dataset) -> None:
         """
         Set the bounds of the data to download.
         """
@@ -79,11 +79,14 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
             return
         elif isinstance(bounds, (list, tuple)):
             _bounds = BoundingBox(*bounds)
-        elif isinstance(bounds, Dataset):
-            _bounds = BoundingBox.from_dataset(bounds)
         elif isinstance(bounds, str):
             _bounds = BoundingBox.from_file(bounds)
-        
+        else:
+            try:
+                _bounds = BoundingBox.from_dataset(bounds)
+            except:
+                raise ValueError('Invalid bounds')
+
         self.bounds = _bounds
 
     def set_destination(self, destination: Dataset|dict|str|None) -> None:
