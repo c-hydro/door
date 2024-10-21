@@ -9,6 +9,7 @@ from ...utils.space import BoundingBox
 
 from ...tools import timestepping as ts
 from ...tools.timestepping.timestep import TimeStep
+from ...tools.timestepping.fixed_num_timestep import FixedNTimeStep
 
 class ERA5Downloader(CDSDownloader):
 
@@ -152,7 +153,28 @@ class ERA5Downloader(CDSDownloader):
         }
 
         return request
+    
+    def get_last_published_ts(self, ts_per_year = None, **kwargs) -> ts.TimeRange:
+        
+        """
+        Get the last published date for the dataset.
+        """
+        if ts_per_year is None:
+            ts_per_year = self.ts_per_year
 
+        # get the last published timestep
+        last_published = self.get_last_published_date()
+        if ts_per_year == 365:
+            TimeStep = ts.Day
+        else:
+            TimeStep = FixedNTimeStep.get_subclass(ts_per_year)
+        return TimeStep.from_date(last_published + dt.timedelta(days=1)) - 1
+
+    def get_last_published_date(self, **kwargs) -> dt.datetime:
+        now = dt.datetime.now()
+        now = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return now - dt.timedelta(days=6)
+         
     def _get_data_ts(self,
                      timestep: TimeStep,
                      space_bounds: BoundingBox,
@@ -251,22 +273,26 @@ class ERA5Downloader(CDSDownloader):
                 timestep_start = agg_timestep.start
                 timestep_end   = agg_timestep.end
 
+                # filter data to the aggregation timestep
+                inrange = (vardata.time.dt.date >= timestep_start.date()) & (vardata.time.dt.date <= timestep_end.date())
+                vardata_ts = vardata.sel(time = inrange)
+
                 # add start and end time as attributes
-                vardata.attrs['start_time'] = timestep_start
-                vardata.attrs['end_time'] = timestep_end
+                vardata_ts.attrs['start_time'] = timestep_start
+                vardata_ts.attrs['end_time'] = timestep_end
 
                 # do the necessary aggregations:
                 for agg in varopts['agg_method']:
 
-                    vardata.attrs['agg_function'] = agg
+                    vardata_ts.attrs['agg_function'] = agg
                     if agg == 'mean':
-                        aggdata = vardata.mean(dim='time', skipna = False)
+                        aggdata = vardata_ts.mean(dim='time', skipna = False)
                     elif agg == 'max':
-                        aggdata = vardata.max(dim='time', skipna = False)
+                        aggdata = vardata_ts.max(dim='time', skipna = False)
                     elif agg == 'min':
-                        aggdata = vardata.min(dim='time', skipna = False)
+                        aggdata = vardata_ts.min(dim='time', skipna = False)
                     elif agg == 'sum':
-                        aggdata = vardata.sum(dim='time', skipna = False)
+                        aggdata = vardata_ts.sum(dim='time', skipna = False)
 
                     aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
                     aggdata = aggdata.rio.write_crs(self.spatial_ref)

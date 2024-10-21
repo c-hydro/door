@@ -7,12 +7,16 @@ class CDSDownloader(APIDownloader):
 
     name = "CDS_downloader"
     apikey_env_vars = 'CDSAPI_KEY' # this should be in the form UID:API_KEY already
-    cds_url = 'https://cds-beta.climate.copernicus.eu/api'
+    cds_url = 'https://cds.climate.copernicus.eu/api'
 
     def __init__(self, dataset) -> None:
 
         # if key is None, this will automatically look for the .cdsapirc file
-        client = cdsapi.Client(url=self.cds_url, key=os.getenv(self.apikey_env_vars))
+        key = os.getenv(self.apikey_env_vars, None)
+        if isinstance(key, str):
+            if key.startswith("'" or '"') and key.endswith("'" or '"'):
+                key = key[1:-1]
+        client = cdsapi.Client(url=self.cds_url, key=key)
         
         super().__init__(client)
         self.dataset = dataset
