@@ -18,9 +18,9 @@ class GRACEDownloader(CMRDownloader):
         'tws' : {
             'provider'   : 'POCLOUD',
             'freq'       : 'monthly',
-            'version'    : {'post2018': 'RL06.1v04', 'pre2018': 'RL06v04'},
-            'product_id' : {'post2018':'TELLUS_GRFO_L3_JPL_RL06.1_LND_v04', 'pre2018':'TELLUS_GRAC_L3_JPL_RL06_LND_v04'}
-    }
+            'version'    : {'post2018': 'RL06.3v04', 'pre2018': 'RL06v04'},
+            'product_id' : {'post2018': 'TELLUS_GRFO_L3_JPL_RL06.3_LND_v04', 'pre2018':'TELLUS_GRAC_L3_JPL_RL06_LND_v04'}
+        }
     }
 
     available_variables = {
