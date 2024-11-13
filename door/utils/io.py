@@ -67,6 +67,8 @@ def download_http(url, destination, auth=None):
     if the argument auth is passed as (user, pass), it will be used for authentication
     """
     r = requests.get(url, auth)
+    if r.status_code != 200:
+        raise FileNotFoundError(r.text)
     os.makedirs(os.path.dirname(destination), exist_ok=True)
     with open(destination, 'wb') as f:
         f.write(r.content)
