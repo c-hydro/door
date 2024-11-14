@@ -15,9 +15,9 @@ space_ref  = BoundingBox.from_file(GRID_FILE)
 
 test_downloader = CLMSDownloader(product='SWI')
 test_downloader.get_data(time_range, space_ref,
-                         destination={'path' : HOME, 'filename':'SWI-{layer}_%Y%m%d.tif'},
+                         destination={'path' : HOME, 'filename':'SWI-{variable}_%Y%m%d.tif'},
                          options={
-                             'layers': ["001","020","060"],
+                             'variables': ["001","020","060"],
                              'crop_to_bounds': True,
                              'ts_per_year': 36
                          })
