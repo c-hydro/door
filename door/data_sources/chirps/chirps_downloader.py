@@ -95,9 +95,9 @@ class CHIRPSDownloader(URLDownloader):
             response = requests.head(current_url)
 
             # if the request is successful, the last published timestep is the current timestep
-            if response.status_code == 200:
+            if response.status_code is requests.codes.ok:
                 return current_timestep
-            
+
             # if the request is not successful, move to the previous timestep
             current_timestep -= 1
 
