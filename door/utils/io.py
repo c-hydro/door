@@ -80,10 +80,12 @@ def download_ftp(url_host, url, destination, auth=None):
     if the argument auth is passed as (user, pass), it will be used for authentication
     """
     host = urlparse(url_host).hostname
-    if type(auth) == tuple:
+    if isinstance(auth, tuple):
         username, password = auth
-    else:
+    elif isinstance(auth, str):
         username, password = base64.b64decode(auth).decode('ascii').split(':')
+    else:
+        raise NotImplementedError('ERROR! Credentials must be a tuple (user,pass) or a base64 encoded string')
     client = ftp(host, username, password)
     client.get(url, destination)
 
