@@ -6,6 +6,7 @@ import bz2
 import requests
 from urllib.parse import urlparse
 import base64
+import paramiko
 import tempfile
 from functools import wraps
 
@@ -79,9 +80,35 @@ def download_ftp(url_host, url, destination, auth=None):
     if the argument auth is passed as (user, pass), it will be used for authentication
     """
     host = urlparse(url_host).hostname
-    username, password = base64.b64decode(auth).decode('ascii').split(':')
+    if type(auth) == tuple:
+        username, password = auth
+    else:
+        username, password = base64.b64decode(auth).decode('ascii').split(':')
     client = ftp(host, username, password)
     client.get(url, destination)
+
+def download_sftp(url_host, url, destination, auth=None):
+    """
+    Download a file via sftp
+    if the argument auth is passed as (user, pass), it will be used for authentication
+    """
+    host = urlparse(url_host).hostname
+    port = urlparse(url_host).port or 22
+    username, password = auth
+
+    transport = paramiko.Transport((host, port))
+    transport.connect(username=username, password=password)
+    sftp = paramiko.SFTPClient.from_transport(transport)
+
+    try:
+        sftp.get(url, destination)
+    # in case it fails I want to be sure to close in any case the sftp and the transport before exiting with error
+    except Exception as e:
+        sftp.close()
+        transport.close()
+        raise e
+    sftp.close()
+    transport.close()
 
 def check_download(destination: str, min_size: float = None, missing_action: str = 'error') -> tuple[int, str]:
     """
