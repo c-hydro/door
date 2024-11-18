@@ -7,7 +7,7 @@ import xarray as xr
 import os
 
 from .utils.space import BoundingBox, crop_to_bb
-from .utils.io import download_http, check_download, handle_missing, download_ftp
+from .utils.io import download_http, check_download, handle_missing, download_ftp, download_sftp
 
 from .tools import timestepping as ts
 from .tools.timestepping.timestep import TimeStep
@@ -258,12 +258,12 @@ class URLDownloader(DOORDownloader):
     def __init__(self, url_blank: str, protocol: str = 'http', host: str|None = None) -> None:
 
         self.url_blank = url_blank
-        if protocol.lower() not in ['http', 'ftp']:
+        if protocol.lower() not in ['http', 'ftp', 'sftp', 'https']:
             raise ValueError(f'Protocol {protocol} not supported')
         else:
             self.protocol = protocol.lower()
 
-        if self.protocol == 'ftp':
+        if self.protocol == 'ftp' or self.protocol == 'sftp':
             if host is None:
                 raise ValueError(f'FTP host must be specified')
             else:
@@ -287,20 +287,19 @@ class URLDownloader(DOORDownloader):
             kwargs["auth"] = None
 
         url = self.format_url(**kwargs)
-        if self.protocol == 'http':
-            try:
+        try:
+            if self.protocol == 'http' or self.protocol == 'https':
                 download_http(url, destination, kwargs["auth"])
-            except Exception as e:
-                handle_missing(missing_action, kwargs)
-                self.log.debug(f'Error downloading {url}: {e}')
-                return False
-        elif self.protocol == 'ftp':
-            try:
+            elif self.protocol == 'ftp':
                 download_ftp(self.host, url, destination, kwargs["auth"])
-            except Exception as e:
-                handle_missing(missing_action, kwargs)
-                self.log.debug(f'Error downloading {url}: {e}')
-                return False
+            elif self.protocol == 'sftp':
+                download_sftp(self.host, url, destination, kwargs["auth"])
+            else:
+                raise ValueError(f'Protocol {self.protocol} not supported')
+        except Exception as e:
+            handle_missing(missing_action, kwargs)
+            self.log.debug(f'Error downloading {url}: {e}')
+            return False
 
         success_flag, success_msg = check_download(destination, min_size, missing_action)
         if success_flag > 0:
