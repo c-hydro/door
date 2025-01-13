@@ -16,6 +16,7 @@ General command line:
 python3 hyde_downloader_satellite_gsmap_obs.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
+20241105 (2.0.3) --> Add possibility of tif download
 20210426 (2.0.2) --> Manage missing data on GSMAP server
 20210301 (2.0.1) --> Manage exception due to the absence of the gsmap_gauge folder on server between 00:00 and 6:00 UTC
 20210223 (2.0.0) --> Implemented quasi-real-time integration of gsmap_gauge and gsmap_gauge_now.
@@ -274,13 +275,19 @@ def main():
                                                           'data_outcome_domain': data_outcome_domain},
                                                          orient='columns').set_index('time').loc[time_data_range_done]
 
+                try:
+                    flags_tif = data_settings['algorithm']['flags']['convert_to_tif']
+                except:
+                    flags_tif = False
                 # Merge and mask data ancillary to data outcome
                 arrange_data_outcome(time_data_range_done, data_type,
                                      expected_output['data_source'], expected_output['data_outcome_global'], expected_output['data_outcome_domain'], data_ancillary_ctl,
                                      tags_template=data_settings['algorithm']['template'],
                                      data_bbox=data_settings['data']['static']['bounding_box'],
                                      cdo_exec=data_settings['algorithm']['ancillary']['cdo_exec'],
-                                     cdo_deps=data_settings['algorithm']['ancillary']['cdo_deps'])
+                                     cdo_deps=data_settings['algorithm']['ancillary']['cdo_deps'],
+                                     flag_tif = flags_tif
+                                     )
 
                 # Clean data tmp (such as ancillary and outcome global)
                 clean_data_tmp(data_ancillary_ctl, data_outcome_global,
@@ -385,7 +392,7 @@ def unzip_data_source(filename_zip, filename_unzip):
 # Method to arrange outcome dataset(s)
 def arrange_data_outcome(time_range, type_data, src_data, dst_data_global, dst_data_domain, ctl_data_ancillary,
                          tags_template=None,
-                         data_bbox=None, cdo_exec=None, cdo_deps=None):
+                         data_bbox=None, cdo_exec=None, cdo_deps=None, flag_tif = False):
     logging.info(' ----> Dumping data ... ')
 
     if data_bbox is not None:
@@ -405,7 +412,7 @@ def arrange_data_outcome(time_range, type_data, src_data, dst_data_global, dst_d
 
     for cdo_dep in cdo_deps:
         os.environ['LD_LIBRARY_PATH'] = 'LD_LIBRARY_PATH:' + cdo_dep
-        os.environ['PATH'] = os.environ['PATH'] + ':/home/andrea/FP_libs/fp_libs_cdo/cdo-1.9.8_nc-4.6.0_hdf-1.8.17_eccodes-2.17.0/bin/'
+        #os.environ['PATH'] = os.environ['PATH'] + ''
 
     cdo = Cdo()
     cdo.setCdo(cdo_exec)
@@ -445,7 +452,7 @@ def arrange_data_outcome(time_range, type_data, src_data, dst_data_global, dst_d
             write_data_ancillary_ctl(ctl_file_step, ctl_template_step)
 
             cdo.import_binary(input=ctl_file_step, output=tmp_file_global_step, options='-f nc')
-            cdo.sellonlatbox('-180,180,-90,90', input=tmp_file_global_step, output=dst_file_global_step)
+            cdo.sellonlatbox('-180,180,-90,90', input=tmp_file_global_step, output=dst_file_global_step.replace(".tif", ".nc"))
 
             if os.path.exists(src_file_step_unzip):
                 os.remove(src_file_step_unzip)
@@ -459,7 +466,10 @@ def arrange_data_outcome(time_range, type_data, src_data, dst_data_global, dst_d
         logging.info(' ------> Mask global data over defined domain ...  ')
         if not os.path.exists(dst_file_domain_step):
             if bbox_cdo is not None:
-                cdo.sellonlatbox(bbox_cdo, input=dst_file_global_step, output=dst_file_domain_step)
+                cdo.sellonlatbox(bbox_cdo, input=dst_file_global_step.replace(".tif", ".nc"), output=dst_file_domain_step.replace(".tif", ".nc"))
+                if flag_tif:
+                    os.system("gdal_translate -of GTiff -co 'COMPRESS=DEFLATE' " + dst_file_domain_step.replace(".tif", ".nc") + " " + dst_file_domain_step + " -a_srs EPSG:4326 -a_nodata -9999")
+                os.system("rm -r " + dst_file_domain_step.replace(".tif", ".nc"))
                 logging.info(' ------> Mask global data over defined domain ...  DONE')
                 if type_data[0] == 'gsmap_gauge':
                     if os.path.exists(dst_file_domain_step + '.tmp'):

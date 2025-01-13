@@ -1,0 +1,67 @@
+{
+  "algorithm":{
+    "flags": {
+      "clean_ancillary": false
+    },
+    "domain": "africa",
+    "general": {
+      "title": "NWP GFS 0.25 degree - backup procedure",
+      "web-site": "",
+      "source": "Python library developed by CIMA Research Foundation",
+      "history": "1.1.0 [20210311]",
+      "project-info": "Hydrological Data Engines - HyDE Library/Project",
+      "algorithm": "Downloading tool developed by CIMA Research Foundation"
+    },
+    "template": {
+      "outcome_datetime": "%Y/%m/%d/",
+      "ancillary_datetime": "%Y/%m/%d/",
+      "filename_datetime": "%Y%m%d%H%M"
+    }
+  },
+  "data": {
+    "static": {
+      "bounding_box": {
+        "lon_left": -20,
+        "lon_right": 55,
+        "lat_top": 40,
+        "lat_bottom": -40
+      }
+    },
+    "dynamic": {
+      "input": {
+        "__info__" : "types: ifs - aifs",
+        "model_type": "ifs"
+      },
+      "time": {
+        "time_forecast_period": 120
+      },
+      "__info__": "hmc vars are: tp, 2t, 10u, 10v",
+      "variables": {
+        "tp": "tp",
+        "10u": "10u",
+        "10v": "10v",
+        "2t": "2t",
+        "2d": "2d",
+        "ssrd": "dswrf"
+      },
+      "vars_standards":{
+        "convert_temperature_to_C": true,
+        "aggregate_wind_components": true,
+        "decumulate_precipitation": true,
+        "calculate_rh_ground": true
+      },
+      "outcome": {
+        "folder": "/home/andrea/Desktop/Working_dir/ecmwf/outcome/{outcome_datetime}",
+        "filename": "{filename_datetime}_ecmwf0p25-{domain}.nc"
+      },
+      "ancillary": {
+        "folder": "/home/andrea/Desktop/Working_dir/ecmwf/ancillary/{ancillary_datetime}",
+        "filename": "{filename_datetime}_ecmwf0p25-{domain}.grib2"
+      }
+    },
+    "log": {
+      "filename": "hyde_downloader_backup_nwp_gfs_025_local_log.txt",
+      "folder": "/home/andrea/Desktop/Working_dir/meteo/ecmwf/log/"
+    }
+  }
+}

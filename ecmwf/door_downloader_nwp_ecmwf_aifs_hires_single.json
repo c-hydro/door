@@ -28,6 +28,10 @@
       }
     },
     "dynamic": {
+      "input": {
+        "__info__" : "types: ifs - aifs",
+        "model_type": "aifs"
+      },
       "time": {
         "time_forecast_period": 120
       },
@@ -35,20 +39,23 @@
       "variables": {
         "tp": "tp",
         "10u": "10u",
-        "10v": "10v"
+        "10v": "10v",
+        "2t": "2t",
+        "2d": "2d"
       },
       "vars_standards":{
         "convert_temperature_to_C": true,
         "aggregate_wind_components": true,
-        "decumulate_precipitation": true
+        "decumulate_precipitation": true,
+        "calculate_rh_ground": true
       },
       "outcome": {
-        "folder": "/home/andrea/Desktop/Working_dir/meteo/ecmwf/outcome/{outcome_datetime}",
-        "filename": "{filename_datetime}_ecmwf0p25-{domain}.nc"
+        "folder": "/home/andrea/Desktop/Working_dir/ecmwf/outcome/{outcome_datetime}",
+        "filename": "{filename_datetime}_ecmwf0p25-aifs-{domain}.nc"
       },
       "ancillary": {
-        "folder": "/home/andrea/Desktop/Working_dir/meteo/ecmwf/ancillary/{ancillary_datetime}",
-        "filename": "{filename_datetime}_ecmwf0p25-{domain}.grib2"
+        "folder": "/home/andrea/Desktop/Working_dir/ecmwf/ancillary/{ancillary_datetime}",
+        "filename": "{filename_datetime}_ecmwf0p25-aifs-{domain}.grib2"
       }
     },
     "log": {

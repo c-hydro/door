@@ -3,8 +3,8 @@
 """
 door - Download ECMWF open data High Resolution (0.25 degree) single run
 
-__date__ = '20240313'
-__version__ = '2.0.0'
+__date__ = '20250113'
+__version__ = '2.5.0'
 __author__ =
         'Andrea Libertino (andrea.libertino@cimafoundation.org',
 __library__ = 'door'
@@ -13,6 +13,8 @@ General command line:
 python3 door_downloader_ecmwf_opendata_single_hires.py -settings_file configuration.json -time "YYYY-MM-DD HH:MM"
 
 Version(s):
+20250113 (2.5.0) --> Add support to AIFS model
+                     Bug fixes in the download of forecast related to different height levels
 20240313 (2.0.0) --> Update to new 0.25 resoulution
 20230923 (1.1.0) --> Fix flipped latitude, removes unused dimensions from output
 20230731 (1.0.0) --> Beta release
@@ -41,8 +43,8 @@ from requests.exceptions import HTTPError
 # -------------------------------------------------------------------------------------
 # Algorithm information
 alg_name = 'DOOR - ECMWF open data SINGLE RUN 0.25'
-alg_version = '2.0.0'
-alg_release = '2024-03-13'
+alg_version = '2.5.0'
+alg_release = '2025-01-13'
 # Algorithm parameter(s)
 time_format = '%Y%m%d%H%M'
 # -------------------------------------------------------------------------------------
@@ -78,7 +80,19 @@ def main():
     # Set model timing
     time_run = datetime.strptime(alg_time, '%Y-%m-%d %H:%M')
     step_end = data_settings["data"]["dynamic"]["time"]["time_forecast_period"]
-    model_freq = 3
+    if "input" in data_settings["data"]["dynamic"].keys():
+        model_type = data_settings["data"]["dynamic"]["input"]["model_type"]
+    else:
+        logging.warinin(" --> WARNING! Model type not defined in the configuration file! Default is IFS!")
+        model_type = "ifs"
+    if model_type == "ifs":
+        model_freq = 3
+    elif model_type == "aifs":
+        model_freq = 6
+        #data_settings["data"]["dynamic"]["variables"]["t2m"] = data_settings["data"]["dynamic"]["variables"]["2t"]
+    else:
+        logging.error(" --> ERROR! Model type not correctly defined!")
+        raise NotImplementedError
     model_time_range = pd.date_range(time_run + pd.Timedelta(str(model_freq) + "H"),
                                      time_run + pd.Timedelta(str(step_end) + "H"), freq=str(model_freq) + "H")
     time_range = pd.date_range(time_run + pd.Timedelta("1H"),
@@ -117,7 +131,7 @@ def main():
     # Setup client
     client = Client(
         source="ecmwf",
-        model="ifs",
+        model=model_type,
         resol="0p25",
         preserve_request_order=False,
         infer_stream_keyword=True,
@@ -128,7 +142,7 @@ def main():
             type="fc",
             date=time_run.strftime("%Y%m%d"),
             time=time_run.hour,
-            step=[i for i in np.arange(3, step_end + 1, model_freq)],
+            step=[i for i in np.arange(model_freq, step_end + 1, model_freq)],
             param=[var for var in data_settings["data"]["dynamic"]["variables"].keys()],
             target=os.path.join(ancillary_folder, ancillary_file)
         )
@@ -146,10 +160,21 @@ def main():
     if "10v" in rename_dict.keys():
         rename_dict["v10"] = "10v"
         del rename_dict["10v"]
-    frc_out = xr.load_dataset(os.path.join(ancillary_folder, ancillary_file), engine="cfgrib").rename_vars(
-        rename_dict).drop_vars("time")
-    frc_out = frc_out.assign_coords({"step": model_time_range}).rename(
-        {"step": "time", "latitude": "lat", "longitude": "lon"})
+    if "2t" in rename_dict.keys():
+        rename_dict["t2m"] = rename_dict["2t"]
+        del rename_dict["2t"]
+    if "2d" in rename_dict.keys():
+        rename_dict["d2m"] = rename_dict["2d"]
+        del rename_dict["2d"]
+
+    file_path = os.path.join(ancillary_folder, ancillary_file)
+    ds_10m = xr.load_dataset(file_path, engine="cfgrib", filter_by_keys={'typeOfLevel': 'heightAboveGround', 'level': 10})
+    ds_2m = xr.load_dataset(file_path, engine="cfgrib", filter_by_keys={'typeOfLevel': 'heightAboveGround', 'level': 2})
+    ds_surface = xr.load_dataset(file_path, engine="cfgrib", filter_by_keys={'typeOfLevel': 'surface'})
+
+    # Merge the datasets
+    frc_out = xr.merge([ds_10m, ds_2m, ds_surface], compat='override').rename_vars(rename_dict).drop_vars("time")
+    frc_out = frc_out.assign_coords({"step": model_time_range}).rename({"step": "time", "latitude": "lat", "longitude": "lon"})
 
     frc_out = frc_out.where((frc_out.lat <= data_settings['data']['static']['bounding_box']["lat_top"]) &
                             (frc_out.lat >= data_settings['data']['static']['bounding_box']["lat_bottom"]) &
@@ -193,6 +218,13 @@ def main():
         frc_out[data_settings['data']['dynamic']["variables"]["2t"]].attrs['units'] = 'C'
         frc_out[data_settings['data']['dynamic']["variables"]["2t"]].attrs['standard_name'] = "air_temperature"
         logging.info(" ---> Convert temperature to °C...DONE!")
+        if "2d" in data_settings["data"]["dynamic"]["variables"].keys() and \
+                data_settings['data']['dynamic']["vars_standards"]["calculate_rh_ground"] is True:
+                frc_out["rh"] = relative_humidity_from_dewpoint(frc_out[data_settings['data']['dynamic']["variables"]["2t"]],
+                                                                frc_out[data_settings['data']['dynamic']["variables"]["2d"]] - 273.15)
+                frc_out['rh'].attrs['long_name'] = 'relative humidity'
+                frc_out['rh'].attrs['units'] = '%'
+                frc_out['rh'].attrs['standard_name'] = "relative_humidity"
 
     if "10u" in data_settings["data"]["dynamic"]["variables"].keys() and "10v" in data_settings["data"]["dynamic"][
         "variables"].keys() and \
@@ -205,8 +237,16 @@ def main():
         frc_out['10wind'].attrs['standard_name'] = "wind"
         logging.info(" ---> Aggregate wind components...DONE!")
 
+    if data_settings['data']['dynamic']["vars_standards"]["aggregate_wind_components"]:
+        if "10u" not in data_settings["data"]["dynamic"]["variables"].keys() or "10v" not in data_settings["data"]["dynamic"]["variables"].keys():
+            logging.warning(" --> WARNING! Wind components are not available (10u, 10v), aggregated wind can not be computed!")
+
+    if data_settings['data']['dynamic']["vars_standards"]["calculate_rh_ground"]:
+        if "2t" not in data_settings["data"]["dynamic"]["variables"].keys() or "2d" not in data_settings["data"]["dynamic"]["variables"].keys():
+            logging.warning(" --> WARNING! 2m temperature and/or 2m dewpoint (2t, 2d) are missing, ground relative humidity can not be computed!")
+
     # frc_out = frc_out.reindex({'time': time_range}, method='nearest')
-    frc_out = frc_out.drop(["valid_time","surface","heightAboveGround"]).reindex({'time': time_range}, method='nearest')
+    frc_out = frc_out.drop_vars(["valid_time","surface","heightAboveGround"]).reindex({'time': time_range}, method='nearest')
     frc_out["lat"].attrs["units"] = "degrees_north"
     frc_out["lon"].attrs["units"] = "degrees_east"
     logging.info(" --> Postprocess variables..DONE")
@@ -327,6 +367,36 @@ def set_logging(logger_file='log.txt', logger_format=None):
 
 
 # -------------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------------
+# Function to calculate the saturation water vapor pressure
+def saturation_vapor_pressure(temperature):
+    """Calculate the saturation water vapor (partial) pressure.
+    Instead of temperature, dewpoint may be used in order to calculate
+    the actual (ambient) water vapor (partial) pressure.
+    The formula used is that from [Bolton1980]_ for T in degrees Celsius:
+    .. math:: 6.112 e^\frac{17.67T}{T + 243.5}
+    """
+    # Converted from original in terms of C to use kelvin. Using raw absolute values of C in
+    # a formula plays havoc with units support.
+    sat_pressure_0c = 6.112 # millibar
+    return sat_pressure_0c * np.exp(17.67 * temperature / (temperature + 243.5))
+# -------------------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------------------
+# Function to calculate the relative humidity from dewpoint
+def relative_humidity_from_dewpoint(temperature, dewpoint):
+    """Calculate the relative humidity.
+    Uses temperature and dewpoint to calculate relative humidity as the ratio of vapor
+    pressure to saturation vapor pressures.
+    """
+    e = saturation_vapor_pressure(dewpoint)
+    e_s = saturation_vapor_pressure(temperature)
+    rh = e / e_s
+    rh.values[rh.values > 1] = 1
+    rh.values[rh.values < 0] = 0
+    return rh * 100
+# ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------
 # Call script from external library
