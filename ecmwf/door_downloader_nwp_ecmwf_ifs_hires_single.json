@@ -35,7 +35,7 @@
       "time": {
         "time_forecast_period": 120
       },
-      "__info__": "hmc vars are: tp, 2t, 10u, 10v",
+      "__info__": "hmc vars are: tp, 2t, 10u, 10v, ssrd, 2d",
       "variables": {
         "tp": "tp",
         "10u": "10u",

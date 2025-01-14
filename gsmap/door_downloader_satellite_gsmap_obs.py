@@ -469,7 +469,7 @@ def arrange_data_outcome(time_range, type_data, src_data, dst_data_global, dst_d
                 cdo.sellonlatbox(bbox_cdo, input=dst_file_global_step.replace(".tif", ".nc"), output=dst_file_domain_step.replace(".tif", ".nc"))
                 if flag_tif:
                     os.system("gdal_translate -of GTiff -co 'COMPRESS=DEFLATE' " + dst_file_domain_step.replace(".tif", ".nc") + " " + dst_file_domain_step + " -a_srs EPSG:4326 -a_nodata -9999")
-                os.system("rm -r " + dst_file_domain_step.replace(".tif", ".nc"))
+                    os.system("rm -r " + dst_file_domain_step.replace(".tif", ".nc"))
                 logging.info(' ------> Mask global data over defined domain ...  DONE')
                 if type_data[0] == 'gsmap_gauge':
                     if os.path.exists(dst_file_domain_step + '.tmp'):

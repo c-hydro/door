@@ -83,7 +83,7 @@ def main():
     if "input" in data_settings["data"]["dynamic"].keys():
         model_type = data_settings["data"]["dynamic"]["input"]["model_type"]
     else:
-        logging.warinin(" --> WARNING! Model type not defined in the configuration file! Default is IFS!")
+        logging.warning(" --> WARNING! Model type not defined in the configuration file! Default is IFS!")
         model_type = "ifs"
     if model_type == "ifs":
         model_freq = 3
@@ -202,9 +202,10 @@ def main():
         if data_settings['data']['dynamic']["vars_standards"]["decumulate_precipitation"] is True:
             logging.info(" ---> Variable tp is cumulated... Performing decumulation")
             first_step = deepcopy(frc_out[data_settings['data']['dynamic']["variables"]["tp"]].values[0, :, :])
+            first_time = frc_out[data_settings['data']['dynamic']["variables"]["tp"]].time[0].values
             frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = frc_out[
                 data_settings['data']['dynamic']["variables"]["tp"]].diff("time", 1)
-            frc_out[data_settings['data']['dynamic']["variables"]["tp"]].loc[time_range[2], :, :] = first_step
+            frc_out[data_settings['data']['dynamic']["variables"]["tp"]].loc[first_time, :, :] = first_step
             frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = xr.where(
                 frc_out[data_settings['data']['dynamic']["variables"]["tp"]] < 0, 0,
                 frc_out[data_settings['data']['dynamic']["variables"]["tp"]]) / model_freq
@@ -237,11 +238,24 @@ def main():
         frc_out['10wind'].attrs['standard_name'] = "wind"
         logging.info(" ---> Aggregate wind components...DONE!")
 
+    if "ssrd" in data_settings["data"]["dynamic"]["variables"].keys():
+        if data_settings['data']['dynamic']["vars_standards"]["decumulate_radiation"] is True:
+            logging.info(" ---> Variable ssrd is cumulated... Performing decumulation")
+            first_step = deepcopy(frc_out[data_settings['data']['dynamic']["variables"]["ssrd"]].values[0, :, :])
+            first_time = frc_out[data_settings['data']['dynamic']["variables"]["tp"]].time[0].values
+            frc_out[data_settings['data']['dynamic']["variables"]["ssrd"]] = frc_out[
+                data_settings['data']['dynamic']["variables"]["ssrd"]].diff("time", 1)
+            frc_out[data_settings['data']['dynamic']["variables"]["ssrd"]].loc[first_time, :, :] = first_step
+            frc_out[data_settings['data']['dynamic']["variables"]["ssrd"]] = frc_out[data_settings['data']['dynamic']["variables"]["ssrd"]] / (3600*model_freq)
+            frc_out[data_settings['data']['dynamic']["variables"]["ssrd"]].attrs['units'] = 'W m**-2'
+        else:
+            logging.warning(" ---> WARNING! Setting to decumulate_radiation is not set by config file... Decumulation performed by default!")
+
     if data_settings['data']['dynamic']["vars_standards"]["aggregate_wind_components"]:
         if "10u" not in data_settings["data"]["dynamic"]["variables"].keys() or "10v" not in data_settings["data"]["dynamic"]["variables"].keys():
             logging.warning(" --> WARNING! Wind components are not available (10u, 10v), aggregated wind can not be computed!")
 
-    if data_settings['data']['dynamic']["vars_standards"]["calculate_rh_ground"]:
+    if "calculate_rh_ground" in data_settings['data']['dynamic']["vars_standards"].keys() and data_settings['data']['dynamic']["vars_standards"]["calculate_rh_ground"]:
         if "2t" not in data_settings["data"]["dynamic"]["variables"].keys() or "2d" not in data_settings["data"]["dynamic"]["variables"].keys():
             logging.warning(" --> WARNING! 2m temperature and/or 2m dewpoint (2t, 2d) are missing, ground relative humidity can not be computed!")
 
