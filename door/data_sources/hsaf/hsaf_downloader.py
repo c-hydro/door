@@ -4,17 +4,17 @@ import xarray as xr
 from typing import Generator
 
 from ...base_downloaders import URLDownloader
-from ...utils.space import BoundingBox, crop_to_bb
+
 from ...utils.auth import get_credentials
 from ...utils.io import decompress_bz2
 
 import datetime as dt
 import requests
 
-from ...base_downloaders import URLDownloader
-from ...tools import timestepping as ts
-from ...tools.timestepping.timestep import TimeStep
-from ...tools.timestepping.fixed_num_timestep import FixedNTimeStep
+from d3tools.spatial import BoundingBox, crop_to_bb
+from d3tools import timestepping as ts
+from d3tools.timestepping.timestep import TimeStep
+from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
 
 # from dam.utils.io_geotiff import read_geotiff_asXarray, write_geotiff_fromXarray
 

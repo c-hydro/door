@@ -1,8 +1,6 @@
 import os
 from typing import Optional, Iterable
-from osgeo import gdal
 import tempfile
-import rioxarray
 import xarray as xr
 
 import gzip
@@ -10,11 +8,11 @@ import netrc
 import shutil
 import datetime as dt
 
-from door.tools.timestepping.timestep import TimeStep
+from d3tools.timestepping.timestep import TimeStep
+from d3tools.spatial import BoundingBox, crop_to_bb
+from d3tools.timestepping import TimeRange
 
 from ...base_downloaders import URLDownloader
-from ...utils.space import BoundingBox, crop_to_bb
-from ...tools.timestepping import TimeRange
 
 class IMERGDownloader(URLDownloader):
     

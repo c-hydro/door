@@ -11,9 +11,9 @@ from typing import Optional
 
 from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
-from ...utils.space import BoundingBox
 
-from ...tools import timestepping as ts
+from d3tools.spatial import BoundingBox
+from d3tools import timestepping as ts
 
 class CMRDownloader(DOORDownloader):
     """
