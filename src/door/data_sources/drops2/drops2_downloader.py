@@ -1,10 +1,11 @@
 import pandas as pd
 import numpy as np
-from typing import Optional, Generator
+from typing import Optional, Generator, Sequence
 from drops2.utils import DropsCredentials
 from drops2 import sensors
 from drops2.utils import DropsException
 from time import sleep
+import datetime as dt
 
 from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
@@ -12,6 +13,7 @@ from ...utils.auth import get_credentials
 from d3tools.spatial import BoundingBox
 from d3tools.timestepping import TimeRange
 from d3tools.timestepping.timestep import TimeStep
+from d3tools.data import Dataset
 
 class DROPS2Downloader(DOORDownloader):
     
@@ -38,18 +40,21 @@ class DROPS2Downloader(DOORDownloader):
         DropsCredentials.set(host, user, password)
 
     def get_data(self,
-                 time_range: TimeRange,
-                 space_bounds: BoundingBox,
-                 destination: str,
-                 options: Optional[dict] = None) -> None:
+                 time_range: TimeRange|Sequence[dt.datetime],
+                 space_bounds:  Optional[BoundingBox] = None,
+                 destination: Optional[Dataset|dict|str] = None,
+                 options:  Optional[dict] = None) -> None:
+
+        # get options and check them against the default options
+        if options is not None: 
+            self.set_options(options)
 
         # handle the credentials
         # I (LT), would rather do this in the __init__, why is the host in the options? isn't it always the same? is the host a secret?
-        host = options.pop('host')
-        self.authenticate(host)
+        self.authenticate(self.host)
 
         # then use the super method to get the data
-        super().get_data(time_range, space_bounds, destination, options)
+        super().get_data(time_range, space_bounds, destination)
     
     def _get_data_ts(self, time_range: TimeStep,
                            space_bounds: BoundingBox,
