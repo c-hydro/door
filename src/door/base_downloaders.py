@@ -1,6 +1,7 @@
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Sequence
 import logging
 from abc import ABC, ABCMeta, abstractmethod
+import datetime as dt
 
 import tempfile
 import xarray as xr
@@ -8,11 +9,8 @@ import os
 
 from .utils.io import download_http, check_download, handle_missing, download_ftp, download_sftp
 
-from d3tools.spatial import BoundingBox, crop_to_bb
-from d3tools.spatial.bounding_box import BoundingBox
-from d3tools.spatial.space_utils import crop_to_bb
+from d3tools import spatial as sp
 from d3tools import timestepping as ts
-from d3tools.timestepping.timestep import TimeStep
 from d3tools.data import Dataset
 
 class MetaDOORDownloader(ABCMeta):
@@ -73,19 +71,19 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         elif hasattr(cls, 'source'):
             return cls.source
 
-    def set_bounds(self, bounds: None|BoundingBox|list[float]|tuple[float]|Dataset) -> None:
+    def set_bounds(self, bounds: None|sp.BoundingBox|list[float]|tuple[float]|Dataset) -> None:
         """
         Set the bounds of the data to download.
         """
         if bounds is None:
             return
         elif isinstance(bounds, (list, tuple)):
-            _bounds = BoundingBox(*bounds)
+            _bounds = sp.BoundingBox(*bounds)
         elif isinstance(bounds, str):
-            _bounds = BoundingBox.from_file(bounds)
+            _bounds = sp.BoundingBox.from_file(bounds)
         else:
             try:
-                _bounds = BoundingBox.from_dataset(bounds)
+                _bounds = sp.BoundingBox.from_dataset(bounds)
             except:
                 raise ValueError('Invalid bounds')
 
@@ -107,8 +105,8 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         self.destination = destination
 
     def get_data(self,
-                 time_range: ts.TimeRange,
-                 space_bounds:  Optional[BoundingBox] = None,
+                 time_range: ts.TimeRange|Sequence[dt.datetime],
+                 space_bounds:  Optional[sp.BoundingBox] = None,
                  destination: Optional[Dataset|dict|str] = None,
                  options:  Optional[dict] = None) -> None:
         """
@@ -134,6 +132,11 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
             raise ValueError('No destination specified')
         
         # get the timesteps to download
+        if isinstance(time_range, Sequence):
+            time_range = list(time_range)
+            time_range.sort()
+            time_range = ts.TimeRange(time_range[0], time_range[-1])
+
         timesteps = self._get_timesteps(time_range)
 
         for timestep in timesteps:
@@ -148,14 +151,14 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
                     destination.write_data(data, timestep, **tags)
 
     @abstractmethod
-    def _get_data_ts(self, time_range: TimeStep, space_bounds: BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:
+    def _get_data_ts(self, time_range: ts.TimeStep, space_bounds: sp.BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:
         """
         Get data from this downloader as xr.Dataset.
         The return structure is a list of tuples, where each tuple contains the data and a dictionary of tags related to that data.
         """
         raise NotImplementedError
 
-    def _get_timesteps(self, time_range: ts.TimeRange) -> list[TimeStep]:
+    def _get_timesteps(self, time_range: ts.TimeRange) -> list[ts.TimeStep]:
         """
         Get the timesteps to download, assuming.
         """
@@ -221,7 +224,7 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
                 self.variables[var] = available_variables[var]
             
     #TODO: this is a bit of an akward spot to put this, but it is used by all forecast downloaders, so it makes some sense to have it here
-    def postprocess_forecast(self, ds: xr.Dataset, space_bounds: BoundingBox) -> None:
+    def postprocess_forecast(self, ds: xr.Dataset, space_bounds: sp.BoundingBox) -> None:
         """
         Postprocess the forecast data.
         """
@@ -232,7 +235,7 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         ds = ds.assign_coords({self.frc_dims["time"]: self.frc_time_range}).rename({v: k for k, v in self.frc_dims.items()})
 
         # Crop with bounding box
-        ds = crop_to_bb(ds, space_bounds)
+        ds = sp.crop_to_bb(ds, space_bounds)
 
         # If lat is a decreasing vector, flip it and the associated variables vertically
         if ds.lat.values[0] > ds.lat.values[-1]:

@@ -5,7 +5,7 @@ import os
 from ecmwf.opendata import Client
 
 from d3tools.timestepping.timestep import TimeStep
-from d3toos.spatial import BoundingBox
+from d3tools.spatial import BoundingBox
 from d3tools.timestepping import TimeRange
 
 from ...base_downloaders import APIDownloader
