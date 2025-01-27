@@ -17,7 +17,9 @@ from d3tools.timestepping.timestep import TimeStep
 
 class ICONDownloader(URLDownloader):
     
+    source = "ICON"
     name = "ICON_downloader"
+    
     default_options = {
         'frc_max_step': 180,
         'variables': ["tp", "t_2m"],
