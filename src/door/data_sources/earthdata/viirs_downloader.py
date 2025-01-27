@@ -78,7 +78,7 @@ class VIIRSDownloader(CMRDownloader):
     # we need to add the version=2.0 to the URL to get the correct response for the snow product (for FAPAR it doesn't matter)
     cmr_url='https://cmr.earthdata.nasa.gov/search/granules.json?version=2.0'
 
-    def __init__(self, product:str, satellite:str) -> None:
+    def __init__(self, product:str, satellite: str = 'SNPP') -> None:
         """
         Initializes the CMRDownloader class.
         """
@@ -215,14 +215,16 @@ class VIIRSDownloader(CMRDownloader):
             # from here on, we work on layers (i.e. variables) individually
             for varname, variable in self.variables.items():
                 dataset = mosaics[variable['id']]
+                # save to a temporary file, to reopen it as a xarray dataset
+                tmp_file = os.path.join(tmp_path, f'mosaic_{varname}.tif')
+                gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions='COMPRESS=LZW'))
+                dataset = None
+
                 if self.crop_to_bounds:
-                    data = crop_to_bb(dataset, space_bounds, 'xarray')
+                    data = crop_to_bb(tmp_file, space_bounds)
                 else:
-                    tmp_file = os.path.join(tmp_path, f'mosaic_{varname}_{tile}.tif')
-                    gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions='COMPRESS=LZW'))
                     data = rxr.open_rasterio(tmp_file)
 
-                dataset = None
                 data = self.set_attributes(data, variable)
                 yield data, {'variable': varname}
         else:
@@ -237,13 +239,17 @@ class VIIRSDownloader(CMRDownloader):
                         tile_name = re.search(pattern, file).group()
                     else:
                         tile_name = str(tile)
-                    if self.crop_to_bounds:
-                        data = crop_to_bb(dataset, space_bounds, 'xarray')
-                    else:
-                        tmp_file = os.path.join(tmp_path, f'{varname}_{tile}.tif')
-                        gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions='COMPRESS=LZW'))
-                        data = rxr.open_rasterio(tmp_file)
+
+                    # save to a temporary file, to reopen it as a xarray dataset
+                    tmp_file = os.path.join(tmp_path, f'{varname}_{tile}.tif')
+                    gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions='COMPRESS=LZW'))
                     dataset = None
+
+                    if self.crop_to_bounds:
+                        data = crop_to_bb(tmp_file, space_bounds)
+                    else:
+                        data = rxr.open_rasterio(tmp_file)
+
                     data = self.set_attributes(data, variable)
                     yield data, {'variable': varname, 'tile': tile_name}           
 
