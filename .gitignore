@@ -35,3 +35,8 @@ venv.bak/
 # IDEs and editors
 .vscode
 .idea
+
+deprecated/*
+workflow_examples/old/*
+workflow_examples/option_files/to_check/*
+output/*
