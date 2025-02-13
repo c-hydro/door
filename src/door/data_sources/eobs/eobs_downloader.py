@@ -145,8 +145,11 @@ class EOBSDownloader(URLDownloader):
             # if the month file is not downloaded, check if the longterm file is
             relevant_longterm_tr = [tr for tr in self.longterm_timeranges if tr.contains(timestep.start)]
 
-            if relevant_longterm_tr is not None:
-                relevant_longterm_url = self.longterm_url.format(variable = self.variable, resolution = self.resolution, tr = relevant_longterm_tr, version = self.version)
+            if len(relevant_longterm_tr) > 0:
+                relevant_longterm_url = self.longterm_url.format(variable = self.variable,
+                                                                 resolution = self.resolution,
+                                                                 tr = relevant_longterm_tr[0],
+                                                                 version = self.version)
                 relevant_longterm_nc  = os.path.basename(relevant_longterm_url)
                 longterm_tmp_file     = os.path.join(tmp_path, relevant_longterm_nc)
 
@@ -162,7 +165,7 @@ class EOBSDownloader(URLDownloader):
                 break
 
             # if the month file is not available, try downloading the longterm file
-            if relevant_longterm_tr is not None:
+            if len(relevant_longterm_tr) > 0:
                 self.url_blank = relevant_longterm_url
                 success = self.download(longterm_tmp_file, min_size = 2000, missing_action = 'warning')
                 if success:
