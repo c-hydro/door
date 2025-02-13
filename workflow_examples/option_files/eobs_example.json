@@ -1,0 +1,21 @@
+{
+    "TAGS":{
+        "source"   : "E-OBS"
+    },
+    "DATASETS":{
+        "destination" : {
+            "type" : "local",
+            "path" : "output/{source}/{variable}/%Y/",
+            "filename" : "{source}-{variable}_sample_%Y%m%d.tif"
+        }
+    },
+    "DOOR_DOWNLOADER" :             {
+        "source"    : "{source}",
+        "destination" : "{DATASETS.destination}",
+        "bounds" : [8, 38.5, 10, 41.5],
+        "options" : {
+            "variables"  : ["rr", "tg", "tx", "tn"],
+            "resolution" : 0.1
+        }
+    }
+}
