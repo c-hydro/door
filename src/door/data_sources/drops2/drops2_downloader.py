@@ -8,8 +8,7 @@ from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
 
 from d3tools.spatial import BoundingBox
-from d3tools.timestepping import TimeRange
-from d3tools.timestepping.timestep import TimeStep
+from d3tools.timestepping import TimeRange, TimeStep, Hour
 from d3tools.data import Dataset
 
 class DROPS2Downloader(DOORDownloader):
@@ -65,7 +64,9 @@ class DROPS2Downloader(DOORDownloader):
 
         # get the last published timestep
         last_published = self.get_last_published_date(**kwargs)
-        return TimeStep.from_unit(frequency).from_date(last_published)
+
+        if frequency.lower() == 'h':
+            return Hour.from_date(last_published)
 
     def get_last_published_date(self, **kwargs) -> dt.datetime:
         now = dt.datetime.now()
