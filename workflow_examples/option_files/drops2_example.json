@@ -1,0 +1,30 @@
+{
+    "TAGS":{
+        "source"   : "DROPS2",
+        "product"  : "CHIRPSp05-dekads",
+        "prod_name": "DROPS2-temperature"
+    },
+    "DATASETS":{
+        "destination" : {
+            "type" : "local",
+            "path" : "output/{source}/temperature/%Y",
+            "filename" : "{prod_name}_sample_%Y%m%d.csv"
+        }
+    },
+    "DOOR_DOWNLOADER" : {
+        "source"    : "{source}",
+        "destination" : "{DATASETS.destination}",
+        "bounds" : [8, 38.5, 10, 41.5],
+        "options" : {
+            "group": "Dewetra%Default",
+            "invalid_flags": [-9998, -9999],
+            "ntry": 20,
+            "sec_sleep": 5,
+            "aggregation_seconds": 3600,
+            "host": "http://dds.cimafoundation.org/dds/rest",
+            "sensor_class": "TERMOMETRO",
+            "frequency": "H",
+            "name_columns": ["station_id", "station_name", "lat", "lon", "data2"]
+        }
+    }
+}

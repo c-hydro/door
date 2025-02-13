@@ -1,0 +1,24 @@
+{
+    "TAGS":{
+        "source"   : "HSAF",
+        "product"  : "HSAF-h14",
+        "prod_name": "{product}"
+    },
+    "DATASETS":{
+        "destination" : {
+            "type" : "local",
+            "path" : "output/{source}/{product}-{variable}/%Y",
+            "filename" : "{prod_name}SM{variable}_sample_%Y%m%d.tif"
+        }
+    },
+    "DOOR_DOWNLOADER" : {
+        "source"    : "{source}",
+        "product"   : "{product}",
+        "destination" : "{DATASETS.destination}",
+        "bounds" : [8, 38.5, 10, 41.5],
+        "options" : {
+            "variables": ["var40", "var41", "var42", "var43"],
+            "custom_variables": {"full":[0,1.89]}
+        }
+    }
+}
