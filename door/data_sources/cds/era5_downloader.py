@@ -134,7 +134,8 @@ class ERA5Downloader(CDSDownloader):
 
         request = {
             'product_type': 'reanalysis',
-            'format': 'grib', # we always want grib, it's smaller, then we convert
+            'data_format': 'grib', # we always want grib, it's smaller, then we convert
+            'download_format' : 'unarchived', #TODO: change this to "zip" and handle unzipping before opening the data!
             'variable': variables,
             'year' : years_str,
             'month': months_str,
