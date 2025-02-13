@@ -33,10 +33,12 @@ dependencies = [
     "xarray>=2024.3.0",
     "requests>=2.32.3",
     "cfgrib>=0.9.11.0",
+    "netcdf4>=1.5.8",
     "h5py>=3.6.0",             #only for viirs_downloader
     "cdsapi>=0.7.4",           #only for cds_downloader
     "ecmwf-opendata >= 0.2.0", #only for ecmwf_opendata_downloader
     "paramiko>=2.9.3",
+    "ftpretty>=0.1.0", # I would like to avoid a repetition here, paramiko and ftpretty kind of do the same thing
 ]
 
 [project.urls]
