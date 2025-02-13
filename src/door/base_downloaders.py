@@ -29,6 +29,9 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
     name = "DOOR_Downloader"
     default_options = {}
 
+    single_temp_folder = False
+    separate_vars = False
+
     def __init__(self) -> None:
         self.log = logging.getLogger(self.name)
 
@@ -113,22 +116,38 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         Get data from this downloader and saves it to a file
         """
         # get options and check them against the default options
+        time_range = self._check_get_data_args(time_range, space_bounds, destination, options)
+
+        timesteps = self._get_timesteps(time_range)
+
+        # sometimes it is convenient to download each variable separately, others it is better to download all the data at once
+        if self.separate_vars:
+            for variable in self.variables:
+                self.variable = variable
+                self._loop_timesteps_and_save_data(timesteps)
+        else:
+            self._loop_timesteps_and_save_data(timesteps)
+
+    def _check_get_data_args(self,
+                             time_range: ts.TimeRange|Sequence[dt.datetime],
+                             space_bounds:  Optional[sp.BoundingBox] = None,
+                             destination: Optional[Dataset|dict|str] = None,
+                             options:  Optional[dict] = None) -> tuple[ts.TimeRange, sp.BoundingBox, Dataset]:
+        
+        # get options and check them against the default options
         if options is not None: 
             self.set_options(options)
 
         # set the space bounds
-        if space_bounds is None:
-            if hasattr(self, 'bounds'):
-                space_bounds = self.bounds
-            else:
-                raise ValueError('No space bounds specified')
-            
-        if destination is not None:
-            self.set_destination(destination)
+        self.set_bounds(space_bounds)
+        # check if the space bounds are set
+        if not hasattr(self, 'bounds'):
+            raise ValueError('No space bounds specified')
         
-        if hasattr(self, 'destination'):
-            destination = self.destination
-        else:
+        # set the destination
+        self.set_destination(destination)
+        # check if the destination is set
+        if not hasattr(self, 'destination'):
             raise ValueError('No destination specified')
         
         # get the timesteps to download
@@ -136,19 +155,34 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
             time_range = list(time_range)
             time_range.sort()
             time_range = ts.TimeRange(time_range[0], time_range[-1])
-
-        timesteps = self._get_timesteps(time_range)
-
-        for timestep in timesteps:
+        
+        return time_range
+        
+    def _loop_timesteps_and_save_data(self, timesteps: list[ts.TimeStep]) -> None:
+        # download the data, either in a single temp folder or in separate temp folders (one per timestep)
+        # the latter is more space efficient, but at times you have to download the data for several timesteps at once
+        # so it is better to have the option to download all the data in a single folder
+        if self.single_temp_folder:
             with tempfile.TemporaryDirectory() as tmp_path:
-                data_struct = self._get_data_ts(timestep, space_bounds, tmp_path)
-                if not data_struct:
-                    self.log.warning(f'No data found for timestep {timestep}')
-                    continue
-                for data, tags in data_struct:
-                    if 'timestep' in tags:
-                        timestep = tags.pop('timestep')
-                    destination.write_data(data, timestep, **tags)
+                for timestep in timesteps:
+                    self._get_and_save_data_ts(timestep, tmp_path)
+        else:
+            for timestep in timesteps:
+                with tempfile.TemporaryDirectory() as tmp_path:
+                    self._get_and_save_data_ts(timestep, tmp_path)
+
+    def _get_and_save_data_ts(self,
+                              timestep: ts.TimeStep,
+                              tmp_path: str) -> None:
+        
+        data_struct = self._get_data_ts(timestep, self.bounds, tmp_path)
+        if not data_struct:
+            self.log.warning(f'No data found for timestep {timestep}')
+            return
+        for data, tags in data_struct:
+            if 'timestep' in tags:
+                timestep = tags.pop('timestep')
+            self.destination.write_data(data, timestep, **tags)
 
     @abstractmethod
     def _get_data_ts(self, time_range: ts.TimeStep, space_bounds: sp.BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:

@@ -1,9 +1,9 @@
 import os
-from typing import Generator
-import numpy as np
+from typing import Generator, Optional, Sequence
 import xarray as xr
 import datetime as dt
 import requests
+import tempfile
 
 from ...base_downloaders import URLDownloader
 
@@ -12,11 +12,11 @@ from d3tools.timestepping.timestep import TimeStep
 from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
 from d3tools.spatial import BoundingBox, crop_to_bb
 
-from ...utils.io import decompress_gz
-
 class NOAADownloader(URLDownloader):
     source = "NOAA"
     name = "NOAA_downloader"
+
+    single_temp_folder = True
 
     default_options = {
         "ts_per_year": 365
@@ -104,7 +104,7 @@ class NOAADownloader(URLDownloader):
         tmp_destination = os.path.join(tmp_path, tmp_file_nc)
         if not os.path.exists(tmp_destination):
             # download the file
-            self.download(tmp_destination, min_size = 2000, missing_action = 'warining', year = year)
+            self.download(tmp_destination, min_size = 2000, missing_action = 'warning', year = year)
         
         # open the file
         raw_data = xr.open_dataset(tmp_destination, engine = 'netcdf4')
