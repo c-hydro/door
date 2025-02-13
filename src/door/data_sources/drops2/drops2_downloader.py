@@ -54,7 +54,24 @@ class DROPS2Downloader(DOORDownloader):
 
         # then use the super method to get the data
         super().get_data(time_range, space_bounds, destination)
-    
+
+    def get_last_published_ts(self, frequency = None, **kwargs) -> TimeStep:
+        
+        """
+        Get the last published date for the dataset.
+        """
+        if frequency is None:
+            frequency = self.frequency
+
+        # get the last published timestep
+        last_published = self.get_last_published_date(**kwargs)
+        return TimeStep.from_unit(frequency).from_date(last_published)
+
+    def get_last_published_date(self, **kwargs) -> dt.datetime:
+        now = dt.datetime.now()
+        now = now.replace(minute=0, second=0, microsecond=0)
+        return now
+
     def _get_data_ts(self, time_range: TimeStep,
                            space_bounds: BoundingBox,
                            tmp_path: str) -> Generator[tuple[pd.DataFrame, dict], None, None]:
