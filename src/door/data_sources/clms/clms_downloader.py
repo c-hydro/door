@@ -2,14 +2,13 @@ import os
 import requests
 import numpy as np
 import xarray as xr
-import tempfile
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Sequence
 import datetime as dt
 
-from ...utils.space import BoundingBox, crop_to_bb
 from ...utils.io import download_http, handle_missing
 from ...base_downloaders import URLDownloader
 
+from d3tools.spatial import BoundingBox, crop_to_bb
 from d3tools import timestepping as ts
 from d3tools.timestepping.timestep import TimeStep
 from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
@@ -108,10 +107,22 @@ class CLMSDownloader(URLDownloader):
                      time_range: TimeStep,
                      space_bounds: BoundingBox,
                      tmp_path: str,
-                     variable: str,
-                     missing_action: str = 'warning',
                      **kwargs) -> Iterable[tuple[xr.DataArray, dict]]:
-        ''' Get the data for a specific timestep. '''
+        
+        """
+        Get the data for a specific timestep.
+        """
+        for variable in self.variables:
+            yield from self._get_data_ts_singlevar(time_range, space_bounds, tmp_path, variable, **kwargs)
+
+    def _get_data_ts_singlevar(
+                        self,
+                        time_range: TimeStep,
+                        space_bounds: BoundingBox,
+                        tmp_path: str,
+                        variable: str,
+                        **kwargs) -> Iterable[tuple[xr.DataArray, dict]]:
+        ''' Get the data for a specific timestep and variable. '''
 
         # Get the URL without version
         url_blank = self.url_blank.format(
@@ -155,20 +166,21 @@ class CLMSDownloader(URLDownloader):
 
         else:
             # If the loop ends without breaking, the data is missing
-            handle_missing(missing_action, {'timestep': time_range, 'variable': variable})
+            handle_missing('warning', {'timestep': time_range, 'variable': variable})
 
     def get_data(self,
-                 time_range: ts.TimeRange,
+                 time_range: ts.TimeRange|Sequence[dt.datetime],
                  space_bounds:  Optional[BoundingBox] = None,
                  destination: Optional[Dataset|dict|str] = None,
                  options:  Optional[dict] = None) -> None:
         """
         Get data from this downloader and saves it to a file
         """
-        # get options and check them against the default options
-        if options is not None:
-            self.set_options(options)
 
+        # get options and check them against the default options
+        if options is not None: 
+            self.set_options(options)
+        
         # Set ts_str based on the ts_per_year
         if self.ts_per_year == 36:
             self.ts_str = '10'
@@ -176,33 +188,5 @@ class CLMSDownloader(URLDownloader):
             self.ts_str = ''
         else:
             raise ValueError(f"ts_per_year {self.ts_per_year} not supported")
-
-        # set the space bounds
-        if space_bounds is None:
-            if hasattr(self, 'bounds'):
-                space_bounds = self.bounds
-            else:
-                raise ValueError('No space bounds specified')
-
-        if destination is not None:
-            self.set_destination(destination)
-
-        if hasattr(self, 'destination'):
-            destination = self.destination
-        else:
-            raise ValueError('No destination specified')
-
-        # get the timesteps to download
-        timesteps = self._get_timesteps(time_range)
-
-        for timestep in timesteps:
-            with tempfile.TemporaryDirectory() as tmp_path:
-                for variable in self.variables:
-                    data_struct = self._get_data_ts(timestep, space_bounds, tmp_path, variable)
-                    if not data_struct:
-                        self.log.warning(f'No data found for timestep {timestep}')
-                        continue
-                    for data, tags in data_struct:
-                        if 'timestep' in tags:
-                            timestep = tags.pop('timestep')
-                        destination.write_data(data, timestep, **tags)
+        
+        super().get_data(time_range, space_bounds, destination)
