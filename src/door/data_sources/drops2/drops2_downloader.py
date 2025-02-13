@@ -1,9 +1,6 @@
 import pandas as pd
 import numpy as np
 from typing import Optional, Generator, Sequence
-from drops2.utils import DropsCredentials
-from drops2 import sensors
-from drops2.utils import DropsException
 from time import sleep
 import datetime as dt
 
@@ -35,6 +32,8 @@ class DROPS2Downloader(DOORDownloader):
     spin_up_drops = 2 # hours
     
     def authenticate(self, host: str) -> None:
+        from drops2.utils import DropsCredentials
+
         credentials = get_credentials(env_variables=self.credential_env_vars, url=host, encode=False)
         user, password = credentials.split(':')
         DropsCredentials.set(host, user, password)
@@ -59,6 +58,9 @@ class DROPS2Downloader(DOORDownloader):
     def _get_data_ts(self, time_range: TimeStep,
                            space_bounds: BoundingBox,
                            tmp_path: str) -> Generator[tuple[pd.DataFrame, dict], None, None]:
+
+        from drops2 import sensors
+        from drops2.utils import DropsException
 
         sensors_list = None
         ntry = self.ntry
