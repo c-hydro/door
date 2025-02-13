@@ -12,7 +12,7 @@ from functools import wraps
 
 from ftpretty import ftpretty as ftp
 
-from .parse import format_dict
+from d3tools.parse.parse_utils import format_dict
 
 import logging
 logger = logging.getLogger(__name__)
@@ -142,35 +142,3 @@ def handle_missing(level: str, specs: dict = {}):
         pass
     else:
         raise ValueError(f'Invalid missing data error level: {level}')
-    
-# def in_tmp_folder(name, path = None):
-#     """
-#     Decorator to execute a function inside a temporary folder.
-#     Changes the current working directory to a temporary directory for the duration of the function call.
-#     """
-#     def decorator(func):
-#         @wraps(func)
-#         def wrapper(*args, **kwargs):
-#             if not path:
-#                 temp_path = os.path.join(os.getenv('HOME'), 'tmp')
-#             else:
-#                 temp_path = path
-
-#             os.makedirs(temp_path, exist_ok=True)
-#             with tempfile.TemporaryDirectory(dir=temp_path) as tmpdirname:
-#                 g = func.__globals__
-
-#                 oldvalue = g.get(name, None)
-#                 g[name] = tmpdirname
-
-#                 try:
-#                     output = func(*args, **kwargs)
-#                 finally:
-#                     if oldvalue is None:
-#                         del g[name]
-#                     else:
-#                         g[name] = oldvalue
-
-#                 return output
-#         return wrapper
-#     return decorator

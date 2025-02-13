@@ -2,8 +2,6 @@ import pandas as pd
 import xarray as xr
 import os
 
-from .space import BoundingBox
-
 import logging
 logger = logging.getLogger(__name__)
 
