@@ -7,12 +7,11 @@ from drops2.utils import DropsException
 from time import sleep
 
 from ...base_downloaders import DOORDownloader
-
-from ...utils.space import BoundingBox
 from ...utils.auth import get_credentials
 
-from ...tools.timestepping import TimeRange
-from ...tools.timestepping.timestep import TimeStep
+from d3tools.spatial import BoundingBox
+from d3tools.timestepping import TimeRange
+from d3tools.timestepping.timestep import TimeStep
 
 class DROPS2Downloader(DOORDownloader):
     

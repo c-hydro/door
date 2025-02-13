@@ -8,12 +8,12 @@ import requests
 import subprocess
 
 from ...base_downloaders import URLDownloader
-from ...utils.space import BoundingBox
 from ...utils.io import untar_file, decompress_bz2
 from ...utils.netcdf import save_netcdf
 
-from ...tools import timestepping as ts
-from ...tools.timestepping.timestep import TimeStep
+from d3tools.spatial import BoundingBox
+from d3tools import timestepping as ts
+from d3tools.timestepping.timestep import TimeStep
 
 class ICONDownloader(URLDownloader):
     
