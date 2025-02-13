@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import Generator
 
 import h5py
-from osgeo import gdal
 import os
 import re
 import xarray as xr
@@ -12,6 +11,7 @@ from .cmr_downloader import CMRDownloader
 
 from d3tools.spatial import BoundingBox, crop_to_bb
 from d3tools.timestepping.timestep import TimeStep
+from d3tools.errors import GDAL_ImportError
 
 class VIIRSDownloader(CMRDownloader):
 
@@ -84,6 +84,11 @@ class VIIRSDownloader(CMRDownloader):
         """
         super().__init__(product.lower())
         
+        try:
+            from osgeo import gdal
+        except ImportError:
+            raise GDAL_ImportError(function = 'door.VIIRSDownloader')
+
         if satellite not in self.product_id:
             raise ValueError(f'Satellite {satellite} not available for product {product}. Choose one of {self.product_id.keys()}')
         self.product_id = self.product_id[satellite]
@@ -131,6 +136,7 @@ class VIIRSDownloader(CMRDownloader):
         """
         Build a mosaic for each layer from a list of HDF5 files.
         """
+        from osgeo import gdal
 
         lids = [l['id'] for l in layers.values()]
 
@@ -151,10 +157,12 @@ class VIIRSDownloader(CMRDownloader):
     
     def get_layers_from_hdf5(self,
                              hdf5_file: str,
-                             layer_ids: list[int]) -> dict[gdal.Dataset]:
+                             layer_ids: list[int]) -> dict['gdal.Dataset']:
         """
         Get the layers from an HDF5 file.
         """
+        from osgeo import gdal
+
         # Create a dict to hold the HDF5 datasets, one for each layer
         hdf5_datasets = {l: [] for l in layer_ids}
 
@@ -190,6 +198,7 @@ class VIIRSDownloader(CMRDownloader):
         """
         Get data from the CMR.
         """
+        from osgeo import gdal
 
         url_list = self.cmr_search(timestep, space_bounds)
         url_list = self.get_urls_in_timestep(url_list, timestep)
