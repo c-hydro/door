@@ -7,6 +7,7 @@ import tempfile
 from osgeo import gdal, gdalconst, osr
 import xarray as xr
 import rioxarray as rxr
+from shapely.constructive import buffer
 
 from ..tools.data import Dataset
 
@@ -178,6 +179,8 @@ def crop_to_bb(src: str|gdal.Dataset|xr.DataArray|xr.Dataset,
     """
     Cut a map to a bounding box.
     """
+    BBox.buffer_bbox(-1e-6)
+
     if isinstance(src, gdal.Dataset):
         with tempfile.TemporaryDirectory() as tmp_path:
             tmp_file = os.path.join(tmp_path, 'tmp.tif')
