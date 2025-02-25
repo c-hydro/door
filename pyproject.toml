@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "door"
+version = "2.3.0"
+description = "A package for operational retrieval of raster data from different sources"
+authors = [
+    { name = "Andrea Libertino", email = "andrea.libertino@cimafoundation.org" },
+    { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org" },
+    { name = "Michel Isabellon"},
+    { name = "Checco Avanzi"}
+]
+maintainers = [
+    { name = "Andrea Libertino", email = "andrea.libertino@cimafoundation.org" },
+    { name = "Luca Trotter", email = "luca.trotter@cimafoundation.org"}
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: ECPL License",
+    "Operating System :: OS Independent",
+]
+
+# mandatory dependencies for basic functionality
+dependencies = [
+    "d3tools@git+https://github.com/c-hydro/d3tools",
+    "numpy>=1.21.5",
+    "rioxarray>=0.15.5",
+    "xarray>=2024.3.0",
+    "requests>=2.32.3",
+    "cfgrib>=0.9.11.0",
+    "netcdf4>=1.5.8",
+    "h5py>=3.6.0",             #only for viirs_downloader
+    "cdsapi>=0.7.4",           #only for cds_downloader
+    "ecmwf-opendata >= 0.2.0", #only for ecmwf_opendata_downloader
+    "paramiko>=2.9.3",
+    "ftpretty>=0.1.0", # I would like to avoid a repetition here, paramiko and ftpretty kind of do the same thing
+]
+
+[project.urls]
+Repository = "https://github.com/c-hydro/door"
+
+[project.optional-dependencies]
+# dependencies for drops data
+drops = [
+    "drops2@git+https://github.com/CIMAFoundation/drops2@v0.7.0",
+    "pandas>=1.3.5"
+]
+
+# dependencies for creating thumbnails
+thumbnails = [
+    "d3tools[thumbnails]@git+https://github.com/c-hydro/d3tools"
+]
+
+# dependencies for reading and writing remote data
+remote-data = [
+    "d3tools[remote-data]@git+https://github.com/c-hydro/d3tools"
+]
