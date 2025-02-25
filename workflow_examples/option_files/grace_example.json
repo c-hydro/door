@@ -1,0 +1,23 @@
+{
+    "TAGS":{
+        "source"   : "GRACE",
+        "product"  : "tws",
+        "prod_name": "{source}-{product}"
+    },
+    "DATASETS":{
+        "destination" : {
+            "type" : "local",
+            "path" : "output/{source}/{product}/%Y",
+            "filename" : "{prod_name}_sample_%Y%m%d.tif"
+        }
+    },
+    "DOOR_DOWNLOADER" : {
+        "source"    : "{source}",
+        "product"   : "{product}",
+        "destination" : "{DATASETS.destination}",
+        "bounds" : [8, 38.5, 10, 41.5],
+        "options" : {
+            "variables": ["TWS"]
+        }
+    }
+}
