@@ -12,6 +12,7 @@ from .utils.io import download_http, check_download, handle_missing, download_ft
 from d3tools import spatial as sp
 from d3tools import timestepping as ts
 from d3tools.data import Dataset
+from d3tools.exit import rm_at_exit
 
 class MetaDOORDownloader(ABCMeta):
     def __init__(cls, name, bases, attrs):
@@ -163,13 +164,15 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         # the latter is more space efficient, but at times you have to download the data for several timesteps at once
         # so it is better to have the option to download all the data in a single folder
         if self.single_temp_folder:
-            with tempfile.TemporaryDirectory() as tmp_path:
+            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_path:
                 for timestep in timesteps:
                     self._get_and_save_data_ts(timestep, tmp_path)
+                    rm_at_exit(tmp_path)
         else:
             for timestep in timesteps:
-                with tempfile.TemporaryDirectory() as tmp_path:
+                with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_path:
                     self._get_and_save_data_ts(timestep, tmp_path)
+                    rm_at_exit(tmp_path)
 
     def _get_and_save_data_ts(self,
                               timestep: ts.TimeStep,

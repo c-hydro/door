@@ -217,9 +217,9 @@ class VIIRSDownloader(CMRDownloader):
                 dataset = mosaics[variable['id']]
                 # save to a temporary file, to reopen it as a xarray dataset
                 tmp_file = os.path.join(tmp_path, f'mosaic_{varname}.tif')
-                gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions='COMPRESS=LZW'))
+                
+                gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
                 dataset = None
-
                 if self.crop_to_bounds:
                     data = crop_to_bb(tmp_file, space_bounds)
                 else:
@@ -242,7 +242,7 @@ class VIIRSDownloader(CMRDownloader):
 
                     # save to a temporary file, to reopen it as a xarray dataset
                     tmp_file = os.path.join(tmp_path, f'{varname}_{tile}.tif')
-                    gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions='COMPRESS=LZW'))
+                    gdal.Translate(tmp_file, dataset, options=gdal.TranslateOptions(format='GTiff', creationOptions=['COMPRESS=LZW']))
                     dataset = None
 
                     if self.crop_to_bounds:
