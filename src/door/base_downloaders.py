@@ -195,6 +195,12 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         """
         raise NotImplementedError
 
+    def get_last_published_ts(self) -> ts.TimeStep:
+        """
+        Get the last timestep available in the downloader.
+        """
+        raise NotImplementedError
+
     def _get_timesteps(self, time_range: ts.TimeRange) -> list[ts.TimeStep]:
         """
         Get the timesteps to download, assuming.
@@ -259,7 +265,39 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         for var in variables:
             if var in available_variables:
                 self.variables[var] = available_variables[var]
-            
+
+    def get_last_ts(self, **kwargs) -> tuple[ts.TimeStep]:
+        """
+        Get the last timestep available in the destination and the last timestep available in the downloader.
+        """
+        
+        last_ts_output = None
+
+        variables = list(self.variables.keys()) if hasattr(self, 'variables') else ['__var__']
+        tiles = self.destination.tile_names
+
+        for i, variable in enumerate(variables):
+            if variable == '__var__':
+                agg_methods = self.agg_method if hasattr(self, 'agg_method') else ['__agg_method__']
+            else:
+                agg_methods = self.agg_method[i] if hasattr(self, 'agg_method') else ['__agg_method__']
+            if not isinstance(agg_methods, list):
+                agg_methods = [agg_methods]
+
+            for agg_method in agg_methods:
+                for tile in tiles:
+                    case = {'variable': variable, 'tile': tile, 'agg_method': agg_method}
+                    now = None if last_ts_output is None else last_ts_output.end + dt.timedelta(days = 1)
+                    output = self.destination.get_last_ts(now = now, **case, **kwargs)
+                    if output is not None:
+                        last_ts_output = output if last_ts_output is None else min(output, last_ts_output)
+                    else:
+                        last_ts_output = None
+                        break
+                         
+        last_ts_input  = self.get_last_published_ts()
+        return last_ts_input, last_ts_output
+
     #TODO: this is a bit of an akward spot to put this, but it is used by all forecast downloaders, so it makes some sense to have it here
     def postprocess_forecast(self, ds: xr.Dataset, space_bounds: sp.BoundingBox) -> None:
         """
