@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "door"
-version = "2.3.0"
+version = "2.3.3"
 description = "A package for operational retrieval of raster data from different sources"
 authors = [
     { name = "Andrea Libertino", email = "andrea.libertino@cimafoundation.org" },
@@ -35,6 +35,7 @@ dependencies = [
     "cfgrib>=0.9.11.0",
     "netcdf4>=1.5.8",
     "h5py>=3.6.0",             #only for viirs_downloader
+    "pyhdf>=0.10.2",           #only for modis_downloader
     "cdsapi>=0.7.4",           #only for cds_downloader
     "ecmwf-opendata >= 0.2.0", #only for ecmwf_opendata_downloader
     "paramiko>=2.9.3",
