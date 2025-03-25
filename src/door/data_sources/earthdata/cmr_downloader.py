@@ -159,7 +159,7 @@ class CMRDownloader(DOORDownloader):
                 except KeyboardInterrupt:
                     quit()
 
-        with open(destination + '/hdf5names.json', 'w') as f:
+        with open(destination + '/hdfnames.json', 'w') as f:
             json.dump(filename_ls, f) 
 
         return filename_ls       

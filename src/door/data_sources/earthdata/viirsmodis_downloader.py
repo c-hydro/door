@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Generator
 
+from pyhdf.SD import SD, SDC
 import h5py
 import os
 import re
@@ -13,52 +14,7 @@ from d3tools.spatial import BoundingBox, crop_to_bb
 from d3tools.timestepping.timestep import TimeStep
 from d3tools.errors import GDAL_ImportError
 
-class VIIRSDownloader(CMRDownloader):
-
-    source = 'VIIRS'
-    name = 'VIIRS_downloader'
-
-    available_products = {
-        'fapar': {
-            'provider'   : 'LPDAAC_ECS',
-            'freq'       : '8-day',
-            'version'    : '002',
-            'product_id' : {'SNPP':'VNP15A2H', 'JPSS1':'VJ115A2H'},
-        },
-        'phenology': {
-            'provider'   : 'LPDAAC_ECS',
-            'freq'       : 'annual',
-            'version'    : '001',
-            'product_id' : {'SNPP':'VNP22Q2'},
-        },
-        'snow': {
-            'provider'   : 'NSIDCDAAC_ECS',
-            'freq'       : 'daily',
-            'version'    : '002',
-            'product_id' : {'SNPP':'VNP10A1', 'JPSS1':'VJ110A1'},
-        }
-    }
-
-    available_variables = {
-        'fapar': {
-            'FAPAR'        : {'id': 0, 'valid_range': (0,100), 'fill_value' : 255, 'scale_factor': 0.01},
-            'FAPAR_QC'     : {'id': 2, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1   },
-            'FAPAR_ExtraQC': {'id': 3, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1   },
-        },
-        'phenology': {
-            'GLSP_QC1'      : {'id': 5,  'valid_range': (0,254),   'fill_value' : 255,   'scale_factor': 1},
-            'GLSP_GSStart1' : {'id': 9,  'valid_range': (1,32766), 'fill_value' : 32767, 'scale_factor': 1},
-            'GLSP_GSEnd1'   : {'id': 11, 'valid_range': (1,32766), 'fill_value' : 32767, 'scale_factor': 1},
-            'GLSP_QC2'      : {'id': 24, 'valid_range': (0,254),   'fill_value' : 255,   'scale_factor': 1},
-            'GLSP_GSStart2' : {'id': 28, 'valid_range': (1,32766), 'fill_value' : 32767, 'scale_factor': 1},
-            'GLSP_GSEnd2'   : {'id': 30, 'valid_range': (1,32766), 'fill_value' : 32767, 'scale_factor': 1},
-        },
-        'snow': {
-            'Snow_AlgQA'      : {'id': 0, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1},
-            'Snow_QA'         : {'id': 1, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1},
-            'NDSI_Snow_Cover' : {'id': 3, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1},
-        }
-    }
+class VIIRSMODISDownloader(CMRDownloader):
 
     # source: http://spatialreference.org/ref/sr-org/modis-sinusoidal/
     projection = 'PROJCS["unnamed",\
@@ -78,7 +34,7 @@ class VIIRSDownloader(CMRDownloader):
     # we need to add the version=2.0 to the URL to get the correct response for the snow product (for FAPAR it doesn't matter)
     cmr_url='https://cmr.earthdata.nasa.gov/search/granules.json?version=2.0'
 
-    def __init__(self, product:str, satellite: str = 'SNPP') -> None:
+    def __init__(self, product:str, satellite: str|None = None) -> None:
         """
         Initializes the CMRDownloader class.
         """
@@ -87,49 +43,16 @@ class VIIRSDownloader(CMRDownloader):
         try:
             from osgeo import gdal
         except ImportError:
-            raise GDAL_ImportError(function = 'door.VIIRSDownloader')
+            raise GDAL_ImportError(function = f'door.{self.name}')
+
+        if satellite is None:
+            satellite = self.default_satellite
 
         if satellite not in self.product_id:
             raise ValueError(f'Satellite {satellite} not available for product {product}. Choose one of {self.product_id.keys()}')
         self.product_id = self.product_id[satellite]
         self.satellite  = satellite
-    
-    # this is specific to VIIRS, different from MODIS!
-    def get_geotransform(self, filename):
-        """
-        Get geotransform from dataset.
-        """
-        # get the filename of the metadata containing the geolocation
-        metadata_filename = filename.split('"')[1]
-        with h5py.File(metadata_filename, 'r') as f:
-            metadata = f['HDFEOS INFORMATION']['StructMetadata.0'][()].split()
-            metadata_list = [s.decode('utf-8').split('=') for s in metadata]
 
-            # get the coordinates of the upper left and lower right corners
-            self.ulx, self.uly = eval([s[1] for s in metadata_list if s[0] == 'UpperLeftPointMtrs'][0])
-            self.lrx, self.lry = eval([s[1] for s in metadata_list if s[0] == 'LowerRightMtrs'][0])
-
-            # get the size of the dataset (in pixels)
-              # these lines are super hacky, but they work
-            self.xsize = eval([s[1] for s in metadata_list if s[0] == 'XDim'][0])
-            self.ysize = eval([s[1] for s in metadata_list if s[0] == 'YDim'][0])
-
-        geotransform = (self.ulx, (self.lrx - self.ulx) / self.xsize, 0,
-                                self.uly, 0, (self.lry - self.uly) / self.ysize)
-        return geotransform
-
-    @property
-    def start(self):
-        if self.satellite == 'SNPP':
-            start = datetime(2012, 1, 19)
-        elif self.satellite == 'JPSS1':
-            start = datetime(2018, 1, 1)
-
-        if self.freq != 'annual':
-            return start
-        else:
-            return datetime(start.year+1, 1, 1)
-    
     def build_mosaics_from_hdf5(self,
                                 files: list[str],
                                 layers: dict) -> None:
@@ -262,4 +185,158 @@ class VIIRSDownloader(CMRDownloader):
         dataset.attrs['scale_factor'] = varopts.get('scale_factor', None)
 
         return dataset
-        
+
+class VIIRSDownloader(VIIRSMODISDownloader):
+
+    source = 'VIIRS'
+    name = 'VIIRS_downloader'
+    default_satellite = 'SNPP'
+
+    available_products = {
+        'fapar': {
+            'provider'   : 'LPDAAC_ECS',
+            'freq'       : '8-day',
+            'version'    : '002',
+            'product_id' : {'SNPP':'VNP15A2H', 'JPSS1':'VJ115A2H'},
+        },
+        'phenology': {
+            'provider'   : 'LPDAAC_ECS',
+            'freq'       : 'annual',
+            'version'    : '001',
+            'product_id' : {'SNPP':'VNP22Q2'},
+        },
+        'snow': {
+            'provider'   : 'NSIDCDAAC_ECS',
+            'freq'       : 'daily',
+            'version'    : '002',
+            'product_id' : {'SNPP':'VNP10A1', 'JPSS1':'VJ110A1'},
+        }
+    }
+
+    available_variables = {
+        'fapar': {
+            'FAPAR'        : {'id': 0, 'valid_range': (0,100), 'fill_value' : 255, 'scale_factor': 0.01},
+            'FAPAR_QC'     : {'id': 2, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1   },
+            'FAPAR_ExtraQC': {'id': 3, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1   },
+        },
+        'phenology': {
+            'GLSP_QC1'      : {'id': 5,  'valid_range': (0,254),   'fill_value' : 255,   'scale_factor': 1},
+            'GLSP_GSStart1' : {'id': 9,  'valid_range': (1,32766), 'fill_value' : 32767, 'scale_factor': 1},
+            'GLSP_GSEnd1'   : {'id': 11, 'valid_range': (1,32766), 'fill_value' : 32767, 'scale_factor': 1},
+            'GLSP_QC2'      : {'id': 24, 'valid_range': (0,254),   'fill_value' : 255,   'scale_factor': 1},
+            'GLSP_GSStart2' : {'id': 28, 'valid_range': (1,32766), 'fill_value' : 32767, 'scale_factor': 1},
+            'GLSP_GSEnd2'   : {'id': 30, 'valid_range': (1,32766), 'fill_value' : 32767, 'scale_factor': 1},
+        },
+        'snow': {
+            'Snow_AlgQA'      : {'id': 0, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1},
+            'Snow_QA'         : {'id': 1, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1},
+            'NDSI_Snow_Cover' : {'id': 3, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1},
+        }
+    }
+    
+    # this is specific to VIIRS, different from MODIS!
+    def get_geotransform(self, filename):
+        """
+        Get geotransform from dataset.
+        """
+        # get the filename of the metadata containing the geolocation
+        metadata_filename = filename.split('"')[1]
+        with h5py.File(metadata_filename, 'r') as f:
+            metadata = f['HDFEOS INFORMATION']['StructMetadata.0'][()].split()
+            metadata_list = [s.decode('utf-8').split('=') for s in metadata]
+
+            # get the coordinates of the upper left and lower right corners
+            self.ulx, self.uly = eval([s[1] for s in metadata_list if s[0] == 'UpperLeftPointMtrs'][0])
+            self.lrx, self.lry = eval([s[1] for s in metadata_list if s[0] == 'LowerRightMtrs'][0])
+
+            # get the size of the dataset (in pixels)
+              # these lines are super hacky, but they work
+            self.xsize = eval([s[1] for s in metadata_list if s[0] == 'XDim'][0])
+            self.ysize = eval([s[1] for s in metadata_list if s[0] == 'YDim'][0])
+
+        geotransform = (self.ulx, (self.lrx - self.ulx) / self.xsize, 0,
+                                self.uly, 0, (self.lry - self.uly) / self.ysize)
+        return geotransform
+
+    @property
+    def start(self):
+        if self.satellite == 'SNPP':
+            start = datetime(2012, 1, 19)
+        elif self.satellite == 'JPSS1':
+            start = datetime(2018, 1, 1)
+
+        if self.freq != 'annual':
+            return start
+        else:
+            return datetime(start.year+1, 1, 1)
+    
+class MODISDownloader(VIIRSMODISDownloader):
+
+    source = 'MODIS'
+    name = 'MODIS_downloader'
+    default_satellite = 'AQUA'
+
+    available_products = {
+        'et': {
+            'provider'   : 'LPCLOUD',
+            'freq'       : '8-day',
+            'version'    : '061',
+            'product_id' : {'AQUA':'MYD16A2', 'TERRA':'MOD16A2'},
+        }
+    }
+
+    available_variables = {
+        'et': {
+            'ET'    : {'id': 0, 'valid_range': (-32767, 32700), 'fill_value' : 32767, 'scale_factor': 0.1},
+            'PET'   : {'id': 2, 'valid_range': (-32767, 32700), 'fill_value' : 32767, 'scale_factor': 0.1},
+            'ET_QC' : {'id': 4, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1   },
+        }
+    }
+
+    # this is specific to MODIS, different from VIIRS!
+    def get_geotransform(self, filename):
+        """
+        Get geotransform from dataset.
+        """
+        # Get the filename of the metadata containing the geolocation
+        metadata_filename = filename.split('"')[1]
+        file = SD(metadata_filename, SDC.READ)
+        metadata = file.attributes()
+
+        # Extract and parse the StructMetadata.0 attribute
+        struct_metadata = metadata['StructMetadata.0']
+
+        # Use regular expressions to find the required geolocation information
+        ulx_uly_pattern = re.compile(r'UpperLeftPointMtrs=\(([^)]+)\)')
+        lrx_lry_pattern = re.compile(r'LowerRightMtrs=\(([^)]+)\)')
+        xdim_pattern = re.compile(r'XDim=(\d+)')
+        ydim_pattern = re.compile(r'YDim=(\d+)')
+
+        ulx_uly = ulx_uly_pattern.search(struct_metadata).group(1).split(',')
+        lrx_lry = lrx_lry_pattern.search(struct_metadata).group(1).split(',')
+        xdim = xdim_pattern.search(struct_metadata).group(1)
+        ydim = ydim_pattern.search(struct_metadata).group(1)
+
+        # Get the coordinates of the upper left and lower right corners
+        self.ulx, self.uly = map(float, ulx_uly)
+        self.lrx, self.lry = map(float, lrx_lry)
+
+        # Get the size of the dataset (in pixels)
+        self.xsize = int(xdim)
+        self.ysize = int(ydim)
+
+        geotransform = (self.ulx, (self.lrx - self.ulx) / self.xsize, 0,
+                        self.uly, 0, (self.lry - self.uly) / self.ysize)
+        return geotransform
+
+    @property
+    def start(self):
+        if self.satellite == 'AQUA':
+            start = datetime(2002, 1, 1)
+        elif self.satellite == 'TERRA':
+            start = datetime(2002, 1, 1)
+
+        if self.freq != 'annual':
+            return start
+        else:
+            return datetime(start.year+1, 1, 1)

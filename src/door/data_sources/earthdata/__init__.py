@@ -1,2 +1,2 @@
-from .viirs_downloader import VIIRSDownloader
+from .viirsmodis_downloader import VIIRSDownloader, MODISDownloader
 from .grace_downloader import GRACEDownloader
