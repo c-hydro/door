@@ -107,15 +107,15 @@ class NOAADownloader(URLDownloader):
         inrange = (vardata.time.dt.date >= timestep.start.date()) & (vardata.time.dt.date <= timestep.end.date())
         vardata = vardata.sel(time = inrange)
 
-        # aggregate the data
-        if self.agg_method == 'sum':
-            vardata = vardata.sum(dim = 'time')
-        elif self.agg_method == 'mean':
-            vardata = vardata.mean(dim = 'time')
-        else:
-            raise ValueError(f'Aggregation method {self.agg_method} not recognized')
-
         # crop the data
         cropped = crop_to_bb(vardata, space_bounds)
 
-        yield cropped, {}
+        # aggregate the data
+        if self.agg_method == 'sum':
+            aggregated = cropped.sum(dim = 'time')
+        elif self.agg_method == 'mean':
+            aggregated = cropped.mean(dim = 'time')
+        else:
+            raise ValueError(f'Aggregation method {self.agg_method} not recognized')
+
+        yield aggregated, {}
