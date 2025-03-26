@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "door"
-version = "2.3.3"
+version = "2.3.4"
 description = "A package for operational retrieval of raster data from different sources"
 authors = [
     { name = "Andrea Libertino", email = "andrea.libertino@cimafoundation.org" },

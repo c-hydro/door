@@ -10,3 +10,4 @@ from .persiann import *
 from .jaxa import *
 from .noaa import *
 from .eobs import *
+from .jra import *
