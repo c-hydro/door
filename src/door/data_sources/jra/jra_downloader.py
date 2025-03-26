@@ -149,6 +149,13 @@ class JRADownloader(URLDownloader):
             }
             # download the file
             self.download(tmp_destination, min_size = 2000, missing_action = 'warning', **tags)
+
+            # once we download a month, we can delete the previous month
+            prev_month = this_month - 1
+            prev_file = f'temp_{self.product}{prev_month.year}{prev_month.month}.nc'
+            prev_file = os.path.join(tmp_path, prev_file)
+            if os.path.exists(prev_file):
+                os.remove(prev_file)
         
         # open the file
         raw_data = xr.open_dataset(tmp_destination, engine = 'netcdf4')
