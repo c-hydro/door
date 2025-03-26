@@ -1,0 +1,27 @@
+{
+    "TAGS":{
+        "source"   : "JRA",
+        "product"  : "JRA-3Q",
+        "prod_name": "{source}-{product}"
+    },
+    "DATASETS":{
+        "destination" : {
+            "type" : "local",
+            "path" : "output/{source}/{product}/%Y",
+            "filename" : "{prod_name}_{variable}sample_%Y%m%d.tif"
+        }
+    },
+    "DOOR_DOWNLOADER" : {
+        "source"    : "{source}",
+        "product"   : "{product}",
+
+        "destination" : "{DATASETS.destination}",
+        "bounds" : [-180, -90, 180, 90],
+        "options" : {
+            "freq" : "t",
+            "variables" : "precipitation",
+            "agg_method" : "sum",
+            "resolution" : 0.375
+        }
+    }
+}
