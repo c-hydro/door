@@ -280,7 +280,14 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         
         last_ts_output = None
 
-        variables = list(self.variables.keys()) if hasattr(self, 'variables') else ['__var__']
+        if hasattr(self, 'variables'):
+            if isinstance(self.variables, list):
+                variables = self.variables
+            elif isinstance(self.variables, dict):
+                variables = list(self.variables.keys())
+        else:
+            variables = ['__var__']
+
         tiles = self.destination.tile_names
 
         for i, variable in enumerate(variables):
