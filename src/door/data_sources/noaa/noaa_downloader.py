@@ -69,18 +69,11 @@ class NOAADownloader(URLDownloader):
         """
         Get the last published date for the dataset.
         """
-
-        self.metadata = "https://psl.noaa.gov/thredds/iso/Datasets/cpc_global_precip/precip.{year}.nc?catalog=http://psl.noaa.gov/thredds/catalog/Datasets/cpc_global_precip/catalog.html&dataset=Datasets/cpc_global_precip/precip.{year}.nc"
-
         import xml.etree.ElementTree as ET
 
         year = dt.datetime.now().year
         with requests.get(self.metadata.format(year = year)) as response:
             root = ET.fromstring(response.content)
-
-        # Parse the XML file
-        tree = ET.parse('your_xml_file.xml')
-        root = tree.getroot()
 
         # Find the gml:endPosition element
         end_position = root.find('.//gml:endPosition', namespaces={'gml': 'http://www.opengis.net/gml/3.2'})
