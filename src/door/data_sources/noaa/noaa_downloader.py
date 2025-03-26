@@ -54,8 +54,10 @@ class NOAADownloader(URLDownloader):
         last_date = self.get_last_published_date(**kwargs)
 
         # get the timestep of the last date
-        ts_per_year = self.ts_per_year if hasattr(self, 'ts_per_year') else 365
-        last_date_timestep = FixedNTimeStep(last_date, ts_per_year)
+        if hasattr(self, 'ts_per_year'):
+            last_date_timestep = FixedNTimeStep.get_subclass(self.ts_per_year).from_date(last_date)
+        else:
+            last_date_timestep = ts.Day.from_date(last_date)
 
         # if the last date is the last day of its timestep, return the last timestep
         if last_date == last_date_timestep.end:
@@ -69,6 +71,7 @@ class NOAADownloader(URLDownloader):
         """
         Get the last published date for the dataset.
         """
+
         import xml.etree.ElementTree as ET
 
         year = dt.datetime.now().year
@@ -81,7 +84,7 @@ class NOAADownloader(URLDownloader):
             end_date = end_position.text
 
         # Convert to datetime object if needed
-        end_date_dt = dt.datetime.fromisoformat(end_date.replace('Z', '+00:00')).date()
+        end_date_dt = dt.datetime.fromisoformat(end_date.replace('Z', '+00:00'))
         return end_date_dt
 
     def _get_data_ts(self,
