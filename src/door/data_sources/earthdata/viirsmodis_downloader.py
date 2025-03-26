@@ -180,9 +180,17 @@ class VIIRSMODISDownloader(CMRDownloader):
         """
         Set the attributes of the dataset.
         """
-        dataset.attrs['valid_range'] = varopts.get('valid_range', None)
-        dataset.attrs['_FillValue'] = varopts.get('fill_value', None)
-        dataset.attrs['scale_factor'] = varopts.get('scale_factor', None)
+
+        valid_range = varopts['valid_range']
+        fill_value = varopts['fill_value']
+        scale_factor = varopts.get('scale_factor', None)
+
+        if valid_range is not None:
+            dataset = dataset.where((dataset >= valid_range[0]) & (dataset <= valid_range[1]), fill_value)
+
+        dataset.attrs['valid_range']  = valid_range
+        dataset.attrs['_FillValue']   = fill_value
+        dataset.attrs['scale_factor'] = scale_factor
 
         return dataset
 
@@ -287,9 +295,9 @@ class MODISDownloader(VIIRSMODISDownloader):
 
     available_variables = {
         'et': {
-            'ET'    : {'id': 0, 'valid_range': (-32767, 32700), 'fill_value' : 32767, 'scale_factor': 0.1},
-            'PET'   : {'id': 2, 'valid_range': (-32767, 32700), 'fill_value' : 32767, 'scale_factor': 0.1},
-            'ET_QC' : {'id': 4, 'valid_range': (0,254), 'fill_value' : 255, 'scale_factor': 1   },
+            'ET'    : {'id': 0, 'valid_range': (0, 32700), 'fill_value' : 32767, 'scale_factor': 0.1},
+            'PET'   : {'id': 2, 'valid_range': (0, 32700), 'fill_value' : 32767, 'scale_factor': 0.1},
+            'ET_QC' : {'id': 4, 'valid_range': (0,254),    'fill_value' : 255,   'scale_factor': 1   },
         }
     }
 
