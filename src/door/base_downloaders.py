@@ -256,7 +256,14 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         if 'variables' in options:
             variables = options['variables']
             self.set_variables(variables)
-    
+
+    def set_product(self, product: str) -> None:
+        self.product = product.lower()
+        if self.product not in self.available_products:
+            raise ValueError(f'Product {product} not available. Choose one of {self.available_products.keys()}')
+        for key in self.available_products[self.product]:
+            setattr(self, key, self.available_products[self.product][key])
+
     def set_variables(self, variables: list) -> None:
         available_variables = self.available_variables
         if hasattr(self, 'product') and self.product in available_variables:
@@ -273,7 +280,14 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         
         last_ts_output = None
 
-        variables = list(self.variables.keys()) if hasattr(self, 'variables') else ['__var__']
+        if hasattr(self, 'variables'):
+            if isinstance(self.variables, list):
+                variables = self.variables
+            elif isinstance(self.variables, dict):
+                variables = list(self.variables.keys())
+        else:
+            variables = ['__var__']
+
         tiles = self.destination.tile_names
 
         for i, variable in enumerate(variables):

@@ -89,15 +89,9 @@ class EOBSDownloader(URLDownloader):
         last_date = self.get_last_published_date(**kwargs)
 
         # get the timestep of the last date
-        ts_per_year = self.ts_per_year if hasattr(self, 'ts_per_year') else 365
-        last_date_timestep = FixedNTimeStep(last_date, ts_per_year)
+        last_date_timestep = ts.Day.from_date(last_date)
 
-        # if the last date is the last day of its timestep, return the last timestep
-        if last_date == last_date_timestep.end:
-            return last_date_timestep
-        # else, return the timestep before the one of the last date
-        else:
-            return last_date_timestep - 1
+        return last_date_timestep
 
     def get_last_published_date(self, **kwargs) -> dt.datetime:
 
@@ -105,26 +99,18 @@ class EOBSDownloader(URLDownloader):
         Get the last published date for the dataset.
         """
 
-        self.metadata = "https://psl.noaa.gov/thredds/iso/Datasets/cpc_global_precip/precip.{year}.nc?catalog=http://psl.noaa.gov/thredds/catalog/Datasets/cpc_global_precip/catalog.html&dataset=Datasets/cpc_global_precip/precip.{year}.nc"
+        this_month = ts.Month.from_date(dt.datetime.now())
+        has_data = False
+        while not has_data:
+            try:
+                url = self.month_url.format(variable = self.variables[0], resolution = self.resolution, year = this_month.year, month = this_month.month)
+                r = requests.head(url)
+                r.raise_for_status()
+                has_data = True
+            except requests.exceptions.HTTPError:
+                this_month -= 1
 
-        import xml.etree.ElementTree as ET
-
-        year = dt.datetime.now().year
-        with requests.get(self.metadata.format(year = year)) as response:
-            root = ET.fromstring(response.content)
-
-        # Parse the XML file
-        tree = ET.parse('your_xml_file.xml')
-        root = tree.getroot()
-
-        # Find the gml:endPosition element
-        end_position = root.find('.//gml:endPosition', namespaces={'gml': 'http://www.opengis.net/gml/3.2'})
-        if end_position is not None:
-            end_date = end_position.text
-
-        # Convert to datetime object if needed
-        end_date_dt = dt.datetime.fromisoformat(end_date.replace('Z', '+00:00')).date()
-        return end_date_dt
+        return this_month.end
 
     def _get_data_ts(self,
                      timestep: TimeStep,

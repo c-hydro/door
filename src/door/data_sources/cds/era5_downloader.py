@@ -69,11 +69,12 @@ class ERA5Downloader(CDSDownloader):
             self.log.error(msg)
             raise ValueError(msg)
 
-    def set_variables(self, variables: list[str]) -> None:
+    def set_variables(self, variables: str|list[str]) -> None:
         """
         Set the variables to download.
         """
-
+        if isinstance(variables, str):
+            variables = [variables]
         super().set_variables(variables)
 
         agg_options = self.agg_method

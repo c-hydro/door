@@ -54,8 +54,10 @@ class NOAADownloader(URLDownloader):
         last_date = self.get_last_published_date(**kwargs)
 
         # get the timestep of the last date
-        ts_per_year = self.ts_per_year if hasattr(self, 'ts_per_year') else 365
-        last_date_timestep = FixedNTimeStep(last_date, ts_per_year)
+        if hasattr(self, 'ts_per_year'):
+            last_date_timestep = FixedNTimeStep.get_subclass(self.ts_per_year).from_date(last_date)
+        else:
+            last_date_timestep = ts.Day.from_date(last_date)
 
         # if the last date is the last day of its timestep, return the last timestep
         if last_date == last_date_timestep.end:
@@ -70,17 +72,11 @@ class NOAADownloader(URLDownloader):
         Get the last published date for the dataset.
         """
 
-        self.metadata = "https://psl.noaa.gov/thredds/iso/Datasets/cpc_global_precip/precip.{year}.nc?catalog=http://psl.noaa.gov/thredds/catalog/Datasets/cpc_global_precip/catalog.html&dataset=Datasets/cpc_global_precip/precip.{year}.nc"
-
         import xml.etree.ElementTree as ET
 
         year = dt.datetime.now().year
         with requests.get(self.metadata.format(year = year)) as response:
             root = ET.fromstring(response.content)
-
-        # Parse the XML file
-        tree = ET.parse('your_xml_file.xml')
-        root = tree.getroot()
 
         # Find the gml:endPosition element
         end_position = root.find('.//gml:endPosition', namespaces={'gml': 'http://www.opengis.net/gml/3.2'})
@@ -88,7 +84,7 @@ class NOAADownloader(URLDownloader):
             end_date = end_position.text
 
         # Convert to datetime object if needed
-        end_date_dt = dt.datetime.fromisoformat(end_date.replace('Z', '+00:00')).date()
+        end_date_dt = dt.datetime.fromisoformat(end_date.replace('Z', '+00:00'))
         return end_date_dt
 
     def _get_data_ts(self,
@@ -114,15 +110,15 @@ class NOAADownloader(URLDownloader):
         inrange = (vardata.time.dt.date >= timestep.start.date()) & (vardata.time.dt.date <= timestep.end.date())
         vardata = vardata.sel(time = inrange)
 
-        # aggregate the data
-        if self.agg_method == 'sum':
-            vardata = vardata.sum(dim = 'time')
-        elif self.agg_method == 'mean':
-            vardata = vardata.mean(dim = 'time')
-        else:
-            raise ValueError(f'Aggregation method {self.agg_method} not recognized')
-
         # crop the data
         cropped = crop_to_bb(vardata, space_bounds)
 
-        yield cropped, {}
+        # aggregate the data
+        if self.agg_method == 'sum':
+            aggregated = cropped.sum(dim = 'time')
+        elif self.agg_method == 'mean':
+            aggregated = cropped.mean(dim = 'time')
+        else:
+            raise ValueError(f'Aggregation method {self.agg_method} not recognized')
+
+        yield aggregated, {}
