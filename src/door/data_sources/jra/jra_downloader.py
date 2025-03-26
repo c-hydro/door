@@ -38,7 +38,7 @@ class JRADownloader(URLDownloader):
 
     available_products: dict = {
         "jra-3q": {
-            "url_blank" : home + "{dataset}/{month.start:%Y%m}/jra3q..{var_code}.{var_name}-{grid_code}.{month.start:%Y%m%d}00_{month.end:%Y%m%d}23.nc",
+            "url_blank" : home + "{dataset}/{month.start:%Y%m}/jra3q.{dataset}.{var_code}.{var_name}-{grid_code}.{month.start:%Y%m%d}00_{month.end:%Y%m%d}23.nc",
             "data_list" : "https://thredds.rda.ucar.edu/thredds/catalog/files/g/d640000/{dataset}/catalog.html"
         }
     }
