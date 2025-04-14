@@ -23,8 +23,12 @@ class CHIRPSDownloader(URLDownloader):
         'get_prelim' : True, # if True, will also download preliminary data if available
     }
 
-    homev2 = "https://data.chc.ucsb.edu/products/CHIRPS-2.0/"
-    homev3 = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/"
+    host = 'ftp://ftp.chc.ucsb.edu'
+    auth = ('anonymous', '')
+
+    homev2 = "/pub/org/chc/products/CHIRPS-2.0/"
+    homev3 = "/pub/org/chc/products/CHIRPS/v3.0/"
+    
     available_products: dict = {
         "CHIRPSp25-daily": {
             "ts_per_year": 365,
@@ -72,7 +76,7 @@ class CHIRPSDownloader(URLDownloader):
 
     def __init__(self, product: str) -> None:
         self.set_product(product)
-        super().__init__(self.url_blank, protocol = 'http')
+        super().__init__(self.url_blank, protocol = 'ftp', host = self.host)
 
     def set_product(self, product: str) -> None:
         self.product = product
@@ -112,10 +116,12 @@ class CHIRPSDownloader(URLDownloader):
                 current_url = url.format(timestep = current_timestep)
             
             # send a request to the url
-            response = requests.head(current_url)
+            from ftpretty import ftpretty as ftp
+            client = ftp(self.host.replace('ftp://', ''), self.auth[0], self.auth[1])
+            list = client.list(current_url)
 
             # if the request is successful, the last published timestep is the current timestep
-            if response.status_code is requests.codes.ok:
+            if len(list) > 0:
                 return current_timestep
 
             # if the request is not successful, move to the previous timestep
@@ -133,14 +139,14 @@ class CHIRPSDownloader(URLDownloader):
         tmp_filename_raw = f'temp_{self.product}{ts_end:%Y%m%d}'
         tmp_filename = f'{tmp_filename_raw}.tif.gz' if self.url_blank.endswith('.gz') else f'{tmp_filename_raw}.tif'
         tmp_destination = os.path.join(tmp_path, tmp_filename)
-        success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep)
+        success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, auth = self.auth)
         nodata = self.nodata
         isprelim = False
         if not success and self.get_prelim:
             if "pentad_of_month" not in self.url_prelim_blank:
                 tmp_filename = f'{tmp_filename_raw}.tif.gz' if self.url_prelim_blank.endswith('.gz') else f'{tmp_filename_raw}.tif'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
-                success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, prelim = True)
+                success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, prelim = True, auth = self.auth)
                 
             else:
                 if isinstance(timestep, ts.Month):
@@ -152,7 +158,7 @@ class CHIRPSDownloader(URLDownloader):
                 for pentad in pentads:
                     tmp_filename = f'{tmp_filename_raw}_{pentad}.tif'
                     tmp_destination = os.path.join(tmp_path, tmp_filename)
-                    success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, pentad_of_month = pentad, prelim = True)
+                    success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, pentad_of_month = pentad, prelim = True, auth = self.auth)
                     tmp_filenames.append(tmp_filename)
                     if not success:
                         break
