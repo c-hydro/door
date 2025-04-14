@@ -157,9 +157,12 @@ class CHIRPSDownloader(URLDownloader):
                     if not success:
                         break
                 else:
-                    data_list = [rxr.open_rasterio(os.path.join(tmp_path, filename)) for filename in tmp_filenames]
-                    data_sum  = np.sum(np.stack([d.values for d in data_list], axis = 0), axis = 0)
-                    data_sum[data_sum == self.prelim_nodata * len(pentads)] = self.prelim_nodata
+
+                    data_list  = [rxr.open_rasterio(os.path.join(tmp_path, filename)) for filename in tmp_filenames]
+                    data_stack = np.stack([d.values for d in data_list], axis = 0)
+                    data_sum  = np.sum(data_stack, axis = 0)
+
+                    data_sum[np.any(data_stack == self.prelim_nodata, axis = 0)] = self.prelim_nodata
                     tmp_destination = os.path.join(tmp_path, tmp_filename_raw + '.tif')
                     data_list[0].copy(data = data_sum).rio.to_raster(tmp_destination, compress = 'lzw')
                     success = True
