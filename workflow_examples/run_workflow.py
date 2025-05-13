@@ -34,7 +34,7 @@ def main():
     start_date = get_date_from_str(args.start) if args.start else None
     end_date   = get_date_from_str(args.end)   if args.end   else None
 
-    # create the index
+    # create the downloader
     downloader:door.Downloader = door.Downloader.from_options(options.DOOR_DOWNLOADER)
 
     # run the computation
