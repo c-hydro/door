@@ -1,7 +1,9 @@
 import os
 import numpy as np
 import xarray as xr
+import rioxarray as rxr
 from typing import Generator
+import time
 
 from ...base_downloaders import URLDownloader
 
@@ -26,7 +28,8 @@ class HSAFDownloader(URLDownloader):
     default_options = {
         "variables": [], #["var40", "var41", "var42", "var43"],
         "custom_variables": None,
-        "cdo_path": "/usr/bin/cdo"
+        "cdo_path": "/usr/bin/cdo",
+        "retries" : 10
     }
 
     available_products: dict = {
@@ -174,25 +177,32 @@ class HSAFDownloader(URLDownloader):
         tmp_file = os.path.join(tmp_path, tmp_filename)
 
         # Download the data
-        success = self.download(tmp_file, timestep = timestep, auth = self.credentials, missing_action = 'ignore', min_size = 500000)
-
-        # if not success
-        if not success:
-            return
+        retries = self.retries
+        while True:
+            success = self.download(tmp_file, timestep = timestep, auth = self.credentials, missing_action = 'ignore', min_size = 50000)
+            if success:
+                break
+            elif retries <= 0:
+                raise Exception(f"Download failed for {timestep}. No more retries left.")
+            else:
+                retries -= 1
+                print(f"Download failed for {timestep}. Retrying in 30 seconds... ({retries} retries left)")
+                time.sleep(30)
         
         # otherwise
         if self.format == 'bz2':
             decompress_bz2(tmp_file)
             tmp_file = self.remapgrib(tmp_file[:-4])
 
-        file_handle = xr.open_dataset(tmp_file, engine='netcdf4')
+        all_data = xr.open_dataset(tmp_file)
+        all_data = all_data.drop_vars([coord for coord in all_data.coords if coord not in ['lat', 'lon']])
 
         all_vars = {}
         for varname, variable in self.variables.items():
-            if variable['alt_name'] in file_handle:
-                var_data = file_handle[variable['alt_name']]
-            elif varname in file_handle:
-                var_data = file_handle[varname]
+            if variable['alt_name'] in all_data:
+                var_data = all_data[variable['alt_name']]
+            elif varname in all_data:
+                var_data = all_data[varname]
             else:
                 return
             
@@ -202,9 +212,15 @@ class HSAFDownloader(URLDownloader):
             var_data = var_data.rio.write_crs(self.spatial_ref)
 
             cropped = crop_to_bb(src=var_data, BBox=space_bounds)
+            cropped = cropped.squeeze()
+            cropped = cropped.rio.set_spatial_dims(x_dim='lon', y_dim='lat')
+            cropped = cropped.rio.write_crs(self.spatial_ref)
+            cropped = cropped.sortby('lat', ascending=False)
+            cropped.rio.to_raster(os.path.join(tmp_path, f'{varname}'), driver='GTiff')
+            cropped = rxr.open_rasterio(os.path.join(tmp_path, f'{varname}'))
             
             if varname in self.original_variables:
-                yield cropped.squeeze(), {'variable': varname}
+                yield cropped, {'variable': varname}
             
             all_vars[varname] = cropped
 
