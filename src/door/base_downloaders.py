@@ -164,13 +164,13 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         # the latter is more space efficient, but at times you have to download the data for several timesteps at once
         # so it is better to have the option to download all the data in a single folder
         if self.single_temp_folder:
-            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_path:
+            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True, prefix=os.getenv('TMP')) as tmp_path:
                 for timestep in timesteps:
                     self._get_and_save_data_ts(timestep, tmp_path)
                     rm_at_exit(tmp_path)
         else:
             for timestep in timesteps:
-                with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_path:
+                with tempfile.TemporaryDirectory(ignore_cleanup_errors=True, prefix=os.getenv('TMP')) as tmp_path:
                     self._get_and_save_data_ts(timestep, tmp_path)
                     rm_at_exit(tmp_path)
 
