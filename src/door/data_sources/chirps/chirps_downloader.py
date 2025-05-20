@@ -60,7 +60,7 @@ class CHIRPSDownloader(URLDownloader):
         },
         "CHIRPSv3-dekads": {
             "ts_per_year": 36,
-            "url" : homev3 + 'dekads/global/tifs/chirps-v3.0.{timestep.start:%Y.%m}.{timestep.dekad_of_month}.tif',
+            "url" : homev3 + 'pentads/global/tifs/chirps-v3.0.{timestep.start:%Y.%m}.{pentad_of_month}.tif',
             "nodata" : -9999,
             "prelim_url" : homev3 + "prelim/" + 'pentads/global/tifs/chirps-v3.0.{timestep.start:%Y.%m}.{pentad_of_month}.tif',
             "prelim_nodata": -9999
@@ -139,7 +139,32 @@ class CHIRPSDownloader(URLDownloader):
         tmp_filename_raw = f'temp_{self.product}{ts_end:%Y%m%d}'
         tmp_filename = f'{tmp_filename_raw}.tif.gz' if self.url_blank.endswith('.gz') else f'{tmp_filename_raw}.tif'
         tmp_destination = os.path.join(tmp_path, tmp_filename)
-        success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, auth = self.auth)
+        if "pentad_of_month" not in self.url_blank:
+            success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, auth = self.auth)
+        else:
+            if isinstance(timestep, ts.Month):
+                pentads = [1, 2, 3, 4, 5, 6]
+            elif isinstance(timestep, ts.Dekad):
+                pentads = [timestep.dekad_of_month*2-1, timestep.dekad_of_month*2]
+
+            tmp_filenames = []
+            for pentad in pentads:
+                tmp_filename = f'{tmp_filename_raw}_{pentad}.tif'
+                tmp_destination = os.path.join(tmp_path, tmp_filename)
+                success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, pentad_of_month = pentad, auth = self.auth)
+                tmp_filenames.append(tmp_filename)
+                if not success:
+                    break
+            else:
+                data_list  = [rxr.open_rasterio(os.path.join(tmp_path, filename)) for filename in tmp_filenames]
+                data_stack = np.stack([d.values for d in data_list], axis = 0)
+                data_sum   = np.sum(data_stack, axis = 0)
+
+                data_sum[np.any(data_stack == self.nodata, axis = 0)] = self.nodata
+                tmp_destination = os.path.join(tmp_path, tmp_filename_raw + '.tif')
+                data_list[0].copy(data = data_sum).rio.to_raster(tmp_destination, compress = 'lzw')
+                success = True
+        
         nodata = self.nodata
         isprelim = False
         if not success and self.get_prelim:
