@@ -217,12 +217,15 @@ class HSAFDownloader(URLDownloader):
             cropped = cropped.rio.write_crs(self.spatial_ref)
             cropped = cropped.sortby('lat', ascending=False)
             cropped.rio.to_raster(os.path.join(tmp_path, f'{varname}'), driver='GTiff')
-            cropped = rxr.open_rasterio(os.path.join(tmp_path, f'{varname}'))
+            cropped = rxr.open_rasterio(os.path.join(tmp_path, f'{varname}')).load()
+            cropped.close()
             
             if varname in self.original_variables:
                 yield cropped, {'variable': varname}
             
             all_vars[varname] = cropped
+
+        all_data.close()
 
         if self.custom_variables is not None:
             for custom_variable in self.custom_variables:
