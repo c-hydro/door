@@ -5,6 +5,10 @@ import rioxarray as rxr
 from typing import Generator
 import time
 
+import base64
+from ftpretty import ftpretty as ftp
+from urllib.parse import urlparse
+
 from ...base_downloaders import URLDownloader
 
 from ...utils.auth import get_credentials
@@ -152,14 +156,18 @@ class HSAFDownloader(URLDownloader):
             TimeStep = FixedNTimeStep.get_subclass(ts_per_year)
 
         current_timestep = TimeStep.from_date(dt.datetime.now())
+        
+        host = urlparse(self.host).hostname
+        username, password = base64.b64decode(self.credentials).decode('ascii').split(':')
+        client = ftp(host, username, password)
         while True:
             current_url = url.format(timestep = current_timestep)
-            
-            # send a request to the url
-            response = requests.head(current_url)
+            # Extract the directory and filename from the current_url
+            ftp_dir = os.path.dirname(current_url)
 
-            # if the request is successful, the last published timestep is the current timestep
-            if response.status_code is requests.codes.ok:
+            # List files in the directory and check if the file exists
+            if current_url in client.list(ftp_dir):
+                client.close()
                 return current_timestep
             
             # if the request is not successful, move to the previous timestep
@@ -210,6 +218,7 @@ class HSAFDownloader(URLDownloader):
             var_data = var_data.rio.write_nodata(np.nan)
 
             var_data = var_data.rio.write_crs(self.spatial_ref)
+            var_data.close()
 
             cropped = crop_to_bb(src=var_data, BBox=space_bounds)
             cropped = cropped.squeeze()
