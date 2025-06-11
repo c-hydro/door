@@ -88,6 +88,7 @@ def download_ftp(url_host, url, destination, auth=None):
         raise NotImplementedError('ERROR! Credentials must be a tuple (user,pass) or a base64 encoded string')
     client = ftp(host, username, password)
     client.get(url, destination)
+    client.close()
 
 def download_sftp(url_host, url, destination, auth=None):
     """
