@@ -183,7 +183,7 @@ class HSAFDownloader(FTPDownloader):
             if success:
                 break
             elif retries <= 0:
-                raise Exception(f"Download failed for {timestep}. No more retries left.")
+                pass
             else:
                 retries -= 1
                 print(f"Download failed for {timestep}. Retrying in 30 seconds... ({retries} retries left)")
