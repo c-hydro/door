@@ -5,11 +5,7 @@ import rioxarray as rxr
 from typing import Generator
 import time
 
-import base64
-from ftpretty import ftpretty as ftp
-from urllib.parse import urlparse
-
-from ...base_downloaders import URLDownloader
+from ...base_downloaders import FTPDownloader
 
 from ...utils.auth import get_credentials
 from ...utils.io import decompress_bz2
@@ -24,7 +20,7 @@ from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
 
 # from dam.utils.io_geotiff import read_geotiff_asXarray, write_geotiff_fromXarray
 
-class HSAFDownloader(URLDownloader):
+class HSAFDownloader(FTPDownloader):
 
     source = "HSAF"
     name = "HSAF_downloader"
@@ -89,11 +85,11 @@ class HSAFDownloader(URLDownloader):
 
     def __init__(self, product: str) -> None:
         self.set_product(product)
-        url_host = "ftp://ftphsaf.meteoam.it"
-
-        super().__init__(self.url_blank, protocol = 'ftp', host = url_host)
-        self.credentials = get_credentials(env_variables=self.credential_env_vars, url = url_host)
-
+        url_host = "ftphsaf.meteoam.it"
+        self.credentials = get_credentials(env_variables=self.credential_env_vars, url = 'ftp://' + url_host, encode = False)
+        username, password = self.credentials.split(':')
+        super().__init__(url_host, protocol = 'ftp', user=username, password=password)
+        
     def set_product(self, product: str) -> None:
         self.product = product
         if product not in self.available_products:
@@ -148,7 +144,7 @@ class HSAFDownloader(URLDownloader):
             product = self.product
 
         ts_per_year = self.available_products[product]["ts_per_year"]
-        url = self.available_products[product]["url"]
+        blank_path = self.available_products[product]["url"]
 
         if ts_per_year == 365:
             TimeStep = ts.Day
@@ -156,22 +152,18 @@ class HSAFDownloader(URLDownloader):
             TimeStep = FixedNTimeStep.get_subclass(ts_per_year)
 
         current_timestep = TimeStep.from_date(dt.datetime.now())
-        
-        host = urlparse(self.host).hostname
-        username, password = base64.b64decode(self.credentials).decode('ascii').split(':')
-        client = ftp(host, username, password)
-        while True:
-            current_url = url.format(timestep = current_timestep)
-            # Extract the directory and filename from the current_url
-            ftp_dir = os.path.dirname(current_url)
+        if 'lim' in kwargs:
+            start = TimeStep.from_date(kwargs['lim'])
+        else:
+            start = TimeStep.from_date(dt.datetime(2000, 1, 1))
 
-            # List files in the directory and check if the file exists
-            if current_url in client.list(ftp_dir):
-                client.close()
+        while current_timestep >= start:
+            if self.check_data(blank_path, timestep = current_timestep):
                 return current_timestep
             
-            # if the request is not successful, move to the previous timestep
             current_timestep -= 1
+
+        return None
 
     def get_last_published_date(self, **kwargs) -> dt.datetime:
         return self.get_last_published_ts(**kwargs).end
@@ -187,7 +179,7 @@ class HSAFDownloader(URLDownloader):
         # Download the data
         retries = self.retries
         while True:
-            success = self.download(tmp_file, timestep = timestep, auth = self.credentials, missing_action = 'ignore', min_size = 50000)
+            success = self.download(self.url_blank, tmp_file, timestep = timestep, auth = self.credentials, missing_action = 'ignore', min_size = 50000)
             if success:
                 break
             elif retries <= 0:
