@@ -37,6 +37,9 @@ def main():
     # create the downloader
     downloader:door.Downloader = door.Downloader.from_options(options.DOOR_DOWNLOADER)
 
+    # check the last available date
+    downloader.get_last_published_ts()
+
     # run the computation
     downloader.get_data((start_date, end_date))
     

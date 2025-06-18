@@ -7,7 +7,11 @@ import tempfile
 import xarray as xr
 import os
 
-from .utils.io import download_http, check_download, handle_missing, download_ftp, download_sftp
+import paramiko
+import ftplib
+import requests
+
+from .utils.io import check_download, handle_missing
 
 from d3tools import spatial as sp
 from d3tools import timestepping as ts
@@ -164,13 +168,13 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         # the latter is more space efficient, but at times you have to download the data for several timesteps at once
         # so it is better to have the option to download all the data in a single folder
         if self.single_temp_folder:
-            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True, prefix=os.getenv('TMP')) as tmp_path:
+            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True, dir=os.getenv('TMP')) as tmp_path:
                 for timestep in timesteps:
                     self._get_and_save_data_ts(timestep, tmp_path)
                     rm_at_exit(tmp_path)
         else:
             for timestep in timesteps:
-                with tempfile.TemporaryDirectory(ignore_cleanup_errors=True, prefix=os.getenv('TMP')) as tmp_path:
+                with tempfile.TemporaryDirectory(ignore_cleanup_errors=True, dir=os.getenv('TMP')) as tmp_path:
                     self._get_and_save_data_ts(timestep, tmp_path)
                     rm_at_exit(tmp_path)
 
@@ -349,19 +353,13 @@ class URLDownloader(DOORDownloader):
 
     name = "URL_Downloader"
 
-    def __init__(self, url_blank: str, protocol: str = 'http', host: str|None = None) -> None:
+    def __init__(self, url_blank: str, protocol: str = 'http') -> None:
 
         self.url_blank = url_blank
-        if protocol.lower() not in ['http', 'ftp', 'sftp', 'https']:
+        if protocol.lower() not in ['http', 'https']:
             raise ValueError(f'Protocol {protocol} not supported')
         else:
             self.protocol = protocol.lower()
-
-        if self.protocol == 'ftp' or self.protocol == 'sftp':
-            if host is None:
-                raise ValueError(f'FTP host must be specified')
-            else:
-                self.host = host
 
         super().__init__()
 
@@ -382,14 +380,15 @@ class URLDownloader(DOORDownloader):
 
         url = self.format_url(**kwargs)
         try:
-            if self.protocol == 'http' or self.protocol == 'https':
-                download_http(url, destination, kwargs["auth"])
-            elif self.protocol == 'ftp':
-                download_ftp(self.host, url, destination, kwargs["auth"])
-            elif self.protocol == 'sftp':
-                download_sftp(self.host, url, destination, kwargs["auth"])
-            else:
-                raise ValueError(f'Protocol {self.protocol} not supported')
+            r = requests.get(url, kwargs["auth"])
+            if r.status_code != 200:
+                raise FileNotFoundError(r.text)
+            
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+
+            with open(destination, 'wb') as f:
+                f.write(r.content)
+
         except Exception as e:
             handle_missing(missing_action, kwargs)
             self.log.debug(f'Error downloading {url}: {e}')
@@ -402,6 +401,98 @@ class URLDownloader(DOORDownloader):
             return False
 
         return True
+
+class FTPDownloader(DOORDownloader):
+    """
+    Downloader for data from an FTP server via FTP or SFTP.
+    This typer of downloader is useful for data that can be downloaded from an FTP server.
+    It allows to specify a URL template with placeholders for various parameters (as keyword arguments).
+    """
+
+    name = "FTP_Downloader"
+
+    def __init__(self, host: str, port: int = 21, protocol: str = 'ftp', user: str = 'anonymous', password: str = 'anonymous') -> None:
+        if protocol.lower() not in ['ftp', 'sftp']:
+            raise ValueError(f'Protocol {protocol} not supported')
+        self.protocol = protocol.lower()
+        
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        super().__init__()
+
+        if self.protocol == 'sftp':
+            self.transport = paramiko.Transport((host, port))
+            self.transport.connect(username=user, password=password)
+            self.client = paramiko.SFTPClient.from_transport(self.transport)
+        elif self.protocol == 'ftp':
+            self.client = ftplib.FTP()
+            self.client.connect(host, port)
+            self.client.login(user, password)
+
+    def __del__(self):
+        """
+        Close the FTP or SFTP client connection when the downloader is deleted.
+        """
+        if hasattr(self, 'client'):
+            try:
+                self.client.close()
+            except Exception as e:
+                self.log.debug(f'Error closing {self.protocol} client: {e}')
+
+        if hasattr(self, 'transport'):
+            try:
+                self.transport.close()
+            except Exception as e:
+                self.log.debug(f'Error closing {self.protocol} transport: {e}')
+        
+    def download(self, blank_path, destination: str, min_size: float = None, missing_action: str = 'error', **kwargs) -> bool:
+        """
+        Downloads data from FTP or SFTP server.
+        Eventually check file size to avoid empty files.
+        """
+
+        url = blank_path.format(**kwargs)
+
+        try:
+            if self.protocol == 'sftp':
+                self.client.get(url, destination)
+            elif self.protocol == 'ftp':
+                with open(destination, 'wb') as f:
+                    self.client.retrbinary(f'RETR {url}', f.write)
+        except Exception as e:
+            handle_missing(missing_action, kwargs)
+            self.log.debug(f'Error downloading {url} via {self.protocol}: {e}')
+            return False
+
+        success_flag, success_msg = check_download(destination, min_size, missing_action)
+        if success_flag > 0:
+            handle_missing(missing_action, kwargs)
+            self.log.debug(f'Error downloading file from {url}: {success_msg}')
+            return False
+
+        return True
+
+    def check_data(self, blank_path,  **kwargs) -> bool:
+        """
+        Check if the data is available on the FTP or SFTP server.
+        This method can be used to check if the data is available before downloading it.
+        """
+        url = blank_path.format(**kwargs)
+        if self.protocol == 'ftp':
+            # For FTP, we can use the 'nlst' command to check if the file exists
+            if len(self.client.nlst(url)) > 0:
+                return True
+        elif self.protocol == 'sftp':
+            try:
+                self.client.stat(url)
+                return True
+            except Exception as e:
+                pass
+        return False
+                
+            
 
 class APIDownloader(DOORDownloader):
     """
