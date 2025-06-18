@@ -6,7 +6,7 @@ import rioxarray as rxr
 import datetime as dt
 import requests
 
-from ...base_downloaders import URLDownloader
+from ...base_downloaders import FTPDownloader
 
 from d3tools import timestepping as ts
 from d3tools.timestepping.timestep import TimeStep
@@ -15,7 +15,7 @@ from d3tools.spatial import BoundingBox, crop_to_bb
 
 from ...utils.io import decompress_gz
 
-class CHIRPSDownloader(URLDownloader):
+class CHIRPSDownloader(FTPDownloader):
     source = "CHIRPS"
     name = "CHIRPS_downloader"
     
@@ -23,7 +23,7 @@ class CHIRPSDownloader(URLDownloader):
         'get_prelim' : True, # if True, will also download preliminary data if available
     }
 
-    host = 'ftp://ftp.chc.ucsb.edu'
+    host = 'ftp.chc.ucsb.edu'
     auth = ('anonymous', '')
 
     homev2 = "/pub/org/chc/products/CHIRPS-2.0/"
@@ -76,7 +76,7 @@ class CHIRPSDownloader(URLDownloader):
 
     def __init__(self, product: str) -> None:
         self.set_product(product)
-        super().__init__(self.url_blank, protocol = 'ftp', host = self.host)
+        super().__init__(self.host, protocol = 'ftp')
 
     def set_product(self, product: str) -> None:
         self.product = product
@@ -100,7 +100,7 @@ class CHIRPSDownloader(URLDownloader):
             product = self.product
 
         ts_per_year = self.available_products[product]["ts_per_year"]
-        url = self.available_products[product]["url"] if not prelim else self.available_products[product]["prelim_url"]
+        blank_path = self.available_products[product]["url"] if not prelim else self.available_products[product]["prelim_url"]
 
         if ts_per_year == 365:
             TimeStep = ts.Day
@@ -108,20 +108,19 @@ class CHIRPSDownloader(URLDownloader):
             TimeStep = FixedNTimeStep.get_subclass(ts_per_year)
 
         current_timestep = TimeStep.from_date(dt.datetime.now())
-        while True:
-            if "pentad_of_month" in url:
+        if 'lim' in kwargs:
+            start = TimeStep.from_date(kwargs['lim'])
+        else:
+            start = TimeStep.from_date(dt.datetime(2000, 1, 1))
+        
+        while current_timestep >= start:
+            if "pentad_of_month" in blank_path:
                 pentad_of_month = 6 if ts_per_year == 12 else current_timestep.dekad_of_month*2
-                current_url = url.format(timestep = current_timestep, pentad_of_month = pentad_of_month)
+                current_url = blank_path.format(timestep = current_timestep, pentad_of_month = pentad_of_month)
             else:   
-                current_url = url.format(timestep = current_timestep)
+                current_url = blank_path.format(timestep = current_timestep)
             
-            # send a request to the url
-            from ftpretty import ftpretty as ftp
-            client = ftp(self.host.replace('ftp://', ''), self.auth[0], self.auth[1])
-            list = client.list(current_url)
-
-            # if the request is successful, the last published timestep is the current timestep
-            if len(list) > 0:
+            if self.check_data(current_url):
                 return current_timestep
 
             # if the request is not successful, move to the previous timestep
@@ -140,7 +139,7 @@ class CHIRPSDownloader(URLDownloader):
         tmp_filename = f'{tmp_filename_raw}.tif.gz' if self.url_blank.endswith('.gz') else f'{tmp_filename_raw}.tif'
         tmp_destination = os.path.join(tmp_path, tmp_filename)
         if "pentad_of_month" not in self.url_blank:
-            success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, auth = self.auth)
+            success = self.download(self.url_blank, tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, auth = self.auth)
         else:
             if isinstance(timestep, ts.Month):
                 pentads = [1, 2, 3, 4, 5, 6]
@@ -151,7 +150,7 @@ class CHIRPSDownloader(URLDownloader):
             for pentad in pentads:
                 tmp_filename = f'{tmp_filename_raw}_{pentad}.tif'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
-                success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, pentad_of_month = pentad, auth = self.auth)
+                success = self.download(self.url_blank, tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, pentad_of_month = pentad, auth = self.auth)
                 tmp_filenames.append(tmp_filename)
                 if not success:
                     break
@@ -171,7 +170,7 @@ class CHIRPSDownloader(URLDownloader):
             if "pentad_of_month" not in self.url_prelim_blank:
                 tmp_filename = f'{tmp_filename_raw}.tif.gz' if self.url_prelim_blank.endswith('.gz') else f'{tmp_filename_raw}.tif'
                 tmp_destination = os.path.join(tmp_path, tmp_filename)
-                success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, prelim = True, auth = self.auth)
+                success = self.download(self.url_prelim_blank, tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, prelim = True, auth = self.auth)
                 
             else:
                 if isinstance(timestep, ts.Month):
@@ -183,7 +182,7 @@ class CHIRPSDownloader(URLDownloader):
                 for pentad in pentads:
                     tmp_filename = f'{tmp_filename_raw}_{pentad}.tif'
                     tmp_destination = os.path.join(tmp_path, tmp_filename)
-                    success = self.download(tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, pentad_of_month = pentad, prelim = True, auth = self.auth)
+                    success = self.download(self.url_prelim_blank, tmp_destination, min_size = 200, missing_action = 'ignore', timestep = timestep, pentad_of_month = pentad, prelim = True, auth = self.auth)
                     tmp_filenames.append(tmp_filename)
                     if not success:
                         break
@@ -216,13 +215,3 @@ class CHIRPSDownloader(URLDownloader):
                 cropped.attrs['PRELIMINARY'] = 'True'
 
             yield cropped, {}
-    
-    def format_url(self, prelim = False, **kwargs):
-        """
-        Format the url for the download
-        """
-        if prelim:
-            url = self.url_prelim_blank.format(**kwargs)
-        else:
-            url = self.url_blank.format(**kwargs)
-        return url

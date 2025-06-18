@@ -38,8 +38,7 @@ dependencies = [
     "pyhdf>=0.10.2",           #only for modis_downloader
     "cdsapi>=0.7.4",           #only for cds_downloader
     "ecmwf-opendata >= 0.2.0", #only for ecmwf_opendata_downloader
-    "paramiko>=2.9.3",
-    "ftpretty>=0.1.0", # I would like to avoid a repetition here, paramiko and ftpretty kind of do the same thing
+    "paramiko>=2.9.3"
 ]
 
 [project.urls]

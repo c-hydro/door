@@ -7,12 +7,12 @@ from d3tools import timestepping as ts
 from d3tools.timestepping.timestep import TimeStep
 from d3tools.spatial import BoundingBox, crop_to_bb
 
-from ...base_downloaders import URLDownloader
+from ...base_downloaders import FTPDownloader
 
 from ...utils.io import decompress_gz
 from ...utils.auth import get_credentials_from_netrc
 
-class GSMAPDownloader(URLDownloader):
+class GSMAPDownloader(FTPDownloader):
     source = "JAXA"
     name = "GSMAPDownloader"
 
@@ -40,7 +40,7 @@ class GSMAPDownloader(URLDownloader):
     def __init__(self, product: str) -> None:
         self.set_product(product)
         self.read_netrc_credentials()
-        super().__init__(self.url_blank, protocol='sftp', host = self.host)
+        super().__init__(self.url_blank, protocol='sftp', host = self.host.replace("sftp://", ""), auth=(self.username, self.password))
 
     def read_netrc_credentials(self) -> None:
         credentials = get_credentials_from_netrc(self.host)
@@ -81,7 +81,7 @@ class GSMAPDownloader(URLDownloader):
 
         # Downlaod the file
         print(" --> Download " + str(timestep))
-        success = self.download(tmp_destination, min_size=200, missing_action='ignore', timestep=timestep, auth= (self.username, self.password))
+        success = self.download(self.url_blank, tmp_destination, min_size=200, missing_action='ignore', timestep=timestep)
         if success:
             # Unzip the data
             unzipped = decompress_gz(tmp_destination)
@@ -117,13 +117,3 @@ class GSMAPDownloader(URLDownloader):
             cropped = crop_to_bb(data_array, space_bounds)
 
             yield cropped, {}
-
-    def format_url(self, prelim=False, **kwargs):
-        """
-        Format the url for the download
-        """
-        if prelim:
-            url = self.url_prelim_blank.format(**kwargs)
-        else:
-            url = self.url_blank.format(**kwargs)
-        return url

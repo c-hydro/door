@@ -5,7 +5,7 @@ import rioxarray as rxr
 from typing import Generator
 import time
 
-from ...base_downloaders import URLDownloader
+from ...base_downloaders import FTPDownloader
 
 from ...utils.auth import get_credentials
 from ...utils.io import decompress_bz2
@@ -20,7 +20,7 @@ from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
 
 # from dam.utils.io_geotiff import read_geotiff_asXarray, write_geotiff_fromXarray
 
-class HSAFDownloader(URLDownloader):
+class HSAFDownloader(FTPDownloader):
 
     source = "HSAF"
     name = "HSAF_downloader"
@@ -29,7 +29,7 @@ class HSAFDownloader(URLDownloader):
         "variables": [], #["var40", "var41", "var42", "var43"],
         "custom_variables": None,
         "cdo_path": "/usr/bin/cdo",
-        "retries" : 10
+        "retries" : 5
     }
 
     available_products: dict = {
@@ -85,11 +85,11 @@ class HSAFDownloader(URLDownloader):
 
     def __init__(self, product: str) -> None:
         self.set_product(product)
-        url_host = "ftp://ftphsaf.meteoam.it"
-
-        super().__init__(self.url_blank, protocol = 'ftp', host = url_host)
-        self.credentials = get_credentials(env_variables=self.credential_env_vars, url = url_host)
-
+        url_host = "ftphsaf.meteoam.it"
+        self.credentials = get_credentials(env_variables=self.credential_env_vars, url = 'ftp://' + url_host, encode = False)
+        username, password = self.credentials.split(':')
+        super().__init__(url_host, protocol = 'ftp', user=username, password=password)
+        
     def set_product(self, product: str) -> None:
         self.product = product
         if product not in self.available_products:
@@ -144,7 +144,7 @@ class HSAFDownloader(URLDownloader):
             product = self.product
 
         ts_per_year = self.available_products[product]["ts_per_year"]
-        url = self.available_products[product]["url"]
+        blank_path = self.available_products[product]["url"]
 
         if ts_per_year == 365:
             TimeStep = ts.Day
@@ -152,18 +152,18 @@ class HSAFDownloader(URLDownloader):
             TimeStep = FixedNTimeStep.get_subclass(ts_per_year)
 
         current_timestep = TimeStep.from_date(dt.datetime.now())
-        while True:
-            current_url = url.format(timestep = current_timestep)
-            
-            # send a request to the url
-            response = requests.head(current_url)
+        if 'lim' in kwargs:
+            start = TimeStep.from_date(kwargs['lim'])
+        else:
+            start = TimeStep.from_date(dt.datetime(2000, 1, 1))
 
-            # if the request is successful, the last published timestep is the current timestep
-            if response.status_code is requests.codes.ok:
+        while current_timestep >= start:
+            if self.check_data(blank_path, timestep = current_timestep):
                 return current_timestep
             
-            # if the request is not successful, move to the previous timestep
             current_timestep -= 1
+
+        return None
 
     def get_last_published_date(self, **kwargs) -> dt.datetime:
         return self.get_last_published_ts(**kwargs).end
@@ -179,11 +179,11 @@ class HSAFDownloader(URLDownloader):
         # Download the data
         retries = self.retries
         while True:
-            success = self.download(tmp_file, timestep = timestep, auth = self.credentials, missing_action = 'ignore', min_size = 50000)
+            success = self.download(self.url_blank, tmp_file, timestep = timestep, auth = self.credentials, missing_action = 'ignore', min_size = 50000)
             if success:
                 break
             elif retries <= 0:
-                raise Exception(f"Download failed for {timestep}. No more retries left.")
+                return
             else:
                 retries -= 1
                 print(f"Download failed for {timestep}. Retrying in 30 seconds... ({retries} retries left)")
@@ -210,6 +210,7 @@ class HSAFDownloader(URLDownloader):
             var_data = var_data.rio.write_nodata(np.nan)
 
             var_data = var_data.rio.write_crs(self.spatial_ref)
+            var_data.close()
 
             cropped = crop_to_bb(src=var_data, BBox=space_bounds)
             cropped = cropped.squeeze()
@@ -217,12 +218,15 @@ class HSAFDownloader(URLDownloader):
             cropped = cropped.rio.write_crs(self.spatial_ref)
             cropped = cropped.sortby('lat', ascending=False)
             cropped.rio.to_raster(os.path.join(tmp_path, f'{varname}'), driver='GTiff')
-            cropped = rxr.open_rasterio(os.path.join(tmp_path, f'{varname}'))
+            cropped = rxr.open_rasterio(os.path.join(tmp_path, f'{varname}')).load()
+            cropped.close()
             
             if varname in self.original_variables:
                 yield cropped, {'variable': varname}
             
             all_vars[varname] = cropped
+
+        all_data.close()
 
         if self.custom_variables is not None:
             for custom_variable in self.custom_variables:
