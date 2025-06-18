@@ -29,7 +29,7 @@ class HSAFDownloader(FTPDownloader):
         "variables": [], #["var40", "var41", "var42", "var43"],
         "custom_variables": None,
         "cdo_path": "/usr/bin/cdo",
-        "retries" : 10
+        "retries" : 5
     }
 
     available_products: dict = {
@@ -183,7 +183,7 @@ class HSAFDownloader(FTPDownloader):
             if success:
                 break
             elif retries <= 0:
-                pass
+                return
             else:
                 retries -= 1
                 print(f"Download failed for {timestep}. Retrying in 30 seconds... ({retries} retries left)")
