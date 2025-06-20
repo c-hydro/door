@@ -87,8 +87,10 @@ def main():
         model_type = "ifs"
     if model_type == "ifs":
         model_freq = 3
-    elif model_type == "aifs":
+        rain_factor = 1000
+    elif model_type == "aifs-single":
         model_freq = 6
+        rain_factor = 1
         #data_settings["data"]["dynamic"]["variables"]["t2m"] = data_settings["data"]["dynamic"]["variables"]["2t"]
     else:
         logging.error(" --> ERROR! Model type not correctly defined!")
@@ -197,7 +199,7 @@ def main():
         # Convert meters to mm
         logging.info(" ---> Convert meters to mm of rain...")
         frc_out[data_settings['data']['dynamic']["variables"]["tp"]] = frc_out[data_settings['data']['dynamic'][
-            "variables"]["tp"]] * 1000
+            "variables"]["tp"]] * rain_factor
 
         if data_settings['data']['dynamic']["vars_standards"]["decumulate_precipitation"] is True:
             logging.info(" ---> Variable tp is cumulated... Performing decumulation")
