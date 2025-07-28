@@ -28,8 +28,8 @@ class CLMSDownloader(URLDownloader):
 
     available_products = {
         'swi': {
-            'versions': ["3.1.1", "3.2.1"],
-            'url': clms_url + 'geotiff/soil_water_index/swi_12.5km_v3_{ts_str}daily/{timestep.start:%Y}/{timestep.start:%Y%m%d}/c_gls_SWI{ts_str}-SWI{var}_{timestep.start:%Y%m%d}1200_GLOBE_ASCAT_V{version}.tiff',
+            'versions': ["3.1.1", "3.2.1", "4.0.1"],
+            'url': clms_url + 'netcdf/soil_water_index/swi_12.5km_v{version[0]}_{ts_str}daily/{timestep.start:%Y}/{timestep.start:%Y%m%d}/c_gls_SWI{ts_str}_{timestep.start:%Y%m%d}1200_GLOBE_ASCAT_V{version}.nc',
             'nodata': 255,
             'scale_factor': 0.5
         }
@@ -47,6 +47,7 @@ class CLMSDownloader(URLDownloader):
         self.nodata = self.available_products[self.product]["nodata"]
         self.scale_factor = self.available_products[self.product]["scale_factor"]
         self.versions = self.available_products[self.product]["versions"]
+        self.versions.reverse()
         self.url_blank =  self.available_products[self.product]["url"]
 
     def set_variables(self, variables: list) -> None:
@@ -66,7 +67,7 @@ class CLMSDownloader(URLDownloader):
         Get the last published date for the dataset.
         """
 
-        ts_per_year = self.ts_per_year
+        ts_per_year = self.ts_per_year if hasattr(self, 'ts_per_year') else 365
 
         # Set ts_str based on the ts_per_year
         if ts_per_year == 36:
@@ -104,7 +105,7 @@ class CLMSDownloader(URLDownloader):
         return self.get_last_published_ts(**kwargs).end
 
     def _get_data_ts(self,
-                     time_range: TimeStep,
+                     time_step: TimeStep,
                      space_bounds: BoundingBox,
                      tmp_path: str,
                      **kwargs) -> Iterable[tuple[xr.DataArray, dict]]:
@@ -112,61 +113,53 @@ class CLMSDownloader(URLDownloader):
         """
         Get the data for a specific timestep.
         """
-        for variable in self.variables:
-            yield from self._get_data_ts_singlevar(time_range, space_bounds, tmp_path, variable, **kwargs)
 
-    def _get_data_ts_singlevar(
-                        self,
-                        time_range: TimeStep,
-                        space_bounds: BoundingBox,
-                        tmp_path: str,
-                        variable: str,
-                        **kwargs) -> Iterable[tuple[xr.DataArray, dict]]:
-        ''' Get the data for a specific timestep and variable. '''
-
-        # Get the URL without version
-        url_blank = self.url_blank.format(
-            ts_str=self.ts_str,
-            timestep=time_range,
-            var=variable,
-            version="{version}"
-        )
-
-        # Download the file
-        ts_end = time_range.end
-        tmp_filename_raw = f'temp_{self.product}{variable}_{ts_end:%Y%m%d}.tif'
-        tmp_destination = os.path.join(tmp_path, tmp_filename_raw)
-
-        # try to download the file in both versions
-        success = False
-        for version in self.versions:
-            url_v = url_blank.format(version=version)
-
-            response = requests.head(url_v)
+        for v in self.versions:
+            this_url_v = self.url_blank.format(
+                ts_str=self.ts_str,
+                timestep=time_step,
+                version=v
+            )
+        
+            # try to download the file
+            response = requests.head(this_url_v)
 
             if response.status_code is requests.codes.ok:
-                url = url_v
-                success = True
+                url = this_url_v
                 break
+        else:
+            # If the loop ends without breaking, the data is missing
+            handle_missing('warning', {'timestep': time_step})
+            return
 
-        if success:
-            download_http(url, tmp_destination)
+        # Download the file
+        ts_end = time_step.end
+        tmp_filename_raw = f'temp_{self.product}_{ts_end:%Y%m%d}.nc'
+        tmp_destination = os.path.join(tmp_path, tmp_filename_raw)
+        download_http(url, tmp_destination)
+        
+        # open it
+        data = xr.open_dataset(tmp_destination)
+
+        # extract the variables from the file, crop them and yield them
+        for variable in self.variables:
+            
+            this_data = data[f'{self.product.upper()}_{variable}']
 
             # Crop the data
-            cropped = crop_to_bb(tmp_destination, space_bounds)
+            cropped = crop_to_bb(this_data, space_bounds)
 
             # Change the nodata value to np.nan and return the data
             cropped = cropped.where(~np.isclose(cropped, self.nodata, equal_nan=True), np.nan)
             cropped.rio.no_data = np.nan
 
+            # ensure the crs is set
+            cropped = cropped.rio.set_crs("EPSG:4326")
+
             # Apply the scale factor
             cropped *= self.scale_factor
 
             yield cropped, {'variable': variable}
-
-        else:
-            # If the loop ends without breaking, the data is missing
-            handle_missing('warning', {'timestep': time_range, 'variable': variable})
 
     def get_data(self,
                  time_range: ts.TimeRange|Sequence[dt.datetime],
