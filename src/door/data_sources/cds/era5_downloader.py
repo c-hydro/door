@@ -1,5 +1,4 @@
 import datetime as dt
-import os
 from typing import Generator
 import xarray as xr
 import numpy as np
@@ -9,12 +8,12 @@ from .cds_downloader import CDSDownloader
 from d3tools.spatial import BoundingBox
 from d3tools import timestepping as ts
 from d3tools.timestepping.timestep import TimeStep
-from d3tools.timestepping.fixed_num_timestep import FixedNTimeStep
 
 class ERA5Downloader(CDSDownloader):
 
     source = "ERA5"
     name = "ERA5_downloader"
+    cds_url = 'https://cds.climate.copernicus.eu/api'
 
     available_products = ['reanalysis-era5-single-levels', 'reanalysis-era5-land']
 
@@ -105,42 +104,17 @@ class ERA5Downloader(CDSDownloader):
         """
         Make a request for the CDS API.
         """
-        variables = [var for var in self.variables.keys()]
-
-        # get the correct timesteps
-        start = time.start
-        end = time.end
-
         # If in the variable list we have total precipitation, we need to download the data for the next day as well
         if 'total_precipitation' in self.variables:
-            end += dt.timedelta(days=1)
+            time = time.extend(ts.TimeWindow(1, 'd'))
         
-        years = set()
-        months = set()
-        days = set()
+        request = super().build_request(
+            time, space_bounds
+        )
 
-        this_time = start
-        while this_time <= end:
-            years.add(this_time.year)
-            months.add(this_time.month)
-            days.add(this_time.day)
-            this_time += dt.timedelta(days=1)
-
-        years_str = [str(y) for y in years]
-        months_str = [str(m).zfill(2) for m in months]
-        days_str = [str(d).zfill(2) for d in days]
-
-        # Get the bounding box in the correct order
-        W, S, E, N = space_bounds.bbox
-
-        request = {
+        # add ERA5 specific parameters
+        request.update({
             'product_type': 'reanalysis',
-            'data_format': 'grib', # we always want grib, it's smaller, then we convert
-            'download_format' : 'unarchived', #TODO: change this to "zip" and handle unzipping before opening the data!
-            'variable': variables,
-            'year' : years_str,
-            'month': months_str,
-            'day'  : days_str,
             'time': [ # we always want all times in a day
                 '00:00', '01:00', '02:00',
                 '03:00', '04:00', '05:00',
@@ -151,26 +125,9 @@ class ERA5Downloader(CDSDownloader):
                 '18:00', '19:00', '20:00',
                 '21:00', '22:00', '23:00',
             ],
-        'area': [N, W, S, E],
-        }
+        })
 
         return request
-    
-    def get_last_published_ts(self, ts_per_year = None, **kwargs) -> ts.TimeRange:
-        
-        """
-        Get the last published date for the dataset.
-        """
-        if ts_per_year is None:
-            ts_per_year = self.ts_per_year
-
-        # get the last published timestep
-        last_published = self.get_last_published_date()
-        if ts_per_year == 365:
-            TimeStep = ts.Day
-        else:
-            TimeStep = FixedNTimeStep.get_subclass(ts_per_year)
-        return TimeStep.from_date(last_published + dt.timedelta(days=1)) - 1
 
     def get_last_published_date(self, **kwargs) -> dt.datetime:
         now = dt.datetime.now()
@@ -182,26 +139,12 @@ class ERA5Downloader(CDSDownloader):
                      space_bounds: BoundingBox,
                      tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
 
-        import cfgrib
-
-        timestep_start = timestep.start
-        timestep_end   = timestep.end
-
-        tmp_filename = f'temp_{self.dataset}_{timestep_start:%Y%m%d}-{timestep_end:%Y%m%d}.grib2'
-        tmp_destination = os.path.join(tmp_path, tmp_filename)
-
-
-        request = self.build_request(timestep, space_bounds)
-        success = self.download(request, tmp_destination, min_size = 100,  missing_action = 'e')
-
-        # this will create a list of xarray datasets, one for each "well-formed" cube in the grib file,
-        # this is needed because requesting multiple variables at once will return a single grib file that might contain multiple cubes
-        # (if the variable have different dimensions)
-        all_data = cfgrib.open_datasets(tmp_destination)
+        all_data = super()._get_data_ts(timestep, space_bounds, tmp_path)
 
         # loop over the variables
         for var, varopts in self.variables.items():
             varname = varopts['varname']
+            varopts['var'] = var
 
             # find the data for the variable
             for this_data in all_data:
@@ -236,7 +179,7 @@ class ERA5Downloader(CDSDownloader):
             vardata = vardata.assign_coords(time=valid_times)
 
             # filter data to the selected days (we have to do this because the API returns data for longer periods than we actually need)
-            inrange = (vardata.time.dt.date >= timestep_start.date()) & (vardata.time.dt.date <= timestep_end.date())
+            inrange = (vardata.time.dt.date >= timestep.start.date()) & (vardata.time.dt.date <= timestep.end.date())
             vardata = vardata.sel(time = inrange)
 
             # Convert Kelvin to Celsius if we are dealing with temperatures
@@ -247,8 +190,8 @@ class ERA5Downloader(CDSDownloader):
             vardata = vardata.squeeze()
 
             # verify that we have all the data we need (i.e. no timesteps of complete nans)!
-            time_to_check = timestep_start
-            while time_to_check <= timestep_end:
+            time_to_check = timestep.start
+            while time_to_check <= timestep.end:
                 istoday = vardata.time.dt.date == time_to_check.date()
                 this_data = vardata.sel(time = istoday)
                 for time in this_data.time:
@@ -263,35 +206,5 @@ class ERA5Downloader(CDSDownloader):
                 if attr.startswith('GRIB'):
                     del vardata.attrs[attr]
 
-            ts_as_tr = ts.TimeRange(start = timestep_start, end = timestep_end)
-            agg_timesteps = ts_as_tr.get_timesteps_from_tsnumber(self.ts_per_year_agg)
-
-            for agg_timestep in agg_timesteps:
-                timestep_start = agg_timestep.start
-                timestep_end   = agg_timestep.end
-
-                # filter data to the aggregation timestep
-                inrange = (vardata.time.dt.date >= timestep_start.date()) & (vardata.time.dt.date <= timestep_end.date())
-                vardata_ts = vardata.sel(time = inrange)
-
-                # add start and end time as attributes
-                vardata_ts.attrs['start_time'] = timestep_start
-                vardata_ts.attrs['end_time'] = timestep_end
-
-                # do the necessary aggregations:
-                for agg in varopts['agg_method']:
-
-                    vardata_ts.attrs['agg_function'] = agg
-                    if agg == 'mean':
-                        aggdata = vardata_ts.mean(dim='time', skipna = False)
-                    elif agg == 'max':
-                        aggdata = vardata_ts.max(dim='time', skipna = False)
-                    elif agg == 'min':
-                        aggdata = vardata_ts.min(dim='time', skipna = False)
-                    elif agg == 'sum':
-                        aggdata = vardata_ts.sum(dim='time', skipna = False)
-
-                    aggdata = aggdata.rio.set_spatial_dims('longitude', 'latitude')
-                    aggdata = aggdata.rio.write_crs(self.spatial_ref)
-
-                    yield aggdata, {'variable': var, 'agg_method': agg, 'timestep': agg_timestep}
+            # aggregate in the superclass and yield
+            yield from self._aggregate_variable(vardata, timestep, varopts)
