@@ -1,7 +1,6 @@
 import datetime as dt
 from typing import Generator
 import xarray as xr
-import numpy as np
 
 from .cds_downloader import CDSDownloader
 
@@ -9,25 +8,20 @@ from d3tools.spatial import BoundingBox
 from d3tools import timestepping as ts
 from d3tools.timestepping.timestep import TimeStep
 
-class ERA5Downloader(CDSDownloader):
+class GLOFASDownloader(CDSDownloader):
 
-    source = "ERA5"
-    name = "ERA5_downloader"
-    cds_url = 'https://cds.climate.copernicus.eu/api'
+    source = "GLOFAS"
+    name = "GLOFAS_downloader"
+    cds_url = 'https://ewds.climate.copernicus.eu/api'
 
-    available_products = ['reanalysis-era5-single-levels', 'reanalysis-era5-land']
+    available_products = ['cems-glofas-historical']
 
-    available_variables = {'total_precipitation': {'varname': 'tp',  'agg_method': 'sum'},
-                           '2m_temperature':      {'varname': 't2m', 'agg_method': 'mean'},
-                           'volumetric_soil_water_layer_1': {'varname': 'swvl1', 'agg_method': 'mean'},
-                           'volumetric_soil_water_layer_2': {'varname': 'swvl2', 'agg_method': 'mean'},
-                           'volumetric_soil_water_layer_3': {'varname': 'swvl3', 'agg_method': 'mean'},
-                           'volumetric_soil_water_layer_4': {'varname': 'swvl4', 'agg_method': 'mean'}}
+    available_variables = {'soil_wetness_index': {'varname': 'swir', 'agg_method': 'mean'}}
     
     available_agg_methods = ['mean', 'max', 'min', 'sum']
     
     default_options = {
-        'variables'   : 'total_precipitation',
+        'variables'   : 'soil_wetness_index',
         'agg_method'  : None,
         'ts_per_year' : 12, # the number of timesteps per year to split the download over #365=daily, 12=monthly, 36=10-daily
         'ts_per_year_agg' : 365
@@ -60,11 +54,11 @@ class ERA5Downloader(CDSDownloader):
                         BBOX[-90,-180,90,180]],\
                     ID["EPSG",4326]]'
 
-    def __init__(self, product = 'reanalysis-era5-single-levels') -> None:
+    def __init__(self, product = 'cems-glofas-historical') -> None:
         super().__init__(product)
 
         if product not in self.available_products:
-            msg = f'Product {product} not available for ERA5'
+            msg = f'Product {product} not available for GLOFAS'
             self.log.error(msg)
             raise ValueError(msg)
 
@@ -104,9 +98,6 @@ class ERA5Downloader(CDSDownloader):
         """
         Make a request for the CDS API.
         """
-        # If in the variable list we have total precipitation, we need to download the data for the next day as well
-        if 'total_precipitation' in self.variables:
-            time = time.extend(ts.TimeWindow(1, 'd'))
         
         request = super().build_request(
             time, space_bounds
@@ -114,25 +105,22 @@ class ERA5Downloader(CDSDownloader):
 
         # add ERA5 specific parameters
         request.update({
-            'product_type': 'reanalysis',
-            'time': [ # we always want all times in a day
-                '00:00', '01:00', '02:00',
-                '03:00', '04:00', '05:00',
-                '06:00', '07:00', '08:00',
-                '09:00', '10:00', '11:00',
-                '12:00', '13:00', '14:00',
-                '15:00', '16:00', '17:00',
-                '18:00', '19:00', '20:00',
-                '21:00', '22:00', '23:00',
-            ],
+                "system_version": ["version_4_0"],
+                "hydrological_model": ["lisflood"],
+                "product_type": ["consolidated","intermediate"],
         })
+
+        # convert the year, month and day into hyear, hmonth and hday
+        request['hyear'] = request.pop('year')
+        request['hmonth'] = request.pop('month')
+        request['hday'] = request.pop('day')
 
         return request
 
     def get_last_published_date(self, **kwargs) -> dt.datetime:
         now = dt.datetime.now()
         now = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        return now - dt.timedelta(days=6)
+        return now - dt.timedelta(days=2)
          
     def _get_data_ts(self,
                      timestep: TimeStep,
@@ -152,39 +140,11 @@ class ERA5Downloader(CDSDownloader):
                     data = this_data
                     break
 
-            # check if we are using any preliminary data, or if it is all final
-            if 'expver' in data.dims:
-                self.log.warning('  -> Some of the data is preliminary, we will use the final version where available')
-                data_final  = data.sel(expver=1)
-                data_prelim = data.sel(expver=5)
-                data = xr.where(np.isnan(data_final), data_prelim, data_final)
-
             vardata = data[varname]
-
-            #Handle the time dimension:
-            # Valid times, is the value that we want to use for the time dimension.
-            if varname == 'tp':
-                # For precipitation, we remove 1 hour to make it easier to filter for the day later
-                # the original time is the end time of the step so a step that ends at midnight is actally from the previous day
-                valid_times = vardata.valid_time.values.flatten() - np.timedelta64(1, 'h')
-            else:
-                valid_times = vardata.valid_time.values.flatten() 
-
-            # for some products we have a time and a step dimension, we need to combine them, for others we don't and we only have time
-            if 'step' in vardata.dims:
-                vardata = vardata.rename({'time': 'time_orig'})
-                vardata = vardata.stack(time=('time_orig', 'step'))
-                vardata = vardata.drop_vars(['time', 'time_orig', 'step'])
-
-            vardata = vardata.assign_coords(time=valid_times)
 
             # filter data to the selected days (we have to do this because the API returns data for longer periods than we actually need)
             inrange = (vardata.time.dt.date >= timestep.start.date()) & (vardata.time.dt.date <= timestep.end.date())
             vardata = vardata.sel(time = inrange)
-
-            # Convert Kelvin to Celsius if we are dealing with temperatures
-            if varname == 't2m':
-                vardata = vardata - 273.15
 
             # finally, remove non needed dimensions
             vardata = vardata.squeeze()
