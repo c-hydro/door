@@ -492,8 +492,6 @@ class FTPDownloader(DOORDownloader):
                 pass
         return False
                 
-            
-
 class APIDownloader(DOORDownloader):
     """
     Downloader for data from an API.
