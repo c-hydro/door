@@ -58,6 +58,13 @@ class CHIRPSDownloader(FTPDownloader):
             "prelim_url" : homev2 + "prelim/" + 'global_monthly/tifs/chirps-v2.0.{timestep.start:%Y.%m}.tif',
             "prelim_nodata": -9999
         },
+        "CHIRPSv3-daily": {
+            "ts_per_year": 365,
+            "url" : homev3 + 'daily/final/IMERGlate-v07/{timestep.year}/chirps-v3.0.{timestep.start:%Y.%m.%d}.tif',
+            "nodata" : -9999,
+            "prelim_url" : homev3 + 'daily/prelim/IMERGlate-v07/{timestep.year}/chirps-v3.0.{timestep.start:%Y.%m.%d}.tif',
+            "prelim_nodata": -9999
+        },
         "CHIRPSv3-dekads": {
             "ts_per_year": 36,
             "url" : homev3 + 'pentads/global/tifs/chirps-v3.0.{timestep.start:%Y.%m}.{pentad_of_month}.tif',

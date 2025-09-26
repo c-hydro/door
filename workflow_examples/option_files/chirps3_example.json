@@ -1,8 +1,8 @@
 {
     "TAGS":{
         "source"   : "CHIRPS",
-        "product"  : "CHIRPSv3-dekads",
-        "prod_name": "CHIRPS-precip10d"
+        "product"  : "CHIRPSv3-daily",
+        "prod_name": "CHIRPS-precip1d"
     },
     "DATASETS":{
         "destination" : {
