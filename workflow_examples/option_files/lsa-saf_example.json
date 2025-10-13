@@ -1,13 +1,13 @@
 {
     "TAGS":{
         "source"   : "LSA-SAF",
-        "product"  : "ET0",
+        "product"  : "ET",
         "prod_name": "{source}_{product}"
     },
     "DATASETS":{
         "destination" : {
             "type" : "local",
-            "path" : "output/{source}/{product}/%Y",
+            "path" : "output/{source}/{product}/{variable}/%Y",
             "filename" : "{prod_name}_{variable}_sample_%Y%m%d.tif"
         }
     },

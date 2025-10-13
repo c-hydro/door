@@ -16,51 +16,53 @@ class LSASAFDownloader(URLDownloader):
     source = "LSA-SAF"
     name = "LSASAF_downloader"
 
-    single_temp_folder = True
+    single_temp_folder = False
 
     default_options = {
-        "ts_per_year": 365
+        "ts_per_year": 365,
+        "variables" : None,  # all variables
     }
 
     credential_env_vars = {'username' : 'LSASAF_LOGIN', 'password' : 'LSASAF_PWD'}
 
     home = "https://datalsasaf.lsasvcs.ipma.pt"
-    url_blank = home + '/PRODUCTS/{satellite}/{product_name}/NETCDF/%Y/%m/%d/{filename}'
+    url_blank = home + '/PRODUCTS/{satellite}/{product_name}/NETCDF/{time:%Y/%m/%d}/{filename}'
 
     available_products: dict = {
         "et0": {
             "product_name" : "METREF",
             "satellite" : "MSG",
-            "filename" : 'NETCDF4_LSASAF_MSG_METREF_MSG-Disk_%Y%m%d0000.nc',
-            "freq" : 'd',
-            "nodata" : -9999,
-            "varname" : "precip",
+            "filename" : 'NETCDF4_LSASAF_MSG_METREF_MSG-Disk_{time:%Y%m%d}0000.nc',
+            "freq" : 'd'
         },
         "et": {
             "product_name" : "MDMETv3",
             "satellite" : "MSG",
-            "filename" : 'NETCDF4_LSASAF_MSG_DMETv3_MSG-Disk_%Y%m%d0000.nc',
-            "freq" : 'd',
-            "nodata" : -9999,
-            "varname" : "precip",
+            "filename" : 'NETCDF4_LSASAF_MSG_DMETv3_MSG-Disk_{time:%Y%m%d}0000.nc',
+            "freq" : 'd'
         }
     }
 
     available_variables: dict = {
-        "et0": ["METREF", "quality_flag"],
-        "et" : ["ET", "max_nsolts_missing", "missing_values_percent"]
+        "et0": {"METREF":{'nodata' : float('nan')}, "quality_flag":{'nodata' : float('nan')}},
+        "et" : {"ET":{'nodata' : float('nan')}, "max_nslots_missing":{'nodata' : float('nan')}, "missing_values_percent":{'nodata' : float('nan')}}
     }
 
     def __init__(self, product: str) -> None:
         self.set_product(product)
         super().__init__(self.url_blank, protocol = 'http')
 
-    def set_product(self, product: str) -> None:
-        self.product = product.lower()
-        if self.product not in self.available_products:
-            raise ValueError(f'Product {product} not available. Choose one of {self.available_products.keys()}')
-        for key in self.available_products[self.product]:
-            setattr(self, key, self.available_products[self.product][key])
+    # def set_product(self, product: str) -> None:
+    #     self.product = product.lower()
+    #     if self.product not in self.available_products:
+    #         raise ValueError(f'Product {product} not available. Choose one of {self.available_products.keys()}')
+    #     for key in self.available_products[self.product]:
+    #         setattr(self, key, self.available_products[self.product][key])
+
+    def set_variables(self, variables: list[str] | None) -> None:
+            if variables is None:
+                variables = self.available_variables[self.product].keys()
+            super().set_variables(variables)
 
     def get_last_published_ts(self, **kwargs) -> ts.TimeRange:
         
@@ -72,11 +74,13 @@ class LSASAFDownloader(URLDownloader):
 
         this_ts = ts.TimeStep.from_unit(self.freq).from_date(dt.datetime.now())
         while True:
-            this_url = this_ts.end.strftime(self.url_blank.format(
+            this_filename = self.filename.format(time = this_ts.start)
+            this_url = self.url_blank.format(
                 product_name = self.product_name,
                 satellite = self.satellite,
-                filename = self.filename
-            ))
+                filename = this_filename,
+                time = this_ts.start
+            )
             response = requests.head(this_url, auth = tuple(credentials.split(':')))
             if response.status_code is requests.codes.ok:
                 break
@@ -111,32 +115,24 @@ class LSASAFDownloader(URLDownloader):
                      tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
         
 
-        year = timestep.year
-        tmp_file_nc = f'temp_{self.product}{year}.nc'
+        tmp_file_nc = f'temp_{self.product}{timestep.start:%Y%m%d}.nc'
 
         # check if the file is not already downloaded in the tmp_path
         tmp_destination = os.path.join(tmp_path, tmp_file_nc)
-        if not os.path.exists(tmp_destination):
-            # download the file
-            self.download(tmp_destination, min_size = 2000, missing_action = 'warning', year = year)
-        
+        this_filename = self.filename.format(time = timestep.start)
+        self.download(tmp_destination, min_size = 2000, missing_action = 'warning',
+                      time = timestep.start, product_name = self.product_name, satellite = self.satellite, filename = this_filename)
+
         # open the file
         raw_data = xr.open_dataset(tmp_destination, engine = 'netcdf4')
-        vardata = raw_data[self.varname]
+        for var, varopts in self.variables.items():
+            vardata = raw_data[var].isel(time = 0, drop = True)  # remove the time dimension if present
 
-        # only select the relevant time range
-        inrange = (vardata.time.dt.date >= timestep.start.date()) & (vardata.time.dt.date <= timestep.end.date())
-        vardata = vardata.sel(time = inrange)
+            # crop to the bounding box
+            vardata = crop_to_bb(vardata, space_bounds)
 
-        # crop the data
-        cropped = crop_to_bb(vardata, space_bounds)
+            # set the metadata
+            vardata = vardata.rio.write_crs('EPSG:4326')
+            vardata = vardata.rio.set_spatial_dims(x_dim = 'lon', y_dim = 'lat')
 
-        # aggregate the data
-        if self.agg_method == 'sum':
-            aggregated = cropped.sum(dim = 'time')
-        elif self.agg_method == 'mean':
-            aggregated = cropped.mean(dim = 'time')
-        else:
-            raise ValueError(f'Aggregation method {self.agg_method} not recognized')
-
-        yield aggregated, {}
+            yield vardata, {'variable' : var}
