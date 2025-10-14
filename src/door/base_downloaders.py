@@ -380,7 +380,7 @@ class URLDownloader(DOORDownloader):
 
         url = self.format_url(**kwargs)
         try:
-            r = requests.get(url, kwargs["auth"])
+            r = requests.get(url, auth = kwargs["auth"])
             if r.status_code != 200:
                 raise FileNotFoundError(r.text)
             
