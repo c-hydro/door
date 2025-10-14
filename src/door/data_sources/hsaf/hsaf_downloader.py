@@ -11,7 +11,6 @@ from ...utils.auth import get_credentials
 from ...utils.io import decompress_bz2
 
 import datetime as dt
-import requests
 
 from d3tools.spatial import BoundingBox, crop_to_bb
 from d3tools import timestepping as ts
@@ -33,15 +32,16 @@ class HSAFDownloader(FTPDownloader):
     }
 
     available_products: dict = {
-        "HSAF-h141": {
+        "hsaf-h141": {
             "ts_per_year": 365,
             "url" : "/products/h141/h141/netCDF4/{timestep.start:%Y}/h141_{timestep.start:%Y%m%d}00_R01.nc",
             "nodata" : -9999,
             "format" : 'nc'
         },
-        "HSAF-h14": {
+        "hsaf-h14": {
             "ts_per_year": 365,
-            "url" : "/hsaf_archive/h14/{timestep.start:%Y/%m/%d}/h14_{timestep.start:%Y%m%d}_0000.grib.bz2",
+            "url_alt" : "/hsaf_archive/h14/{timestep.start:%Y/%m/%d}/h14_{timestep.start:%Y%m%d}_0000.grib.bz2",
+            "url" : "/products/h14/h14_cur_mon_grib/h14_{timestep.start:%Y%m%d}_0000.grib.bz2",
             "nodata" : -9999,
             "format" : 'bz2'
         },
@@ -89,15 +89,6 @@ class HSAFDownloader(FTPDownloader):
         self.credentials = get_credentials(env_variables=self.credential_env_vars, url = 'ftp://' + url_host, encode = False)
         username, password = self.credentials.split(':')
         super().__init__(url_host, protocol = 'ftp', user=username, password=password)
-        
-    def set_product(self, product: str) -> None:
-        self.product = product
-        if product not in self.available_products:
-            raise ValueError(f'Product {product} not available. Choose one of {self.available_products.keys()}')
-        self.ts_per_year = self.available_products[product]["ts_per_year"]
-        self.url_blank = self.available_products[product]["url"]
-        self.nodata = self.available_products[product]["nodata"]
-        self.format = self.available_products[product]["format"]
 
     def set_variables(self, variables: list) -> None:
         if self.custom_variables:
@@ -178,8 +169,19 @@ class HSAFDownloader(FTPDownloader):
 
         # Download the data
         retries = self.retries
+
+        urls = [self.url.format(timestep=timestep)]
+        if hasattr(self, 'url_alt'): urls.append(self.url_alt.format(timestep=timestep))
+        # find the correct url
+        for url in urls:
+            if self.check_data(url, timestep=timestep):
+                break
+        else:
+            print(f"No data available for {timestep}")
+            return
+
         while True:
-            success = self.download(self.url_blank, tmp_file, timestep = timestep, auth = self.credentials, missing_action = 'ignore', min_size = 50000)
+            success = self.download(url, tmp_file, timestep = timestep, auth = self.credentials, missing_action = 'ignore', min_size = 50000)
             if success:
                 break
             elif retries <= 0:
