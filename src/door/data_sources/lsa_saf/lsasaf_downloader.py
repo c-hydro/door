@@ -18,6 +18,9 @@ class LSASAFDownloader(URLDownloader):
 
     single_temp_folder = False
 
+    retries = 3
+    retry_delay = 10  # seconds
+
     default_options = {
         "ts_per_year": 365,
         "variables" : None,  # all variables
@@ -115,24 +118,41 @@ class LSASAFDownloader(URLDownloader):
                      tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
         
 
+        credentials = self.get_credentials()
         tmp_file_nc = f'temp_{self.product}{timestep.start:%Y%m%d}.nc'
 
         # check if the file is not already downloaded in the tmp_path
         tmp_destination = os.path.join(tmp_path, tmp_file_nc)
         this_filename = self.filename.format(time = timestep.start)
-        self.download(tmp_destination, min_size = 2000, missing_action = 'warning',
-                      time = timestep.start, product_name = self.product_name, satellite = self.satellite, filename = this_filename)
 
-        # open the file
-        raw_data = xr.open_dataset(tmp_destination, engine = 'netcdf4')
-        for var, varopts in self.variables.items():
-            vardata = raw_data[var].isel(time = 0, drop = True)  # remove the time dimension if present
+        success = False
+        while not success and self.retries > 0:
 
-            # crop to the bounding box
-            vardata = crop_to_bb(vardata, space_bounds)
+            success = self.download(tmp_destination, min_size = 2000, missing_action = 'warning', auth = tuple(credentials.split(':')),
+                        time = timestep.start, product_name = self.product_name, satellite = self.satellite, filename = this_filename)
 
-            # set the metadata
-            vardata = vardata.rio.write_crs('EPSG:4326')
-            vardata = vardata.rio.set_spatial_dims(x_dim = 'lon', y_dim = 'lat')
+            if not success:
+                self.retries -= 1
+                if self.retries > 0:
+                    print(f'Retrying download in {self.retry_delay} seconds... ({self.retries} retries left)')
+                    import time
+                    time.sleep(self.retry_delay)
+                    continue
+                else:
+                    print('Max retries reached. Giving up.')
+                    break
 
-            yield vardata, {'variable' : var}
+            # open the file
+            raw_data = xr.open_dataset(tmp_destination, engine = 'netcdf4')
+            raw_data.close()
+            for var, varopts in self.variables.items():
+                vardata = raw_data[var].isel(time = 0, drop = True)  # remove the time dimension if present
+
+                # crop to the bounding box
+                vardata = crop_to_bb(vardata, space_bounds)
+
+                # set the metadata
+                vardata = vardata.rio.write_crs('EPSG:4326')
+                vardata = vardata.rio.set_spatial_dims(x_dim = 'lon', y_dim = 'lat')
+
+                yield vardata, {'variable' : var}
