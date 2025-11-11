@@ -31,15 +31,13 @@ class JRADownloader(URLDownloader):
         1.25  : 'll125'
     }
 
-    home = "https://thredds.rda.ucar.edu/thredds/fileServer/files/g/d640000/"
+    home = "https://tds.gdex.ucar.edu/thredds/"
     
-
     available_agg_methods = ['mean', 'max', 'min', 'sum']
-
     available_products: dict = {
         "jra-3q": {
-            "url_blank" : home + "{dataset}/{month.start:%Y%m}/jra3q.{dataset}.{var_code}.{var_name}-{grid_code}.{month.start:%Y%m%d}00_{month.end:%Y%m%d}{end_time}.nc",
-            "data_list" : "https://thredds.rda.ucar.edu/thredds/catalog/files/g/d640000/{dataset}/catalog.html"
+            "url_blank" : home + "dodsC/files/g/d640000/{dataset}/{month.start:%Y%m}/jra3q.{dataset}.{var_code}.{var_name}-{grid_code}.{month.start:%Y%m%d}00_{month.end:%Y%m%d}{end_time}.nc",
+            "data_list" : home + "catalog/files/g/d640000/{dataset}/catalog.html"
         }
     }
 
@@ -61,6 +59,8 @@ class JRADownloader(URLDownloader):
             }
         }
     }
+
+    cached_data = None
 
     def __init__(self, product: str) -> None:
         self.set_product(product)
@@ -143,11 +143,10 @@ class JRADownloader(URLDownloader):
         
         this_var = self.variables[self.variable]
         this_month = ts.Month(timestep.year, timestep.month)
-        tmp_file_nc = f'temp_{self.product}{this_month.year}{this_month.month}.nc'
 
-        # check if the file is not already downloaded in the tmp_path
-        tmp_destination = os.path.join(tmp_path, tmp_file_nc)
-        if not os.path.exists(tmp_destination):
+        if self.cached_data is not None and this_month in self.cached_data:
+            raw_data = self.cached_data[this_month]
+        else:
             tags = {
                 'dataset' : this_var['dataset'],
                 'var_code' : this_var['var_code'],
@@ -156,18 +155,13 @@ class JRADownloader(URLDownloader):
                 'month' : this_month,
                 'end_time' : this_var['end_time']
             }
-            # download the file
-            self.download(tmp_destination, min_size = 2000, missing_action = 'warning', **tags)
-
-            # once we download a month, we can delete the previous month
-            prev_month = this_month - 1
-            prev_file = f'temp_{self.product}{prev_month.year}{prev_month.month}.nc'
-            prev_file = os.path.join(tmp_path, prev_file)
-            if os.path.exists(prev_file):
-                os.remove(prev_file)
+            
+            # open the monthly file
+            url = self.format_url(**tags)
+            raw_data = xr.open_dataset(url, engine = 'netcdf4')
+            self.cached_data = {this_month: raw_data}
         
-        # open the file
-        raw_data = xr.open_dataset(tmp_destination, engine = 'netcdf4')
+        # select the variable
         vardata = raw_data[f"{this_var['var_name']}-{self.grid_codes[self.resolution]}"]
 
         # only select the relevant time range
