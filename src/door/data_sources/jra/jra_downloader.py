@@ -109,7 +109,7 @@ class JRADownloader(URLDownloader):
         last_date_timestep = ts.TimeStep.from_unit(freq).from_date(last_date)
 
         # if the last date is the last day of its timestep, return the last timestep
-        if last_date == last_date_timestep.end:
+        if last_date.date() == last_date_timestep.end.date():
             return last_date_timestep
         # else, return the timestep before the one of the last date
         else:
