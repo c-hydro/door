@@ -38,7 +38,7 @@ class JRADownloader(URLDownloader):
 
     available_products: dict = {
         "jra-3q": {
-            "url_blank" : home + "{dataset}/{month.start:%Y%m}/jra3q.{dataset}.{var_code}.{var_name}-{grid_code}.{month.start:%Y%m%d}00_{month.end:%Y%m%d}23.nc",
+            "url_blank" : home + "{dataset}/{month.start:%Y%m}/jra3q.{dataset}.{var_code}.{var_name}-{grid_code}.{month.start:%Y%m%d}00_{month.end:%Y%m%d}{end_time}.nc",
             "data_list" : "https://thredds.rda.ucar.edu/thredds/catalog/files/g/d640000/{dataset}/catalog.html"
         }
     }
@@ -49,7 +49,15 @@ class JRADownloader(URLDownloader):
                 "dataset" : 'fcst_phy2m',
                 "var_code" : '0_1_52',
                 "var_name" : "tprate1have-sfc-fc", # this is a rate in mm/s, will need to multiply by 3600 to get mm/h and then sum to get total precipitation
-                "agg_method" : 'sum'
+                "agg_method" : 'sum',
+                "end_time" : 23
+            },
+            "temperature": {
+                "dataset" : 'anl_surf',
+                "var_code" : '0_0_0',
+                "var_name" : "tmp2m-hgt-an", # this is a rate in mm/s, will need to multiply by 3600 to get mm/h and then sum to get total precipitation
+                "agg_method" : 'mean',
+                "end_time" : 18
             }
         }
     }
@@ -145,7 +153,8 @@ class JRADownloader(URLDownloader):
                 'var_code' : this_var['var_code'],
                 'var_name' : this_var['var_name'],
                 'grid_code' : self.grid_codes[self.resolution],
-                'month' : this_month
+                'month' : this_month,
+                'end_time' : this_var['end_time']
             }
             # download the file
             self.download(tmp_destination, min_size = 2000, missing_action = 'warning', **tags)
@@ -171,6 +180,9 @@ class JRADownloader(URLDownloader):
         # if this is precipitation data, we need to transform it to mm/h
         if this_var['var_name'] == 'tprate1have-sfc-fc':
             cropped *= 3600
+        # if this is temperature data, we need to transform it to Celsius
+        elif this_var['var_name'] == 'tmp2m-hgt-an':
+            cropped -= 273.15
 
         # aggregate the data
         for agg_method in this_var['agg_method']:
