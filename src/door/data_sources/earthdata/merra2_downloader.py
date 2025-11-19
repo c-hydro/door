@@ -97,7 +97,7 @@ class MERRA2Downloader(CMRDownloader):
                 self.download(url_list, tmp_path)[0]
 
             # open the file with rasterio
-            all_data = xr.open_dataset(file)
+            all_data = xr.open_dataset(file, engine = 'h5netcdf')
 
             # ensure the latitude is descending
             all_data = all_data.sortby('lat', ascending=False)
