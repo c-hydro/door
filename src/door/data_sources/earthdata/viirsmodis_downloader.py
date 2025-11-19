@@ -31,6 +31,14 @@ class VIIRSMODISDownloader(CMRDownloader):
 
     file_ext = ['.hdf', '.h5']
 
+    default_options = {
+        'variables': None,
+        'make_mosaic': True,
+        'crop_to_bounds': True,
+        'keep_tiles_naming': False,
+        'selected_tiles' : None
+    }
+
     # we need to add the version=2.0 to the URL to get the correct response for the snow product (for FAPAR it doesn't matter)
     cmr_url='https://cmr.earthdata.nasa.gov/search/granules.json?version=2.0'
 
