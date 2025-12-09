@@ -1,0 +1,24 @@
+{
+    "TAGS":{
+        "source"   : "MERRA2",
+        "product"  : "tavg1_2d",
+        "prod_name": "{source}-{product}"
+    },
+    "DATASETS":{
+        "destination" : {
+            "type" : "local",
+            "path" : "output/{source}/{variable}/%Y",
+            "filename" : "{variable}_{agg_method}_sample_%Y%m%d.tif"
+        }
+    },
+    "DOOR_DOWNLOADER" : {
+        "source"    : "{source}",
+        "product"   : "{product}",
+        "destination" : "{DATASETS.destination}",
+        "bounds" : [-180, -90, 180, 90],
+        "options" : {
+            "variables" : ["precipitation", "temperature"],
+            "agg_method": [["sum"], ["mean", "max", "min"]]
+        }
+    }
+}
