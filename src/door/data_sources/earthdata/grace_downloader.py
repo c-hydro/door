@@ -30,6 +30,10 @@ class GRACEDownloader(CMRDownloader):
         }
     }
 
+    default_options = {
+        'variables': ['TWS']
+    }
+
     file_ext = ['.tif', '.tiff']
     
     def __init__(self, product: str): 	

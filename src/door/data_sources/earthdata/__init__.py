@@ -1,2 +1,3 @@
 from .viirsmodis_downloader import VIIRSDownloader, MODISDownloader
 from .grace_downloader import GRACEDownloader
+from .merra2_downloader import MERRA2Downloader

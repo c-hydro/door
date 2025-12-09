@@ -32,14 +32,6 @@ class CMRDownloader(DOORDownloader):
 
     cmr_page_size = 200 #TODO: check if true
 
-    default_options = {
-        'variables': None,
-        'make_mosaic': True,
-        'crop_to_bounds': True,
-        'keep_tiles_naming': False,
-        'selected_tiles' : None
-    }
-
     file_ext = ['.hdf', '.h5']
     
     def __init__(self, product: str) -> None:
@@ -211,7 +203,8 @@ class CMRDownloader(DOORDownloader):
 
                 search_page = response.read()
                 search_page = json.loads(search_page.decode('utf-8'))
-                valid_results = cmr_filter_urls(search_page, extensions=self.file_ext, selected_tiles=self.selected_tiles)
+                selected_tiles = self.selected_tiles if hasattr(self, 'selected_tiles') else None
+                valid_results = cmr_filter_urls(search_page, extensions=self.file_ext, selected_tiles=selected_tiles)
 
                 urls += valid_results
 
