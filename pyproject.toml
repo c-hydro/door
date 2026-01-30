@@ -36,6 +36,7 @@ dependencies = [
     "xarray~=2025.11.0",
     "requests~=2.32.5",
     "cfgrib~=0.9.15.0",
+    "eccodeslib~=2.45.1",       #this shouldn't be needed (dependency of cfgrib), but uv somethimes fails to resolve it
     "netcdf4~=1.7.3",
     "h5netcdf~=1.7.3",
     "h5py~=3.15.1",             #only for viirs_downloader
