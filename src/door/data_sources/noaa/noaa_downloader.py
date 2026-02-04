@@ -22,17 +22,17 @@ class NOAADownloader(URLDownloader):
         "ts_per_year": 365
     }
 
-    home = "https://psl.noaa.gov/thredds/fileServer/Datasets/"
+    home = "https://psl.noaa.gov/thredds/"
 
     available_products: dict = {
         "cpc_global_precip": {
-            "url_blank" : home + 'cpc_global_precip/precip.{year}.nc',
+            "url_blank" : home + 'dodsC/Datasets/cpc_global_precip/precip.{year}.nc',
             "nodata" : -9999,
             "varname" : "precip",
-            "agg_method" : "sum",
-            "metadata" : "https://psl.noaa.gov/thredds/iso/Datasets/cpc_global_precip/precip.{year}.nc?catalog=http://psl.noaa.gov/thredds/catalog/Datasets/cpc_global_precip/catalog.html&dataset=Datasets/cpc_global_precip/precip.{year}.nc"
-        }
+            "agg_method" : "sum"        }
     }
+
+    cached_data = None
 
     def __init__(self, product: str) -> None:
         self.set_product(product)
@@ -72,19 +72,21 @@ class NOAADownloader(URLDownloader):
         Get the last published date for the dataset.
         """
 
-        import xml.etree.ElementTree as ET
-
-        year = dt.datetime.now().year
-        with requests.get(self.metadata.format(year = year)) as response:
-            root = ET.fromstring(response.content)
-
-        # Find the gml:endPosition element
-        end_position = root.find('.//gml:endPosition', namespaces={'gml': 'http://www.opengis.net/gml/3.2'})
-        if end_position is not None:
-            end_date = end_position.text
+        this_year = dt.datetime.now().year
+        while this_year >= 2025:
+            # open the yearly file
+            url = self.format_url(year = this_year)
+            if requests.head(url + ('.html')).status_code == 200:
+                raw_data = xr.open_dataset(url, engine = 'netcdf4')
+                self.cached_data = {this_year: raw_data}
+                break
+            this_year -= 1
+        
+        vardata = raw_data[self.varname]
+        end_date = vardata.time.values[-1]
 
         # Convert to datetime object if needed
-        end_date_dt = dt.datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        end_date_dt = dt.datetime.fromtimestamp(end_date.astype('datetime64[s]').astype(int), tz=dt.timezone.utc)
         return end_date_dt
 
     def _get_data_ts(self,
@@ -93,17 +95,16 @@ class NOAADownloader(URLDownloader):
                      tmp_path: str) -> Generator[tuple[xr.DataArray, dict], None, None]:
         
 
-        year = timestep.year
-        tmp_file_nc = f'temp_{self.product}{year}.nc'
+        this_year = timestep.year
 
-        # check if the file is not already downloaded in the tmp_path
-        tmp_destination = os.path.join(tmp_path, tmp_file_nc)
-        if not os.path.exists(tmp_destination):
-            # download the file
-            self.download(tmp_destination, min_size = 2000, missing_action = 'warning', year = year)
+        if self.cached_data is not None and this_year in self.cached_data:
+            raw_data = self.cached_data[this_year]
+        else:
+            # open the yearly file
+            url = self.format_url(year = this_year)
+            raw_data = xr.open_dataset(url, engine = 'netcdf4')
+            self.cached_data = {this_year: raw_data}
         
-        # open the file
-        raw_data = xr.open_dataset(tmp_destination, engine = 'netcdf4')
         vardata = raw_data[self.varname]
 
         # only select the relevant time range

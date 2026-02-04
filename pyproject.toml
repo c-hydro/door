@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "door"
-version = "2.3.11"
+version = "2.4.0"
 description = "A package for operational retrieval of raster data from different sources"
 authors = [
     { name = "Andrea Libertino", email = "andrea.libertino@cimafoundation.org" },
@@ -18,7 +18,7 @@ maintainers = [
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: ECPL License",
@@ -26,13 +26,17 @@ classifiers = [
 ]
 
 # mandatory dependencies for basic functionality
+# Note: d3tools uses version pinning for compatibility
+# For development: uv pip install -e ../d3tools
+# For production: d3tools will be resolved from git+https://github.com/c-hydro/d3tools@main
 dependencies = [
-    "d3tools@git+https://github.com/c-hydro/d3tools",
+    "d3tools>=2.3.0,<3.0.0",
     "numpy~=2.3.5",
     "rioxarray~=0.20.0",
     "xarray~=2025.11.0",
     "requests~=2.32.5",
     "cfgrib~=0.9.15.0",
+    "eccodeslib~=2.45.1",       #this shouldn't be needed (dependency of cfgrib), but uv somethimes fails to resolve it
     "netcdf4~=1.7.3",
     "h5netcdf~=1.7.3",
     "h5py~=3.15.1",             #only for viirs_downloader
@@ -50,14 +54,4 @@ Repository = "https://github.com/c-hydro/door"
 drops = [
     "drops2@git+https://github.com/CIMAFoundation/drops2@v0.7.0",
     "pandas~=2.3.3"
-]
-
-# dependencies for creating thumbnails
-thumbnails = [
-    "d3tools[thumbnails]@git+https://github.com/c-hydro/d3tools"
-]
-
-# dependencies for reading and writing remote data
-remote-data = [
-    "d3tools[remote-data]@git+https://github.com/c-hydro/d3tools"
 ]
