@@ -273,9 +273,11 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         if hasattr(self, 'product') and self.product in available_variables:
             available_variables = available_variables[self.product]
         self.variables = {}
+        if variables is None:
+            variables = list(available_variables.keys()) if isinstance(available_variables, dict) else available_variables
         for var in variables:
             if var in available_variables:
-                self.variables[var] = available_variables[var]
+                self.variables[var] = available_variables[var] if isinstance(available_variables, dict) else var
 
     def get_last_ts(self, **kwargs) -> tuple[ts.TimeStep]:
         """

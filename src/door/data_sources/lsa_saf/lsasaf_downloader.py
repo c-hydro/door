@@ -143,7 +143,7 @@ class LSASAFDownloader(URLDownloader):
                     break
 
             # open the file
-            raw_data = xr.open_dataset(tmp_destination, engine = 'netcdf4')
+            raw_data = xr.open_dataset(tmp_destination, engine = 'h5netcdf')
             raw_data.close()
             for var, varopts in self.variables.items():
                 vardata = raw_data[var].isel(time = 0, drop = True)  # remove the time dimension if present
