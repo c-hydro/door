@@ -1,24 +1,24 @@
 {
     "TAGS":{
         "source"   : "CLMS",
-        "product"  : "swi",
-        "prod_name": "CLMS-swi"
+        "product"  : "fapar",
+        "prod_name": "CLMS-fapar"
     },
     "DATASETS":{
         "destination" : {
             "type" : "local",
-            "path" : "output/{source}/{product}/%Y",
-            "filename" : "{prod_name}_sample_%Y%m%d.tif"
+            "path" : "output/{source}/{product}/%Y/{variable}",
+            "filename" : "{prod_name}_{variable}_sample_%Y%m%d.tif"
         }
     },
     "DOOR_DOWNLOADER" : {
         "source"    : "{source}",
         "product"   : "{product}",
         "destination" : "{DATASETS.destination}",
-        "bounds" : [8, 38.5, 10, 41.5],
+        "bounds" : [-180, -90, 180, 90],
         "options" : {
-            "variables": ["020"],
-            "ts_per_year" : 36
+            "accept_RTs" : ["RT6", "RT0"],
+            "variables"  : ["FAPAR", "NOBS", "QFLAG"]
         }
     }
 }
