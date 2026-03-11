@@ -30,7 +30,8 @@ class ERA5Downloader(CDSDownloader):
         'variables'   : 'total_precipitation',
         'agg_method'  : None,
         'ts_per_year' : 12, # the number of timesteps per year to split the download over #365=daily, 12=monthly, 36=10-daily
-        'ts_per_year_agg' : 365
+        'ts_per_year_agg' : 365,
+        'interp' : False
     }
 
     spatial_ref =  'GEOGCRS["WGS 84",\
@@ -126,6 +127,12 @@ class ERA5Downloader(CDSDownloader):
                 '21:00', '22:00', '23:00',
             ],
         })
+
+        if self.interp:
+            if self.dataset == 'reanalysis-era5-single-levels':
+                request['grid'] = '0.25/0.25'
+            elif self.dataset == 'reanalysis-era5-land':
+                request['grid'] = '0.1/0.1'
 
         return request
 
