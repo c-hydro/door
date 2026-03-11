@@ -43,6 +43,8 @@ dependencies = [
     "pyhdf~=0.11.6",            #only for modis_downloader
     "cdsapi~=0.7.7",            #only for cds_downloader
     "ecmwf-opendata~=0.3.24",   #only for ecmwf_opendata_downloader
+    "aiohttp~=3.13.3",
+    "pydap~=3.5.9",
     "paramiko~=4.0.0",
     "dask~=2025.11.0"
 ]
