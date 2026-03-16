@@ -1,0 +1,24 @@
+{
+    "TAGS":{
+        "source"   : "CDSE",
+        "product"  : "fapar",
+        "prod_name": "CDSE-fapar"
+    },
+    "DATASETS":{
+        "destination" : {
+            "type" : "local",
+            "path" : "output/{source}/{product}/%Y/{variable}",
+            "filename" : "{prod_name}_{variable}_sample_%Y%m%d.tif"
+        }
+    },
+    "DOOR_DOWNLOADER" : {
+        "source"    : "{source}",
+        "product"   : "{product}",
+        "destination" : "{DATASETS.destination}",
+        "bounds" : [8.0, 38.5, 10.0, 41.5],
+        "options" : {
+            "accept_RTs" : ["RT6", "RT0"],
+            "variables"  : ["FAPAR", "NOBS", "QFLAG"]
+        }
+    }
+}
