@@ -30,7 +30,7 @@ class CDSEDownloader(DOORDownloader):
 
     default_options = {
         "product": "fapar",
-        "consolidation": 6,
+        "consolidation": 6, # eventually allow this to be a list, but figure it out after the basic version is working
         "resolution": 300,
         "variables": ["FAPAR"],
         "mosaicking_order": "mostRecent",
@@ -84,53 +84,24 @@ class CDSEDownloader(DOORDownloader):
         }
     }
 
-    def __init__(self, **kwargs):
+    def __init__(self, product: str) -> None:
         super().__init__()
+        self.set_product(product)
         self.session = self._make_session()
-        self.set_options(kwargs if kwargs else self.default_options.copy())
 
-    def check_options(self, options=None):
-        options = super().check_options(options or {})
-        if "product" not in options:
-            options["product"] = "fapar"
-        if "variables" not in options:
-            options["variables"] = ["FAPAR"]
-        if "resolution" not in options:
-            options["resolution"] = 300  # default S3 OLCI resolution
+    def check_options(self, options):
+        super().check_options(options)
 
-        return options
+        consolidation = options.get("consolidation")
+        # if isinstance(consolidation, int):
+        #     consolidation = [consolidation]
 
-    def set_options(self, options):
-        options = self.check_options(options)
-
-        if "product" in options:
-            self.set_product(options["product"])
-
-        super().set_options(options)
-
-        if not hasattr(self, "variables") or not self.variables:
-            self.set_variables(["FAPAR"])
-
-        if self.consolidation not in self.collections:
+        # if not all([c in self.collections for c in consolidation]):
+        if consolidation not in self.collections:
             raise ValueError(
                 f"Invalid consolidation {self.consolidation}. "
-                f"Choose one of {list(self.collections.keys())}"
+                f"Choose one or more of {list(self.collections.keys())}"
             )
-
-    def set_product(self, product: str) -> None:
-        super().set_product(product)
-        self.collections = self.available_products[self.product]["collections"]
-
-    def set_variables(self, variables: list) -> None:
-        available_variables = self.available_variables[self.product]
-        self.variables = {}
-        for var in variables:
-            if var not in available_variables:
-                raise ValueError(
-                    f"Variable {var} not available for product {self.product}. "
-                    f"Choose from {list(available_variables.keys())}"
-                )
-            self.variables[var] = available_variables[var]
 
     @staticmethod
     def _make_session() -> requests.Session:
