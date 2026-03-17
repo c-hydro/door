@@ -1,24 +1,27 @@
 {
-    "TAGS":{
-        "source"   : "CDSE",
-        "product"  : "fapar",
-        "prod_name": "CDSE-fapar"
-    },
-    "DATASETS":{
-        "destination" : {
-            "type" : "local",
-            "path" : "output/{source}/{product}/%Y/{variable}",
-            "filename" : "{prod_name}_{variable}_sample_%Y%m%d.tif"
-        }
-    },
-    "DOOR_DOWNLOADER" : {
-        "source"    : "{source}",
-        "product"   : "{product}",
-        "destination" : "{DATASETS.destination}",
-        "bounds" : [8.0, 38.5, 10.0, 41.5],
-        "options" : {
-            "accept_RTs" : ["RT6", "RT0"],
-            "variables"  : ["FAPAR", "NOBS", "QFLAG"]
-        }
+  "TAGS": {
+    "source": "cdse",
+    "product": "fapar",
+    "prod_name": "CDSE-fapar"
+  },
+  "DATASETS": {
+    "destination": {
+      "type": "local",
+      "path": "output/{source}/{product}/%Y/{variable}",
+      "filename": "{prod_name}_{variable}_%Y%m%d.tif"
     }
+  },
+  "DOOR_DOWNLOADER": {
+    "source": "{source}",
+    "product": "{product}",
+    "bounds": [8.0, 38.5, 10.0, 41.5],
+    "destination": "{DATASETS.destination}",
+    "options": {
+      "consolidation": 6,
+      "resolution": 300,
+      "variables": ["FAPAR", "NOBS", "QFLAG"],
+      "mosaicking_order": "mostRecent",
+      "sample_type": "FLOAT32"
+    }
+  }
 }
