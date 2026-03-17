@@ -15,12 +15,13 @@ from d3tools import spatial as sp
 
 # internal imports
 from ...base_downloaders import DOORDownloader
-
+from ...utils.auth import get_credentials
 
 class CDSEDownloader(DOORDownloader):
     source = "cdse"
     name = "CDSE_Downloader"
 
+    credential_env_vars = {'username' : 'CDSE_LOGIN', 'password' : 'CDSE_PWD'}
     TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
     PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
 
@@ -111,39 +112,34 @@ class CDSEDownloader(DOORDownloader):
         session.trust_env = False
         return session
 
-    @staticmethod
-    def _read_sh_credentials():
-        try:
-            auth = netrc().authenticators("sh.dataspace.copernicus.eu")
-        except FileNotFoundError:
-            auth = None
-        except NetrcParseError as e:
-            raise RuntimeError(f"Could not parse ~/.netrc: {e}") from e
+    def _get_credentials(self) -> str:
 
-        if auth is None:
-            raise RuntimeError(
-                "No Sentinel Hub OAuth credentials found in ~/.netrc.\n"
-                "Expected:\n"
-                "machine sh.dataspace.copernicus.eu\n"
-                "login YOUR_OAUTH_CLIENT_ID\n"
-                "password YOUR_OAUTH_CLIENT_SECRET"
-            )
+        # credentials will be looked for in the environment variables
+        # username = 'CDSE_LOGIN', password = 'CDSE_PWD'
+        # should be saved in a .netrc file in the user's home directory
+        # with the following line:
+        # machine sh.dataspace.copernicus.eu login <username> password <password>
+        if not hasattr(self, 'credentials') or not isinstance(self.credentials, str):
+            self.credentials = get_credentials(env_variables=self.credential_env_vars,
+                                               url=self.PROCESS_URL, encode = False)
+        
+        return self.credentials
 
-        client_id, _, client_secret = auth
-        return client_id, client_secret
+    def _get_access_token(self):
+        """
+        Retrieve an access token from the authentication server.
+        This token is used for subsequent API calls.
+        """
 
-    def _get_access_token(self) -> str:
-        client_id, client_secret = self._read_sh_credentials()
+        username, password = self._get_credentials().split(":", 1)
 
-        resp = self.session.post(
-            self.TOKEN_URL,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-            },
-            timeout=30,
-        )
+        auth_data = {
+            "client_id": "cdse-public",
+            "grant_type": "password",
+            "username": username,
+            "password": password,
+        }
+        resp = requests.post(self.TOKEN_URL, data=auth_data, verify=True, allow_redirects=False)
         resp.raise_for_status()
 
         payload = resp.json()
