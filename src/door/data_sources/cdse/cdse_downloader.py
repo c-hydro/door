@@ -16,23 +16,23 @@ from d3tools import spatial as sp
 # internal imports
 from ...base_downloaders import DOORDownloader
 
-TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
-PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
-
 
 class CDSEDownloader(DOORDownloader):
     source = "cdse"
     name = "CDSE_Downloader"
 
-    freq = "dekad"
-    single_temp_folder = False
-    separate_vars = True
+    TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
+
+    # single_temp_folder = False
+    # separate_vars = True
 
     default_options = {
         "product": "fapar",
         "consolidation": 6, # eventually allow this to be a list, but figure it out after the basic version is working
+        "variables": None,  # None means all available variables for the product
+        "freq" : "dekad",
         "resolution": 300,
-        "variables": ["FAPAR"],
         "mosaicking_order": "mostRecent",
         "sample_type": "FLOAT32",
     }
@@ -90,7 +90,7 @@ class CDSEDownloader(DOORDownloader):
         self.session = self._make_session()
 
     def check_options(self, options):
-        super().check_options(options)
+        options = super().check_options(options)
 
         consolidation = options.get("consolidation")
         # if isinstance(consolidation, int):
@@ -102,6 +102,8 @@ class CDSEDownloader(DOORDownloader):
                 f"Invalid consolidation {self.consolidation}. "
                 f"Choose one or more of {list(self.collections.keys())}"
             )
+
+        return options
 
     @staticmethod
     def _make_session() -> requests.Session:
@@ -134,7 +136,7 @@ class CDSEDownloader(DOORDownloader):
         client_id, client_secret = self._read_sh_credentials()
 
         resp = self.session.post(
-            TOKEN_URL,
+            self.TOKEN_URL,
             data={
                 "grant_type": "client_credentials",
                 "client_id": client_id,
@@ -294,7 +296,7 @@ function evaluatePixel(sample) {{
 
     def _request_tiff(self, payload, token):
         resp = self.session.post(
-            PROCESS_URL,
+            self.PROCESS_URL,
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
