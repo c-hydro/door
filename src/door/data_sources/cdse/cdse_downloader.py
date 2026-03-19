@@ -55,37 +55,19 @@ class CDSEDownloader(DOORDownloader):
             },
             "frequency": "dekad",
             "data_type" : "UINT8",
-            "resolution": 300,
+            "resolution": 1/336,
         }
     }
     last_available = {}
 
     available_variables = {
         "fapar": {
-            "FAPAR": {
-                "scale_factor": 1/250,
-                "fill_value": 255
-            },
-            "NOBS": {
-                "scale_factor": 1,
-                "fill_value": 255
-            },
-            "QFLAG": {
-                "scale_factor": 1,
-                "fill_value": 255
-            },
-            "RMSE": {
-                "scale_factor": 1/250,
-                "fill_value": 255
-            },
-            "LENGTH_BEFORE": {
-                "scale_factor": 1,
-                "fill_value": 255
-            },
-            "LENGTH_AFTER": {
-                "scale_factor": 1,
-                "fill_value": 255
-            },
+            "FAPAR":         {"scale_factor": 1/250,"fill_value": 255},
+            "NOBS":          {"scale_factor": 1,    "fill_value": 255},
+            "QFLAG":         {"scale_factor": 1,    "fill_value": 255},
+            "RMSE":          {"scale_factor": 1/250,"fill_value": 255},
+            "LENGTH_BEFORE": {"scale_factor": 1,    "fill_value": 255},
+            "LENGTH_AFTER":  {"scale_factor": 1,    "fill_value": 255},
         }
     }
 
@@ -154,8 +136,8 @@ class CDSEDownloader(DOORDownloader):
     @staticmethod
     def _estimate_output_size(bbox, resolution):
         minx, miny, maxx, maxy = bbox
-        width = max(1, int(round((maxx - minx) * 111320 / resolution)))
-        height = max(1, int(round((maxy - miny) * 111320 / resolution)))
+        width  = max(1, int(round((maxx - minx) / resolution)))
+        height = max(1, int(round((maxy - miny) / resolution)))
         return width, height
 
     @staticmethod
