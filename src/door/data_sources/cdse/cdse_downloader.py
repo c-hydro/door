@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import random
 import requests
+from typing import Sequence
 import rioxarray as rxr
 import datetime as dt
 
@@ -29,7 +30,7 @@ class CDSEDownloader(DOORDownloader):
 
     default_options = {
         "product": "fapar",
-        "consolidation": 6, # eventually allow this to be a list, but figure it out after the basic version is working
+        "consolidation": [0,6], # will take the highest available for a timestep
         "variables": None,  # None means all available variables for the product
         "mosaicking_order": "mostRecent",
         "max_workers": 4,
@@ -57,6 +58,7 @@ class CDSEDownloader(DOORDownloader):
             "resolution": 300,
         }
     }
+    last_available = {}
 
     available_variables = {
         "fapar": {
@@ -96,11 +98,10 @@ class CDSEDownloader(DOORDownloader):
         options = super().check_options(options)
 
         consolidation = options.get("consolidation")
-        # if isinstance(consolidation, int):
-        #     consolidation = [consolidation]
+        if isinstance(consolidation, int):
+            consolidation = [consolidation]
 
-        # if not all([c in self.collections for c in consolidation]):
-        if consolidation not in self.collections:
+        if not all([c in self.collections for c in consolidation]):
             raise ValueError(
                 f"Invalid consolidation {self.consolidation}. "
                 f"Choose one or more of {list(self.collections.keys())}"
@@ -250,9 +251,9 @@ function evaluatePixel(sample) {{
 }}
 """.strip()
 
-    def _build_payload(self, timestep, width, height, bbox, bands):
+    def _build_payload(self, timestep, width, height, bbox, bands, consolidation):
 
-        collection_id = self.collections[self.consolidation]
+        collection_id = self.collections[consolidation]
 
         return {
             "input": {
@@ -387,12 +388,24 @@ function evaluatePixel(sample) {{
 
         tile_specs = self._compute_tile_specs(space_bounds.bbox)
 
+        # find the highest consolidation that has data available for this timestep
+        for c in sorted(self.consolidation, reverse=True):
+            last_ts = self.get_last_published_ts(consolidation=c)
+            if last_ts >= timestep:
+                consolidation = c
+                break
+        else:
+            self.log.warning(
+                f"No data available for timestep {timestep} at any of the specified consolidations {self.consolidation}. "
+            )
+            yield None, {}
+
         download_jobs = []
         for spec in tile_specs:
             width = spec["width"]
             height = spec["height"]
             bbox = spec["bbox"]
-            payload = self._build_payload(timestep, width, height, bbox, bands)
+            payload = self._build_payload(timestep, width, height, bbox, bands, consolidation)
             tmp_file = f"{tmp_path}/cdse_request_{self.variable}_{spec['tile_id']}.tiff"
             download_jobs.append((spec, payload, tmp_file))
 
@@ -430,6 +443,7 @@ function evaluatePixel(sample) {{
             da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
             da.name = self.variable
             da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
+            da.attrs['consolidation'] = consolidation
             da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
             yield da, {'variable': self.variable}
         else:
@@ -437,6 +451,7 @@ function evaluatePixel(sample) {{
                 da = rxr.open_rasterio(f)
                 da.name = self.variable
                 da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
+                da.attrs['consolidation'] = consolidation
                 da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
                 da.attrs['tile_id'] = tile_specs[i]['tile_id']
                 yield da, {'variable': self.variable, 'tile' : f'{tile_specs[i]['tile_id']}'}
@@ -449,6 +464,12 @@ function evaluatePixel(sample) {{
         token = self._get_access_token()
         if consolidation is None:
             consolidation = self.consolidation
+        if isinstance(consolidation, Sequence):
+            consolidation = min(consolidation)
+        # we only need the smallest consolidation since higher consolidations will come later
+        # and thus have earlier last_published
+        if consolidation in self.last_available:
+            return self.last_available[consolidation]
         collection_id = self.collections[consolidation]
 
         timestep = ts.TimeStep.from_unit(self.frequency)
@@ -479,7 +500,9 @@ function evaluatePixel(sample) {{
                 this_ts -= 1
             else:
                 latest_datetime = results[0]["properties"]["datetime"]
-                return timestep.from_date(latest_datetime[:10])
+                latest_ts = timestep.from_date(latest_datetime[:10])
+                self.last_available[consolidation] = latest_ts
+                return latest_ts
 
     def get_last_published_date(self):
         """
