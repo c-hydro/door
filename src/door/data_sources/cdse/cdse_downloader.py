@@ -4,6 +4,7 @@ from typing import Iterable
 import numpy as np
 import requests
 import rasterio
+import rioxarray as rxr
 import io
 import logging
 from netrc import netrc, NetrcParseError
@@ -32,10 +33,17 @@ class CDSEDownloader(DOORDownloader):
         "product": "fapar",
         "consolidation": 6, # eventually allow this to be a list, but figure it out after the basic version is working
         "variables": None,  # None means all available variables for the product
-        "freq" : "dekad",
-        "resolution": 300,
         "mosaicking_order": "mostRecent",
-        "sample_type": "FLOAT32",
+        "max_workers": 4,
+        "make_mosaic": True,
+    }
+
+    tile_options = {
+        "max_tile_pixels": 2500,
+        "tile_overlap_pixels": 0,
+        "retry_max_attempts": 5,
+        "retry_backoff_base_s": 1.0,
+        "retry_on_status": [429, 500, 502, 503, 504],
     }
 
     available_products = {
@@ -56,21 +64,27 @@ class CDSEDownloader(DOORDownloader):
         "fapar": {
             "FAPAR": {
                 "scale_factor": 1/250,
+                "fill_value": 255
             },
             "NOBS": {
                 "scale_factor": 1,
+                "fill_value": 255
             },
             "QFLAG": {
                 "scale_factor": 1,
+                "fill_value": 255
             },
             "RMSE": {
                 "scale_factor": 1/250,
+                "fill_value": 255
             },
             "LENGTH_BEFORE": {
                 "scale_factor": 1,
+                "fill_value": 255
             },
             "LENGTH_AFTER": {
                 "scale_factor": 1,
+                "fill_value": 255
             },
         }
     }
@@ -145,14 +159,75 @@ class CDSEDownloader(DOORDownloader):
         height = max(1, int(round((maxy - miny) * 111320 / resolution)))
         return width, height
 
-    def _timestep_to_timerange(self, timestep):
-        """
-        Convert framework timestep to [from, to] strings.
-        Assumes timestep has .start and .end as datetime-like objects.
-        """
-        t0 = timestep.start.strftime("%Y-%m-%d")
-        t1 = timestep.end.strftime("%Y-%m-%d")
-        return t0, t1
+    @staticmethod
+    def _tile_edges(length: int, tile_size: int):
+        if tile_size <= 0:
+            raise ValueError(f"tile_size must be > 0, got {tile_size}")
+
+        edges = list(range(0, length, tile_size))
+        if edges[-1] != length:
+            edges.append(length)
+        return edges
+
+    @staticmethod
+    def _pixel_edges_to_coords(min_value: float, max_value: float, edges_px):
+        span = max_value - min_value
+        if span <= 0:
+            raise ValueError(
+                f"Invalid coordinate span: min={min_value}, max={max_value}"
+            )
+
+        total_px = edges_px[-1]
+        if total_px <= 0:
+            raise ValueError(f"Invalid pixel span: {total_px}")
+
+        return [min_value + (span * px / total_px) for px in edges_px]
+
+    def _compute_tile_specs(self, bbox):
+        max_tile_pixels = self.tile_options["max_tile_pixels"]
+        full_width, full_height = self._estimate_output_size(bbox, self.resolution)
+        minx, miny, maxx, maxy = bbox
+
+        x_edges_px = self._tile_edges(full_width, max_tile_pixels)
+        y_edges_px = self._tile_edges(full_height, max_tile_pixels)
+
+        x_edges = self._pixel_edges_to_coords(minx, maxx, x_edges_px)
+        y_edges = self._pixel_edges_to_coords(miny, maxy, y_edges_px)
+
+        specs = []
+        tile_id = 0
+        nx = len(x_edges_px) - 1
+        ny = len(y_edges_px) - 1
+
+        for row in range(ny):
+            for col in range(nx):
+                x0_px, x1_px = x_edges_px[col], x_edges_px[col + 1]
+                y0_px, y1_px = y_edges_px[row], y_edges_px[row + 1]
+
+                width = x1_px - x0_px
+                height = y1_px - y0_px
+
+                if width <= 0 or height <= 0:
+                    continue
+
+                specs.append(
+                    {
+                        "tile_id": tile_id,
+                        "row": row,
+                        "col": col,
+                        "width": width,
+                        "height": height,
+                        "bbox": [
+                            x_edges[col],
+                            y_edges[row],
+                            x_edges[col + 1],
+                            y_edges[row + 1],
+                        ],
+                    }
+                )
+                tile_id += 1
+
+        return specs
 
     def _build_evalscript(self, bands):
         input_list = ", ".join(f'"{band}"' for band in bands)
@@ -177,10 +252,8 @@ function evaluatePixel(sample) {{
 }}
 """.strip()
 
-    def _build_payload(self, timestep, bounds, bands):
-        bbox = list(bounds.bbox)
-        width, height = self._estimate_output_size(bbox, self.resolution)
-        t0, t1 = self._timestep_to_timerange(timestep)
+    def _build_payload(self, timestep, width, height, bbox, bands):
+
         collection_id = self.collections[self.consolidation]
 
         return {
@@ -196,8 +269,8 @@ function evaluatePixel(sample) {{
                         "type": f"byoc-{collection_id}",
                         "dataFilter": {
                             "timeRange": {
-                                "from": f"{t0}T00:00:00Z",
-                                "to": f"{t1}T23:59:59Z",
+                                "from": f"{timestep.start:%Y-%m-%d}T00:00:00Z",
+                                "to": f"{timestep.end:%Y-%m-%d}T23:59:59Z",
                             },
                             "mosaickingOrder": self.mosaicking_order,
                         },
@@ -240,38 +313,10 @@ function evaluatePixel(sample) {{
 
         return resp.content
 
-    def _tiff_bytes_to_dataarrays(self, raw_bytes, bands):
-        out = []
-
-        with rasterio.MemoryFile(raw_bytes) as memfile:
-            with memfile.open() as src:
-                data = src.read()  # shape: (bands, y, x)
-                transform = src.transform
-                crs = src.crs
-
-                x = np.arange(src.width) * transform.a + transform.c + transform.a / 2
-                y = np.arange(src.height) * transform.e + transform.f + transform.e / 2
-
-                for i, band_name in enumerate(bands):
-                    arr = data[i, :, :]
-
-                    da = xr.DataArray(
-                        arr,
-                        dims=("y", "x"),
-                        coords={"y": y, "x": x},
-                        name=band_name,
-                        attrs={
-                            "crs": str(crs) if crs else None,
-                            "transform": tuple(transform),
-                            "source": self.source,
-                            "product": self.product,
-                            "variable": band_name,
-                            "consolidation": self.consolidation,
-                        },
-                    )
-                    out.append(da)
-
-        return out
+    def _download_and_save_tiff(self, payload, token, tmp_file):
+        raw_tiff = self._request_tiff(payload, token)
+        with open(tmp_file, "wb") as f:
+            f.write(raw_tiff)
 
     def _get_data_ts(self, timestep, space_bounds, tmp_path):
         """
@@ -281,25 +326,35 @@ function evaluatePixel(sample) {{
         token = self._get_access_token()
         bands = [self.variable]
 
-        payload = self._build_payload(
-            timestep=timestep,
-            bounds=space_bounds,
-            bands=bands,
-        )
+        tile_specs = self._compute_tile_specs(space_bounds.bbox)
 
-        raw_tiff = self._request_tiff(payload, token)
-        arrays = self._tiff_bytes_to_dataarrays(raw_tiff, bands)
+        tmp_files = []
+        for spec in tile_specs:
+            width = spec["width"]
+            height = spec["height"]
+            bbox = spec["bbox"]
+            payload = self._build_payload(timestep, width, height, bbox, bands)
+            tmp_file = f"{tmp_path}/cdse_request_{self.variable}_{spec['tile_id']}.tiff"
+            self._download_and_save_tiff(payload, token, tmp_file)
+            tmp_files.append(tmp_file)
 
-        output = []
-        for da in arrays:
-            tags = {
-                "variable": da.name,
-                "source": self.source,
-                "product": self.product,
-            }
-            output.append((da, tags))
-
-        return output
+        if self.make_mosaic:
+            # Open multiple files with dask for efficient processing
+            das = [rxr.open_rasterio(f, chunks={'x': 'auto', 'y': 'auto'}) for f in tmp_files]
+            # Merge tiles spatially into a single DataArray
+            da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
+            da.name = self.variable
+            da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
+            da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
+            yield da, {'variable': self.variable}
+        else:
+            for i, f in enumerate(tmp_files):
+                da = rxr.open_rasterio(f)
+                da.name = self.variable
+                da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
+                da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
+                da.attrs['tile_id'] = tile_specs[i]['tile_id']
+                yield da, {'variable': self.variable, 'tile' : f'{tile_specs[i]['tile_id']}'}
 
     def get_last_published_ts(self):
         """
