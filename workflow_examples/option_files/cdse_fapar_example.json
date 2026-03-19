@@ -1,0 +1,25 @@
+{
+  "TAGS": {
+    "source": "cdse",
+    "product": "fapar",
+    "prod_name": "CDSE-fapar"
+  },
+  "DATASETS": {
+    "destination": {
+      "type": "local",
+      "path": "output/{source}/{product}/%Y/{variable}",
+      "filename": "{prod_name}_{variable}_%Y%m%d.tif"
+    }
+  },
+  "DOOR_DOWNLOADER": {
+    "source": "{source}",
+    "product": "{product}",
+    "bounds": [8, 33, 20, 45],
+    "destination": "{DATASETS.destination}",
+    "options": {
+      "consolidation": [0,6],
+      "mosaicking_order": "mostRecent",
+      "variables" : ["FAPAR"]
+    }
+  }
+}
