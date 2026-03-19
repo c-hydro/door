@@ -20,8 +20,9 @@ class CDSEDownloader(DOORDownloader):
     name = "CDSE_Downloader"
 
     credential_env_vars = {'username' : 'CDSE_LOGIN', 'password' : 'CDSE_PWD'}
-    TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
-    PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
+    TOKEN_URL     = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    PROCESS_URL   = "https://sh.dataspace.copernicus.eu/api/v1/process"
+    CATALOGUE_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search"
 
     # single_temp_folder = False
     separate_vars = True
@@ -440,9 +441,50 @@ function evaluatePixel(sample) {{
                 da.attrs['tile_id'] = tile_specs[i]['tile_id']
                 yield da, {'variable': self.variable, 'tile' : f'{tile_specs[i]['tile_id']}'}
 
-    def get_last_published_ts(self):
+    def get_last_published_ts(self, consolidation=None):
         """
         Placeholder.
         Implement from product publication rules or a metadata endpoint if you have one.
         """
-        raise NotImplementedError("get_last_published_ts() is not implemented yet.")
+        token = self._get_access_token()
+        if consolidation is None:
+            consolidation = self.consolidation
+        collection_id = self.collections[consolidation]
+
+        timestep = ts.TimeStep.from_unit(self.frequency)
+        now = dt.datetime.now()
+        this_ts = timestep.from_date(now)
+
+        bbox = self.bounds.bbox or [-180, -90, 180, 90]
+        while True:
+            payload = {
+                "bbox": bbox,
+                "datetime": f"{this_ts.start:%Y-%m-%d}T00:00:00Z/{this_ts.end:%Y-%m-%d}T23:59:59Z",
+                "collections": [f"byoc-{collection_id}"],
+                "limit": 1
+            }
+
+            resp = self.session.post(
+                self.CATALOGUE_URL,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=60,
+            )
+            resp.raise_for_status()
+            results = resp.json().get("features", [])
+            if not results:
+                this_ts -= 1
+            else:
+                latest_datetime = results[0]["properties"]["datetime"]
+                return timestep.from_date(latest_datetime[:10])
+
+    def get_last_published_date(self):
+        """
+        Placeholder.
+        Implement from product publication rules or a metadata endpoint if you have one.
+        """
+        last_ts = self.get_last_published_ts()
+        return last_ts.end
