@@ -40,3 +40,6 @@ deprecated/*
 workflow_examples/old/*
 workflow_examples/option_files/to_check/*
 output/*
+
+# remove old tests
+_old_tests/*

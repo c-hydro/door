@@ -42,21 +42,32 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
 
     ## CLASS METHODS FOR FACTORY
     @classmethod
-    def from_options(cls, source: dict|str, *args, **kwargs) -> 'Dataset':
+    def from_options(cls, source: dict|str|None, *args, **kwargs) -> 'DOORDownloader':
         if isinstance(source, dict):
-            init_options = source
+            init_options = source.copy()
             init_options.update(kwargs)
             source = init_options.pop('source', None)
+        elif isinstance(source, str) or source is None:
+            init_options = kwargs.copy()
         else:
-            init_options = kwargs
+            raise TypeError("'source' must be a mapping, a string, or None")
+
         source = cls.get_source(source)
-        Subclass: 'Dataset' = cls.get_subclass(source)
+        if source is None:
+            raise ValueError("No data source specified in downloader options")
+
+        Subclass: 'DOORDownloader' = cls.get_subclass(source)
 
         bdo = {}
         bdo['bounds'] = init_options.pop('bounds', None)
         bdo['destination'] = init_options.pop('destination', None)
-        bdo['options'] = init_options.pop('options', {})
+        bdo['options'] = init_options.pop('options', None)
         
+        if bdo['options'] is None:
+            bdo['options'] = {}
+        if not isinstance(bdo['options'], dict):
+            raise TypeError("'options' must be a mapping")
+
         downloader = Subclass(*args, **init_options)
         downloader.set_bounds(bdo['bounds'])
         downloader.set_destination(bdo['destination'])
@@ -279,7 +290,7 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
             variables = [variables]
         for var in variables:
             if var in available_variables:
-                self.variables[var] = available_variables[var]
+                self.variables[var] = available_variables[var] if isinstance(available_variables, dict) else var
 
     def get_last_ts(self, **kwargs) -> tuple[ts.TimeStep]:
         """

@@ -25,6 +25,7 @@ def parse_arguments():
     return args
 
 def main():
+
     args = parse_arguments()
 
     # load the options from the json file
