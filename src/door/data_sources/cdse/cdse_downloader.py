@@ -1,14 +1,11 @@
 # input standard python (xarray, np ecc)
 import xarray as xr
-from typing import Iterable
-import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+import random
 import requests
-import rasterio
 import rioxarray as rxr
-import io
-import logging
-from netrc import netrc, NetrcParseError
-from pathlib import Path
+import datetime as dt
 
 # d3tools e other cima
 from d3tools import timestepping as ts
@@ -303,7 +300,9 @@ function evaluatePixel(sample) {{
         )
 
         if not resp.ok:
-            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:1000]}")
+            message = f"HTTP {resp.status_code}: {resp.text[:1000]}"
+            error = requests.HTTPError(message, response=resp)
+            raise error
 
         content_type = resp.headers.get("Content-Type", "")
         if "image/tiff" not in content_type.lower():
@@ -313,10 +312,69 @@ function evaluatePixel(sample) {{
 
         return resp.content
 
-    def _download_and_save_tiff(self, payload, token, tmp_file):
-        raw_tiff = self._request_tiff(payload, token)
-        with open(tmp_file, "wb") as f:
-            f.write(raw_tiff)
+    def _get_retry_delay(self, attempt: int, response: requests.Response | None = None):
+        if response is not None:
+            retry_after = response.headers.get("Retry-After") or response.headers.get("retry-after")
+            if retry_after is not None:
+                try:
+                    retry_after_value = float(retry_after)
+                    if retry_after_value > 1000:
+                        return retry_after_value / 1000.0
+                    return retry_after_value
+                except ValueError:
+                    pass
+
+        base_delay = float(self.tile_options.get("retry_backoff_base_s", 1.0))
+        jitter = random.uniform(0.0, 0.25 * base_delay)
+        return base_delay * (2 ** max(0, attempt - 1)) + jitter
+
+    def _download_and_save_tiff(self, payload, token, tmp_file, tile_id=None):
+        max_attempts = int(self.tile_options.get("retry_max_attempts", 5))
+        retry_on_status = set(self.tile_options.get("retry_on_status", [429, 500, 502, 503, 504]))
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                raw_tiff = self._request_tiff(payload, token)
+                with open(tmp_file, "wb") as f:
+                    f.write(raw_tiff)
+                return tmp_file
+            except requests.HTTPError as exc:
+                response = exc.response
+                status_code = response.status_code if response is not None else None
+                should_retry = status_code in retry_on_status and attempt < max_attempts
+                if not should_retry:
+                    tile_msg = f" for tile {tile_id}" if tile_id is not None else ""
+                    raise RuntimeError(
+                        f"CDSE download failed{tile_msg} after {attempt} attempt(s): {exc}"
+                    ) from exc
+
+                delay = self._get_retry_delay(attempt, response=response)
+                self.log.warning(
+                    "Retrying CDSE download for tile %s after HTTP %s (attempt %s/%s, %.2fs)",
+                    tile_id,
+                    status_code,
+                    attempt,
+                    max_attempts,
+                    delay,
+                )
+                time.sleep(delay)
+            except (requests.ConnectionError, requests.Timeout) as exc:
+                if attempt >= max_attempts:
+                    tile_msg = f" for tile {tile_id}" if tile_id is not None else ""
+                    raise RuntimeError(
+                        f"CDSE download failed{tile_msg} after {attempt} attempt(s): {exc}"
+                    ) from exc
+
+                delay = self._get_retry_delay(attempt)
+                self.log.warning(
+                    "Retrying CDSE download for tile %s after network error %s (attempt %s/%s, %.2fs)",
+                    tile_id,
+                    type(exc).__name__,
+                    attempt,
+                    max_attempts,
+                    delay,
+                )
+                time.sleep(delay)
 
     def _get_data_ts(self, timestep, space_bounds, tmp_path):
         """
@@ -328,15 +386,41 @@ function evaluatePixel(sample) {{
 
         tile_specs = self._compute_tile_specs(space_bounds.bbox)
 
-        tmp_files = []
+        download_jobs = []
         for spec in tile_specs:
             width = spec["width"]
             height = spec["height"]
             bbox = spec["bbox"]
             payload = self._build_payload(timestep, width, height, bbox, bands)
             tmp_file = f"{tmp_path}/cdse_request_{self.variable}_{spec['tile_id']}.tiff"
-            self._download_and_save_tiff(payload, token, tmp_file)
-            tmp_files.append(tmp_file)
+            download_jobs.append((spec, payload, tmp_file))
+
+        tmp_files_by_tile = {}
+        max_workers = max(1, int(getattr(self, "max_workers", 1)))
+
+        if max_workers == 1 or len(download_jobs) == 1:
+            for spec, payload, tmp_file in download_jobs:
+                self._download_and_save_tiff(payload, token, tmp_file, tile_id=spec["tile_id"])
+                tmp_files_by_tile[spec["tile_id"]] = tmp_file
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_job = {
+                    executor.submit(
+                        self._download_and_save_tiff,
+                        payload,
+                        token,
+                        tmp_file,
+                        spec["tile_id"],
+                    ): (spec, tmp_file)
+                    for spec, payload, tmp_file in download_jobs
+                }
+
+                for future in as_completed(future_to_job):
+                    spec, tmp_file = future_to_job[future]
+                    future.result()
+                    tmp_files_by_tile[spec["tile_id"]] = tmp_file
+
+        tmp_files = [tmp_files_by_tile[spec["tile_id"]] for spec in tile_specs]
 
         if self.make_mosaic:
             # Open multiple files with dask for efficient processing
