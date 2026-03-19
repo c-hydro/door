@@ -26,7 +26,7 @@ class CDSEDownloader(DOORDownloader):
     PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
 
     # single_temp_folder = False
-    # separate_vars = True
+    separate_vars = True
 
     default_options = {
         "product": "fapar",
@@ -47,40 +47,30 @@ class CDSEDownloader(DOORDownloader):
                 6: "f3d558b9-7f12-46ff-aaef-7ea0dab397ed",
             },
             "frequency": "dekad",
+            "data_type" : "UINT8",
+            "resolution": 300,
         }
     }
 
     available_variables = {
         "fapar": {
             "FAPAR": {
-                "dtype": "float32",
-                "expr": "sample.FAPAR / 250.0",
-                "nodata": np.nan,
+                "scale_factor": 1/250,
             },
             "NOBS": {
-                "dtype": "int8",
-                "expr": "sample.NOBS",
-                "nodata": -1,
+                "scale_factor": 1,
             },
             "QFLAG": {
-                "dtype": "int8",
-                "expr": "sample.QFLAG",
-                "nodata": -1,
+                "scale_factor": 1,
             },
             "RMSE": {
-                "dtype": "float32",
-                "expr": "sample.RMSE",
-                "nodata": np.nan,
+                "scale_factor": 1/250,
             },
             "LENGTH_BEFORE": {
-                "dtype": "int8",
-                "expr": "sample.LENGTH_BEFORE",
-                "nodata": -1,
+                "scale_factor": 1,
             },
             "LENGTH_AFTER": {
-                "dtype": "int8",
-                "expr": "sample.LENGTH_AFTER",
-                "nodata": -1,
+                "scale_factor": 1,
             },
         }
     }
@@ -149,69 +139,6 @@ class CDSEDownloader(DOORDownloader):
         return token
 
     @staticmethod
-    def _bounds_to_bbox(bounds):
-
-        """
-        Convert DOOR-compatible bounds to a CDSE bbox list:
-        [minx, miny, maxx, maxy] in EPSG:4326.
-        """
-
-        if bounds is None:
-            raise ValueError("Bounds are None")
-
-        # Case 1: plain sequence already passed directly
-        if isinstance(bounds, (list, tuple)) and len(bounds) == 4:
-            bbox = [float(v) for v in bounds]
-
-        # Case 2: DOOR / d3tools BoundingBox
-        elif hasattr(bounds, "bbox"):
-            bbox = list(bounds.bbox)
-            if len(bbox) != 4:
-                raise ValueError(f"Invalid bounds.bbox length: {bbox}")
-            bbox = [float(v) for v in bbox]
-
-        # Case 3: other common bbox-style objects
-        elif all(hasattr(bounds, name) for name in ("minx", "miny", "maxx", "maxy")):
-            bbox = [
-                float(bounds.minx),
-                float(bounds.miny),
-                float(bounds.maxx),
-                float(bounds.maxy),
-            ]
-
-        elif all(hasattr(bounds, name) for name in ("left", "bottom", "right", "top")):
-            bbox = [
-                float(bounds.left),
-                float(bounds.bottom),
-                float(bounds.right),
-                float(bounds.top),
-            ]
-
-        # Case 4: iterable custom object
-        else:
-            try:
-                bbox = [float(v) for v in list(bounds)]
-                if len(bbox) != 4:
-                    raise ValueError
-            except Exception:
-                raise ValueError(
-                    f"Unsupported bounds format: type={type(bounds)}, repr={bounds!r}"
-                )
-
-        minx, miny, maxx, maxy = bbox
-        if minx >= maxx or miny >= maxy:
-            raise ValueError(f"Invalid bbox coordinates: {bbox}")
-
-        # CDSE payload below assumes geographic lon/lat coordinates
-        crs = getattr(bounds, "epsg_code", None) or str(getattr(bounds, "crs", ""))
-        if crs and "4326" not in str(crs):
-            raise ValueError(
-                f"Bounds CRS must be EPSG:4326 for CDSE payload, got {crs}"
-            )
-
-        return bbox
-
-    @staticmethod
     def _estimate_output_size(bbox, resolution):
         minx, miny, maxx, maxy = bbox
         width = max(1, int(round((maxx - minx) * 111320 / resolution)))
@@ -229,7 +156,7 @@ class CDSEDownloader(DOORDownloader):
 
     def _build_evalscript(self, bands):
         input_list = ", ".join(f'"{band}"' for band in bands)
-        output_exprs = ",\n      ".join(self.variables[band]["expr"] for band in bands)
+        output_exprs = ",\n      ".join(f'sample.{band}' for band in bands)
 
         return f"""
 //VERSION=3
@@ -238,7 +165,7 @@ function setup() {{
     input: [{input_list}],
     output: {{
       bands: {len(bands)},
-      sampleType: "{self.sample_type}"
+      sampleType: "{self.data_type}"
     }}
   }};
 }}
@@ -251,7 +178,7 @@ function evaluatePixel(sample) {{
 """.strip()
 
     def _build_payload(self, timestep, bounds, bands):
-        bbox = self._bounds_to_bbox(bounds)
+        bbox = list(bounds.bbox)
         width, height = self._estimate_output_size(bbox, self.resolution)
         t0, t1 = self._timestep_to_timerange(timestep)
         collection_id = self.collections[self.consolidation]
@@ -352,7 +279,7 @@ function evaluatePixel(sample) {{
             list[(xr.DataArray, tags_dict)]
         """
         token = self._get_access_token()
-        bands = list(self.variables.keys())
+        bands = [self.variable]
 
         payload = self._build_payload(
             timestep=timestep,
