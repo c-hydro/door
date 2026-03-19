@@ -14,14 +14,12 @@
   "DOOR_DOWNLOADER": {
     "source": "{source}",
     "product": "{product}",
-    "bounds": [8.0, 38.5, 10.0, 41.5],
+    "bounds": [8, 33, 20, 45],
     "destination": "{DATASETS.destination}",
     "options": {
-      "consolidation": 6,
-      "resolution": 300,
-      "variables": ["FAPAR", "NOBS", "QFLAG"],
+      "consolidation": [0,6],
       "mosaicking_order": "mostRecent",
-      "sample_type": "FLOAT32"
+      "variables" : ["FAPAR"]
     }
   }
 }
