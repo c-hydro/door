@@ -233,7 +233,7 @@ function evaluatePixel(sample) {{
 }}
 """.strip()
 
-    def _build_payload(self, timestep, width, height, bbox, bands, consolidation):
+    def _build_payload(self, timestep, bbox, bands, consolidation):
 
         collection_id = self.collections[consolidation]
 
@@ -259,8 +259,8 @@ function evaluatePixel(sample) {{
                 ],
             },
             "output": {
-                "width": width,
-                "height": height,
+                "resx": self.resolution,
+                "resy": self.resolution,
                 "responses": [
                     {
                         "identifier": "default",
@@ -384,10 +384,8 @@ function evaluatePixel(sample) {{
 
         download_jobs = []
         for spec in tile_specs:
-            width = spec["width"]
-            height = spec["height"]
             bbox = spec["bbox"]
-            payload = self._build_payload(timestep, width, height, bbox, bands, consolidation)
+            payload = self._build_payload(timestep, bbox, bands, consolidation)
             tmp_file = f"{tmp_path}/cdse_request_{self.variable}_{spec['tile_id']}.tiff"
             download_jobs.append((spec, payload, tmp_file))
 
