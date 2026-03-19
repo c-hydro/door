@@ -125,7 +125,7 @@ class EOBSDownloader(URLDownloader):
             month_tmp_file     = os.path.join(tmp_path, relevant_month_nc)
 
             if os.path.exists(month_tmp_file):
-                raw_data = xr.open_dataset(month_tmp_file, engine = 'netcdf4')
+                raw_data = xr.open_dataset(month_tmp_file, engine = 'h5netcdf')
                 break
 
             # if the month file is not downloaded, check if the longterm file is
@@ -140,14 +140,14 @@ class EOBSDownloader(URLDownloader):
                 longterm_tmp_file     = os.path.join(tmp_path, relevant_longterm_nc)
 
                 if os.path.exists(longterm_tmp_file):
-                    raw_data = xr.open_dataset(longterm_tmp_file, engine = 'netcdf4')
+                    raw_data = xr.open_dataset(longterm_tmp_file, engine = 'h5netcdf')
                     break
             
             # if neither the month nor the longterm file is downloaded, try downloading the month file
             self.url_blank = relevant_month_url
             success = self.download(month_tmp_file, min_size = 2000, missing_action = 'ignore')
             if success:
-                raw_data = xr.open_dataset(month_tmp_file, engine = 'netcdf4')
+                raw_data = xr.open_dataset(month_tmp_file, engine = 'h5netcdf')
                 break
 
             # if the month file is not available, try downloading the longterm file
@@ -155,7 +155,7 @@ class EOBSDownloader(URLDownloader):
                 self.url_blank = relevant_longterm_url
                 success = self.download(longterm_tmp_file, min_size = 2000, missing_action = 'warning')
                 if success:
-                    raw_data = xr.open_dataset(longterm_tmp_file, engine = 'netcdf4')
+                    raw_data = xr.open_dataset(longterm_tmp_file, engine = 'h5netcdf')
                     break
 
             # if neither the month nor the longterm file is available, raise an error

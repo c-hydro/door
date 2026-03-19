@@ -158,7 +158,7 @@ class JRADownloader(URLDownloader):
             
             # open the monthly file
             url = self.format_url(**tags)
-            raw_data = xr.open_dataset(url, engine = 'netcdf4')
+            raw_data = xr.open_dataset(url, engine = 'pydap')
             self.cached_data = {this_month: raw_data}
         
         # select the variable
