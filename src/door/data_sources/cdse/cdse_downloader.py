@@ -405,7 +405,7 @@ function evaluatePixel(sample) {{
                     tmp_files_by_tile[spec["tile_id"]] = tmp_file
                 else:
                     da = rxr.open_rasterio(tmp_file)
-                    if self.skip_empty_tiles and da.count() == 0:
+                    if self.skip_empty_tiles and da.all(da.data == self.variables[self.variable]['fill_value']):
                         self.log.info(f"Skipping empty tile {spec['tile_id']}")
                         continue
                     da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
@@ -430,7 +430,7 @@ function evaluatePixel(sample) {{
                         tmp_files_by_tile[spec["tile_id"]] = tmp_file
                     else:
                         da = rxr.open_rasterio(tmp_file)
-                        if self.skip_empty_tiles and da.count() == 0:
+                        if self.skip_empty_tiles and da.all(da.data == self.variables[self.variable]['fill_value']):
                             self.log.info(f"Skipping empty tile {spec['tile_id']}")
                             continue
                         da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
