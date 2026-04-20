@@ -421,20 +421,21 @@ function evaluatePixel(sample) {{
             das = [rxr.open_rasterio(f, chunks={'x': 'auto', 'y': 'auto'}) for f in tmp_files]
             # Merge tiles spatially into a single DataArray
             da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
-            da.name = self.variable
-            da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
-            da.attrs['consolidation'] = consolidation
-            da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
+            da = self.set_attributes(da, consolidation=consolidation)
             yield da, {'variable': self.variable}
         else:
             for i, f in enumerate(tmp_files):
                 da = rxr.open_rasterio(f)
-                da.name = self.variable
-                da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
-                da.attrs['consolidation'] = consolidation
-                da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
-                da.attrs['tile_id'] = tile_specs[i]['tile_id']
+                da = self.set_attributes(da, consolidation=consolidation, tile_id=tile_specs[i]['tile_id'])
                 yield da, {'variable': self.variable, 'tile' : f'{tile_specs[i]['tile_id']}'}
+
+    def set_attributes(self, da: xr.DataArray, **kwargs):
+        da.name = self.variable
+        da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
+        da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
+        for key, value in kwargs.items():
+            da.attrs[key] = str(value)
+        return da
 
     def get_last_published_ts(self, consolidation=None):
         """
