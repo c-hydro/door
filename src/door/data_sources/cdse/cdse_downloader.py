@@ -35,6 +35,7 @@ class CDSEDownloader(DOORDownloader):
         "mosaicking_order": "mostRecent",
         "max_workers": 4,
         "make_mosaic": True,
+        "skip_empty_tiles": False,
     }
 
     tile_options = {
@@ -404,6 +405,9 @@ function evaluatePixel(sample) {{
                     tmp_files_by_tile[spec["tile_id"]] = tmp_file
                 else:
                     da = rxr.open_rasterio(tmp_file)
+                    if self.skip_empty_tiles and da.count() == 0:
+                        self.log.info(f"Skipping empty tile {spec['tile_id']}")
+                        continue
                     da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
                     yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
         else:
@@ -426,6 +430,9 @@ function evaluatePixel(sample) {{
                         tmp_files_by_tile[spec["tile_id"]] = tmp_file
                     else:
                         da = rxr.open_rasterio(tmp_file)
+                        if self.skip_empty_tiles and da.count() == 0:
+                            self.log.info(f"Skipping empty tile {spec['tile_id']}")
+                            continue
                         da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
                         yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
 
