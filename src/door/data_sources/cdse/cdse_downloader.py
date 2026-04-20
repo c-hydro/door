@@ -17,7 +17,7 @@ from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
 
 class CDSEDownloader(DOORDownloader):
-    source = "cdse"
+    source = "CDSE"
     name = "CDSE_Downloader"
 
     credential_env_vars = {'username' : 'CDSE_LOGIN', 'password' : 'CDSE_PWD'}
