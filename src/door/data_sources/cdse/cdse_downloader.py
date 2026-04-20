@@ -325,7 +325,12 @@ function evaluatePixel(sample) {{
             except requests.HTTPError as exc:
                 response = exc.response
                 status_code = response.status_code if response is not None else None
-                should_retry = status_code in retry_on_status and attempt < max_attempts
+                if status_code == 401: # Unauthorized - token might have expired, try refreshing it
+                    self.log.info("Access token may have expired, refreshing token and retrying...")
+                    token = self._get_access_token()
+                    should_retry = True
+                else:
+                    should_retry = status_code in retry_on_status and attempt < max_attempts
                 if not should_retry:
                     tile_msg = f" for tile {tile_id}" if tile_id is not None else ""
                     raise RuntimeError(
