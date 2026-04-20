@@ -395,7 +395,12 @@ function evaluatePixel(sample) {{
         if max_workers == 1 or len(download_jobs) == 1:
             for spec, payload, tmp_file in download_jobs:
                 self._download_and_save_tiff(payload, token, tmp_file, tile_id=spec["tile_id"])
-                tmp_files_by_tile[spec["tile_id"]] = tmp_file
+                if self.make_mosaic:
+                    tmp_files_by_tile[spec["tile_id"]] = tmp_file
+                else:
+                    da = rxr.open_rasterio(tmp_file)
+                    da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
+                    yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
         else:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_job = {
@@ -412,22 +417,21 @@ function evaluatePixel(sample) {{
                 for future in as_completed(future_to_job):
                     spec, tmp_file = future_to_job[future]
                     future.result()
-                    tmp_files_by_tile[spec["tile_id"]] = tmp_file
-
-        tmp_files = [tmp_files_by_tile[spec["tile_id"]] for spec in tile_specs]
+                    if self.make_mosaic:
+                        tmp_files_by_tile[spec["tile_id"]] = tmp_file
+                    else:
+                        da = rxr.open_rasterio(tmp_file)
+                        da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
+                        yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
 
         if self.make_mosaic:
+            tmp_files = [tmp_files_by_tile[spec["tile_id"]] for spec in tile_specs]
             # Open multiple files with dask for efficient processing
             das = [rxr.open_rasterio(f, chunks={'x': 'auto', 'y': 'auto'}) for f in tmp_files]
             # Merge tiles spatially into a single DataArray
             da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
             da = self.set_attributes(da, consolidation=consolidation)
             yield da, {'variable': self.variable}
-        else:
-            for i, f in enumerate(tmp_files):
-                da = rxr.open_rasterio(f)
-                da = self.set_attributes(da, consolidation=consolidation, tile_id=tile_specs[i]['tile_id'])
-                yield da, {'variable': self.variable, 'tile' : f'{tile_specs[i]['tile_id']}'}
 
     def set_attributes(self, da: xr.DataArray, **kwargs):
         da.name = self.variable
