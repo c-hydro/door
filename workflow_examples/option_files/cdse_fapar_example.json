@@ -27,8 +27,7 @@
       "variables" : ["FAPAR"],
       "make_mosaic" : false,
       "skip_empty_tiles": true,
-      "mask":"{DATASETS.mask}",
-      "max_workers" : 1
+      "mask":"{DATASETS.mask}"
     }
   }
 }

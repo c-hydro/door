@@ -77,6 +77,8 @@ class CDSEDownloader(DOORDownloader):
         super().__init__()
         self.set_product(product)
         self.session = self._make_session()
+        
+        self.token = self._get_access_token()
 
     def check_options(self, options):
         options = super().check_options(options)
@@ -123,22 +125,32 @@ class CDSEDownloader(DOORDownloader):
         This token is used for subsequent API calls.
         """
 
-        username, password = self._get_credentials().split(":", 1)
+        if not hasattr(self, "refresh_token") or self.refresh_token is None:
+            username, password = self._get_credentials().split(":", 1)
+            auth_data = {
+                "client_id": "cdse-public",
+                "grant_type": "password",
+                "username": username,
+                "password": password,
+            }
+        else:
+            auth_data = {
+                "client_id": "cdse-public",
+                "grant_type": "refresh_token",
+                "refresh_token": self.refresh_token,
+            }
 
-        auth_data = {
-            "client_id": "cdse-public",
-            "grant_type": "password",
-            "username": username,
-            "password": password,
-        }
         resp = requests.post(self.TOKEN_URL, data=auth_data, verify=True, allow_redirects=False)
         resp.raise_for_status()
 
         payload = resp.json()
-        token = payload.get("access_token")
-        if not token:
+        access_token = payload.get("access_token")
+        
+        if not access_token:
             raise RuntimeError(f"No access_token in response: {payload}")
-        return token
+        
+        self.refresh_token = payload.get("refresh_token")
+        return access_token
 
     @staticmethod
     def _estimate_output_size(bbox, resolution):
@@ -210,7 +222,7 @@ class CDSEDownloader(DOORDownloader):
         nx = len(x_edges_px) - 1
         ny = len(y_edges_px) - 1
 
-        for row in range(ny):
+        for row in range(17,ny):
             for col in range(nx):
 
                 #print(f"{row=}/{ny}, {col=}/{nx}", end="\r")
@@ -308,11 +320,11 @@ function evaluatePixel(sample) {{
             "evalscript": self._build_evalscript(bands),
         }
 
-    def _request_tiff(self, payload, token):
+    def _request_tiff(self, payload):
         resp = self.session.post(
             self.PROCESS_URL,
             headers={
-                "Authorization": f"Bearer {token}",
+                "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/json",
                 "Accept": "image/tiff",
             },
@@ -349,13 +361,13 @@ function evaluatePixel(sample) {{
         jitter = random.uniform(0.0, 0.25 * base_delay)
         return base_delay * (2 ** max(0, attempt - 1)) + jitter
 
-    def _download_and_save_tiff(self, payload, token, tmp_file, tile_id=None):
+    def _download_and_save_tiff(self, payload, tmp_file, tile_id=None):
         max_attempts = int(self.tile_options.get("retry_max_attempts", 5))
         retry_on_status = set(self.tile_options.get("retry_on_status", [429, 500, 502, 503, 504]))
 
         for attempt in range(1, max_attempts + 1):
             try:
-                raw_tiff = self._request_tiff(payload, token)
+                raw_tiff = self._request_tiff(payload)
                 with open(tmp_file, "wb") as f:
                     f.write(raw_tiff)
                 return tmp_file
@@ -364,7 +376,7 @@ function evaluatePixel(sample) {{
                 status_code = response.status_code if response is not None else None
                 if status_code == 401: # Unauthorized - token might have expired, try refreshing it
                     self.log.info("Access token may have expired, refreshing token and retrying...")
-                    token = self._get_access_token()
+                    self.token = self._get_access_token()
                     should_retry = True
                 else:
                     should_retry = status_code in retry_on_status
@@ -406,7 +418,7 @@ function evaluatePixel(sample) {{
         Returns:
             list[(xr.DataArray, tags_dict)]
         """
-        token = self._get_access_token()
+
         bands = [self.variable]
 
         # correct the bounds to be within the available bounds for the product
@@ -444,7 +456,7 @@ function evaluatePixel(sample) {{
 
         if max_workers == 1 or len(download_jobs) == 1:
             for spec, payload, tmp_file in download_jobs:
-                self._download_and_save_tiff(payload, token, tmp_file, tile_id=spec["tile_id"])
+                self._download_and_save_tiff(payload, tmp_file, tile_id=spec["tile_id"])
                 if self.make_mosaic:
                     tmp_files_by_tile[spec["tile_id"]] = tmp_file
                 else:
@@ -457,7 +469,6 @@ function evaluatePixel(sample) {{
                     executor.submit(
                         self._download_and_save_tiff,
                         payload,
-                        token,
                         tmp_file,
                         spec["tile_id"],
                     ): (spec, tmp_file)
@@ -496,7 +507,6 @@ function evaluatePixel(sample) {{
         Placeholder.
         Implement from product publication rules or a metadata endpoint if you have one.
         """
-        token = self._get_access_token()
         if consolidation is None:
             consolidation = self.consolidation
         if isinstance(consolidation, Sequence):
@@ -523,7 +533,7 @@ function evaluatePixel(sample) {{
             resp = self.session.post(
                 self.CATALOGUE_URL,
                 headers={
-                    "Authorization": f"Bearer {token}",
+                    "Authorization": f"Bearer {self.token}",
                     "Content-Type": "application/json",
                 },
                 json=payload,
