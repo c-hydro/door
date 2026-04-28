@@ -308,6 +308,8 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
             variables = ['__var__']
 
         tiles = self.destination.tile_names
+        if tiles is None:
+            tiles = ['__tile__']
 
         for i, variable in enumerate(variables):
             if variable == '__var__':
