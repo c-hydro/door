@@ -11,6 +11,7 @@ import datetime as dt
 # d3tools e other cima
 from d3tools import timestepping as ts
 from d3tools import spatial as sp
+from d3tools.data import Dataset
 
 # internal imports
 from ...base_downloaders import DOORDownloader
@@ -36,12 +37,11 @@ class CDSEDownloader(DOORDownloader):
         "max_workers": 4,
         "make_mosaic": True,
         "skip_empty_tiles": False,
+        "mask" : None # Dataset to use as mask to decide what data to download. Should have same CRS and resolution of the product, but can have different bounds. Only tiles intersecting with the mask will be downloaded.
     }
 
     tile_options = {
         "max_tile_pixels": 2500,
-        "tile_overlap_pixels": 0,
-        "retry_max_attempts": 5,
         "retry_backoff_base_s": 1.0,
         "retry_on_status": [429, 500, 502, 503, 504],
     }
@@ -57,6 +57,7 @@ class CDSEDownloader(DOORDownloader):
             "frequency": "dekad",
             "data_type" : "UINT8",
             "resolution": 1/336,
+            "available_bounds": (-180, -60, 180, 80),
         }
     }
     last_available = {}
@@ -89,6 +90,11 @@ class CDSEDownloader(DOORDownloader):
                 f"Invalid consolidation {self.consolidation}. "
                 f"Choose one or more of {list(self.collections.keys())}"
             )
+
+        if options.get("mask") is not None and isinstance(options["mask"], Dataset):
+            mask = options["mask"].get_data()
+            mask = mask.chunk({mask.rio.x_dim: 1024, mask.rio.y_dim: 1024})
+            options["mask"] = mask
 
         return options
 
@@ -146,29 +152,53 @@ class CDSEDownloader(DOORDownloader):
         if tile_size <= 0:
             raise ValueError(f"tile_size must be > 0, got {tile_size}")
 
+        tile_size = min(tile_size, length)
+        rem = 0
+        for n in range(tile_size, 1, -1):
+            if length % n == 0:
+                tile_size = n
+                break
+            if length % n > rem:
+                rem = length % n
+                tile_size = n
+
         edges = list(range(0, length, tile_size))
         if edges[-1] != length:
             edges.append(length)
         return edges
 
     @staticmethod
-    def _pixel_edges_to_coords(min_value: float, max_value: float, edges_px):
-        span = max_value - min_value
-        if span <= 0:
-            raise ValueError(
-                f"Invalid coordinate span: min={min_value}, max={max_value}"
-            )
+    def _pixel_edges_to_coords(v0: float, v1: float, edges_px):
+        span = v1 - v0
 
         total_px = edges_px[-1]
         if total_px <= 0:
             raise ValueError(f"Invalid pixel span: {total_px}")
 
-        return [min_value + (span * px / total_px) for px in edges_px]
+        return [v0 + (span * px / total_px) for px in edges_px]
+
+    def _get_tile_specs(self, bbox):
+        if hasattr(self, "_tile_specs_cache") and self._tile_specs_cache.get(bbox) is not None:
+            return self._tile_specs_cache[bbox]
+
+        specs = self._compute_tile_specs(bbox)
+
+        if not hasattr(self, "_tile_specs_cache"):
+            self._tile_specs_cache = {}
+        self._tile_specs_cache[bbox] = specs
+
+        return specs
 
     def _compute_tile_specs(self, bbox):
+
+        self.log.info(f"Computing tile specs for bbox {bbox} with resolution {self.resolution}")
+
         max_tile_pixels = self.tile_options["max_tile_pixels"]
         full_width, full_height = self._estimate_output_size(bbox, self.resolution)
         minx, miny, maxx, maxy = bbox
+
+        if self.mask is not None:
+            mask = self.mask.compute()
 
         x_edges_px = self._tile_edges(full_width, max_tile_pixels)
         y_edges_px = self._tile_edges(full_height, max_tile_pixels)
@@ -177,24 +207,31 @@ class CDSEDownloader(DOORDownloader):
         y_edges = self._pixel_edges_to_coords(miny, maxy, y_edges_px)
 
         specs = []
-        tile_id = 0
         nx = len(x_edges_px) - 1
         ny = len(y_edges_px) - 1
 
         for row in range(ny):
             for col in range(nx):
+
+                #print(f"{row=}/{ny}, {col=}/{nx}", end="\r")
                 x0_px, x1_px = x_edges_px[col], x_edges_px[col + 1]
                 y0_px, y1_px = y_edges_px[row], y_edges_px[row + 1]
 
+                if self.mask is not None:
+                    this_mask = mask.sel({self.mask.rio.x_dim: slice(x_edges[col], x_edges[col+1]),
+                                          self.mask.rio.y_dim: slice(y_edges[row+1], y_edges[row])})
+
+                    if not(this_mask.any()):
+                        continue
+
                 width = x1_px - x0_px
                 height = y1_px - y0_px
-
                 if width <= 0 or height <= 0:
                     continue
 
                 specs.append(
                     {
-                        "tile_id": tile_id,
+                        "tile_id": f"r{row+1:02}c{col+1:02}",
                         "row": row,
                         "col": col,
                         "width": width,
@@ -207,7 +244,6 @@ class CDSEDownloader(DOORDownloader):
                         ],
                     }
                 )
-                tile_id += 1
 
         return specs
 
@@ -331,7 +367,7 @@ function evaluatePixel(sample) {{
                     token = self._get_access_token()
                     should_retry = True
                 else:
-                    should_retry = status_code in retry_on_status and attempt < max_attempts
+                    should_retry = status_code in retry_on_status
                 if not should_retry:
                     tile_msg = f" for tile {tile_id}" if tile_id is not None else ""
                     raise RuntimeError(
@@ -340,11 +376,10 @@ function evaluatePixel(sample) {{
 
                 delay = self._get_retry_delay(attempt, response=response)
                 self.log.warning(
-                    "Retrying CDSE download for tile %s after HTTP %s (attempt %s/%s, %.2fs)",
+                    "Retrying CDSE download for tile %s after HTTP %s (attempt %s, %.2fs)",
                     tile_id,
                     status_code,
                     attempt,
-                    max_attempts,
                     delay,
                 )
                 time.sleep(delay)
@@ -374,7 +409,16 @@ function evaluatePixel(sample) {{
         token = self._get_access_token()
         bands = [self.variable]
 
-        tile_specs = self._compute_tile_specs(space_bounds.bbox)
+        # correct the bounds to be within the available bounds for the product
+        minx, miny, maxx, maxy = space_bounds.bbox
+        avail_minx, avail_miny, avail_maxx, avail_maxy = self.available_bounds
+        minx = max(minx, avail_minx)
+        maxx = min(maxx, avail_maxx)
+        miny = max(miny, avail_miny)
+        maxy = min(maxy, avail_maxy)
+        space_bounds = sp.BoundingBox(minx, miny, maxx, maxy)
+
+        tile_specs = self._get_tile_specs(space_bounds.bbox)
 
         # find the highest consolidation that has data available for this timestep
         for c in sorted(self.consolidation, reverse=True):
@@ -405,9 +449,6 @@ function evaluatePixel(sample) {{
                     tmp_files_by_tile[spec["tile_id"]] = tmp_file
                 else:
                     da = rxr.open_rasterio(tmp_file)
-                    if self.skip_empty_tiles and da.all(da.data == self.variables[self.variable]['fill_value']):
-                        self.log.info(f"Skipping empty tile {spec['tile_id']}")
-                        continue
                     da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
                     yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
         else:
@@ -430,9 +471,6 @@ function evaluatePixel(sample) {{
                         tmp_files_by_tile[spec["tile_id"]] = tmp_file
                     else:
                         da = rxr.open_rasterio(tmp_file)
-                        if self.skip_empty_tiles and da.all(da.data == self.variables[self.variable]['fill_value']):
-                            self.log.info(f"Skipping empty tile {spec['tile_id']}")
-                            continue
                         da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
                         yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
 

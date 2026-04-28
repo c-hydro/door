@@ -1,6 +1,6 @@
 {
   "TAGS": {
-    "source": "cdse",
+    "source": "CDSE",
     "product": "fapar",
     "prod_name": "CDSE-fapar"
   },
@@ -8,18 +8,27 @@
     "destination": {
       "type": "local",
       "path": "output/{source}/{product}/%Y/{variable}",
-      "filename": "{prod_name}_{variable}_%Y%m%d.tif"
+      "filename": "{prod_name}_{variable}_%Y%m%d_{tile}.tif"
+    },
+    "mask":{
+      "type": "local",
+      "path": "/home/luca/Desktop",
+      "filename": "global_fapar-s3_mask.tif"
     }
   },
   "DOOR_DOWNLOADER": {
     "source": "{source}",
     "product": "{product}",
-    "bounds": [8, 33, 20, 45],
+    "bounds": [-180,-90,180,90],
     "destination": "{DATASETS.destination}",
     "options": {
       "consolidation": [0,6],
       "mosaicking_order": "mostRecent",
-      "variables" : ["FAPAR"]
+      "variables" : ["FAPAR"],
+      "make_mosaic" : false,
+      "skip_empty_tiles": true,
+      "mask":"{DATASETS.mask}",
+      "max_workers" : 1
     }
   }
 }
