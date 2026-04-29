@@ -36,7 +36,6 @@ class CDSEDownloader(DOORDownloader):
         "mosaicking_order": "mostRecent",
         "max_workers": 4,
         "make_mosaic": True,
-        "skip_empty_tiles": False,
         "mask" : None # Dataset to use as mask to decide what data to download. Should have same CRS and resolution of the product, but can have different bounds. Only tiles intersecting with the mask will be downloaded.
     }
 
@@ -222,7 +221,7 @@ class CDSEDownloader(DOORDownloader):
         nx = len(x_edges_px) - 1
         ny = len(y_edges_px) - 1
 
-        for row in range(17,ny):
+        for row in range(ny):
             for col in range(nx):
 
                 #print(f"{row=}/{ny}, {col=}/{nx}", end="\r")
@@ -491,6 +490,7 @@ function evaluatePixel(sample) {{
             das = [rxr.open_rasterio(f, chunks={'x': 'auto', 'y': 'auto'}) for f in tmp_files]
             # Merge tiles spatially into a single DataArray
             da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
+            for d in das: d.close()  # close the individual datasets to free resources
             da = self.set_attributes(da, consolidation=consolidation)
             yield da, {'variable': self.variable}
 
