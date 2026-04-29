@@ -27,7 +27,7 @@ class CDSEDownloader(DOORDownloader):
     CATALOGUE_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search"
 
     # single_temp_folder = False
-    separate_vars = True
+    separate_vars = False
 
     default_options = {
         "product": "fapar",
@@ -418,7 +418,7 @@ function evaluatePixel(sample) {{
             list[(xr.DataArray, tags_dict)]
         """
 
-        bands = [self.variable]
+        bands = list(self.variables.keys())
 
         # correct the bounds to be within the available bounds for the product
         minx, miny, maxx, maxy = space_bounds.bbox
@@ -447,7 +447,7 @@ function evaluatePixel(sample) {{
         for spec in tile_specs:
             bbox = spec["bbox"]
             payload = self._build_payload(timestep, bbox, bands, consolidation)
-            tmp_file = f"{tmp_path}/cdse_request_{self.variable}_{spec['tile_id']}.tiff"
+            tmp_file = f"{tmp_path}/cdse_request_{spec['tile_id']}.tiff"
             download_jobs.append((spec, payload, tmp_file))
 
         tmp_files_by_tile = {}
@@ -456,12 +456,14 @@ function evaluatePixel(sample) {{
         if max_workers == 1 or len(download_jobs) == 1:
             for spec, payload, tmp_file in download_jobs:
                 self._download_and_save_tiff(payload, tmp_file, tile_id=spec["tile_id"])
-                if self.make_mosaic:
+                if self.make_mosaic or len(download_jobs) == 1:
                     tmp_files_by_tile[spec["tile_id"]] = tmp_file
                 else:
                     da = rxr.open_rasterio(tmp_file)
-                    da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
-                    yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
+                    for i, var in enumerate(self.variables.keys()):
+                        da_var = da.isel(band=i).drop("band")
+                        da_var = self.set_attributes(da_var, variable = var, consolidation=consolidation, tile_id=spec["tile_id"])
+                        yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
         else:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_job = {
@@ -481,23 +483,30 @@ function evaluatePixel(sample) {{
                         tmp_files_by_tile[spec["tile_id"]] = tmp_file
                     else:
                         da = rxr.open_rasterio(tmp_file)
-                        da = self.set_attributes(da, consolidation=consolidation, tile_id=spec["tile_id"])
-                        yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
+                        for i, var in enumerate(self.variables.keys()):
+                            da_var = da.isel(band=i).drop("band")
+                            da_var = self.set_attributes(da_var, variable = var, consolidation=consolidation, tile_id=spec["tile_id"])
+                            yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
 
-        if self.make_mosaic:
+        if self.make_mosaic or len(download_jobs) == 1:
             tmp_files = [tmp_files_by_tile[spec["tile_id"]] for spec in tile_specs]
             # Open multiple files with dask for efficient processing
             das = [rxr.open_rasterio(f, chunks={'x': 'auto', 'y': 'auto'}) for f in tmp_files]
             # Merge tiles spatially into a single DataArray
-            da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
-            for d in das: d.close()  # close the individual datasets to free resources
-            da = self.set_attributes(da, consolidation=consolidation)
-            yield da, {'variable': self.variable}
+            if len(das) == 1:
+                da = das[0]
+            else:
+                da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
+                for d in das: d.close()  # close the individual datasets to free resources
+            for i, var in enumerate(self.variables.keys()):
+                da_var = da.isel(band=i).drop("band")
+                da_var = self.set_attributes(da_var, variable = var, consolidation=consolidation)
+                yield da_var, {'variable': var}
 
-    def set_attributes(self, da: xr.DataArray, **kwargs):
-        da.name = self.variable
-        da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
-        da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
+    def set_attributes(self, da: xr.DataArray, variable: str, **kwargs):
+        da.name = variable
+        da.attrs['scale_factor'] = self.variables[variable]['scale_factor']
+        da.attrs['_FillValue'] = self.variables[variable]['fill_value']
         for key, value in kwargs.items():
             da.attrs[key] = str(value)
         return da
