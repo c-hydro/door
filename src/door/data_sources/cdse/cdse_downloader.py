@@ -7,6 +7,7 @@ import requests
 from typing import Sequence
 import rioxarray as rxr
 import datetime as dt
+from rasterio.env import Env
 
 # d3tools e other cima
 from d3tools import timestepping as ts
@@ -452,19 +453,24 @@ function evaluatePixel(sample) {{
 
         tmp_files_by_tile = {}
         max_workers = max(1, int(getattr(self, "max_workers", 1)))
-
+        
         if max_workers == 1 or len(download_jobs) == 1:
+            tn=1
             for spec, payload, tmp_file in download_jobs:
+                self.log.info(f"Downloading tile {spec['tile_id']} ({tn}/{len(download_jobs)})")
                 self._download_and_save_tiff(payload, tmp_file, tile_id=spec["tile_id"])
+                tn += 1
                 if self.make_mosaic or len(download_jobs) == 1:
                     tmp_files_by_tile[spec["tile_id"]] = tmp_file
                 else:
-                    da = rxr.open_rasterio(tmp_file)
+                    with Env(CPL_DEBUG=False): da = rxr.open_rasterio(tmp_file)
                     for i, var in enumerate(self.variables.keys()):
                         da_var = da.isel(band=i).drop("band")
                         da_var = self.set_attributes(da_var, variable = var, consolidation=consolidation, tile_id=spec["tile_id"])
                         yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
         else:
+            self.log.info(f"Downloading {len(download_jobs)} tiles with up to {max_workers} parallel workers")
+            tn=1
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_job = {
                     executor.submit(
@@ -475,20 +481,22 @@ function evaluatePixel(sample) {{
                     ): (spec, tmp_file)
                     for spec, payload, tmp_file in download_jobs
                 }
-
                 for future in as_completed(future_to_job):
+                    self.log.info(f"Completed download of tile {tn}/{len(download_jobs)}")
+                    tn += 1
                     spec, tmp_file = future_to_job[future]
                     future.result()
                     if self.make_mosaic:
                         tmp_files_by_tile[spec["tile_id"]] = tmp_file
                     else:
-                        da = rxr.open_rasterio(tmp_file)
+                        with Env(CPL_DEBUG=False): da = rxr.open_rasterio(tmp_file)
                         for i, var in enumerate(self.variables.keys()):
                             da_var = da.isel(band=i).drop("band")
                             da_var = self.set_attributes(da_var, variable = var, consolidation=consolidation, tile_id=spec["tile_id"])
                             yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
 
         if self.make_mosaic or len(download_jobs) == 1:
+            self.log.info(f"Merging {len(tmp_files_by_tile)} tiles into a single DataArray")
             tmp_files = [tmp_files_by_tile[spec["tile_id"]] for spec in tile_specs]
             # Open multiple files with dask for efficient processing
             das = [rxr.open_rasterio(f, chunks={'x': 'auto', 'y': 'auto'}) for f in tmp_files]
