@@ -7,27 +7,21 @@
   "DATASETS": {
     "destination": {
       "type": "local",
-      "path": "output/{source}/{product}/%Y/{variable}",
-      "filename": "{prod_name}_{variable}_%Y%m%d_{tile}.tif"
-    },
-    "mask":{
-      "type": "local",
-      "path": "/home/luca/Desktop",
-      "filename": "global_fapar-s3_mask.tif"
+      "path": "output/{source}_Europe/{product}/%Y/%m/%d/{variable}",
+      "filename": "{prod_name}_{variable}_%Y%m%d.tif"
     }
   },
   "DOOR_DOWNLOADER": {
     "source": "{source}",
     "product": "{product}",
-    "bounds": [-180,-90,180,90],
+    "bounds": [-26 ,34, 41, 71],
     "destination": "{DATASETS.destination}",
     "options": {
       "consolidation": [0,6],
       "mosaicking_order": "mostRecent",
-      "variables" : ["FAPAR"],
+      "variables" : ["FAPAR", "QFLAG"],
       "make_mosaic" : false,
-      "skip_empty_tiles": true,
-      "mask":"{DATASETS.mask}"
+      "max_workers": 1
     }
   }
 }
