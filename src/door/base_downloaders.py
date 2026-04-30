@@ -38,7 +38,7 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
     separate_vars = False
 
     def __init__(self) -> None:
-        self.log = logging.getLogger(self.name)
+        self.log = logging.getLogger("door." + self.name)
 
     ## CLASS METHODS FOR FACTORY
     @classmethod
@@ -136,6 +136,8 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
 
         timesteps = self._get_timesteps(time_range)
 
+        self.log.info(f"Getting data from {time_range.start:%Y-%m-%d} to {time_range.end:%Y-%m-%d} ({len(timesteps)}{timesteps[0].unit}) and space bounds {self.bounds.bbox}")
+
         # sometimes it is convenient to download each variable separately, others it is better to download all the data at once
         if self.separate_vars:
             for variable in self.variables:
@@ -201,6 +203,12 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
             if 'timestep' in tags:
                 timestep = tags.pop('timestep')
             self.destination.write_data(data, timestep, **tags)
+
+            tags_str = ', '.join(f'{k}={v}' for k, v in tags.items())
+            msg0 = f"Data for {timestep}"
+            msg2 = f" saved to {self.destination.get_key(timestep, **tags)}"
+            msg1 = f" [{tags_str}]" if tags_str else ""
+            self.log.info(msg0 + msg1 + msg2)
 
     @abstractmethod
     def _get_data_ts(self, time_range: ts.TimeStep, space_bounds: sp.BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:
