@@ -12,3 +12,4 @@ from .eobs import *
 from .jra import *
 from .lsa_saf import *
 from .cdse import *
+from .edogdo import *
