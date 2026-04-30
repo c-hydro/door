@@ -404,6 +404,7 @@ class URLDownloader(DOORDownloader):
             kwargs["auth"] = None
 
         url = self.format_url(**kwargs)
+        self.log.info(f"Downloading file from {url}")
         try:
             r = requests.get(url, auth = kwargs["auth"])
             if r.status_code != 200:
