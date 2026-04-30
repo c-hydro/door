@@ -159,11 +159,34 @@ class EDOGDODownloader(URLDownloader):
         # crop the data
         cropped = crop_to_bb(data, space_bounds)
 
+        # correct the nan values
         nanvalue = cropped.attrs.get('_FillValue', np.nan)
         cropped = cropped.where(~np.isclose(cropped, nanvalue, equal_nan = True), np.nan)
-        cropped.attrs['_FillValue'] = np.nan
+        
+        # set the attributes
+        output = xr.DataArray(
+            data = cropped.values.squeeze(),
+            dims = ['y', 'x'],
+            coords = {
+                'y': cropped.y,
+                'x': cropped.x
+            },
+            attrs = {
+                'product': self.product,
+                'type': self.type,
+                'observatory': self.observatory,
+                'timestep_start': timestep.start,
+                'timestep_end': timestep.end,
+                '_FillValue': np.nan,
+            }
+        )
+
+        # set the spatial reference
+        output = output.rio.write_crs(cropped.rio.crs)
+        output = output.rio.set_spatial_dims(x_dim='x', y_dim='y')
 
         # remove the file after processing (to clear the tmp_path)
+        data.close()
         os.remove(os.path.join(tmp_path, filename))
 
-        yield cropped, {}
+        yield output, {}
