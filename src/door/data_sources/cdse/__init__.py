@@ -1,1 +1,2 @@
 from .cdse_downloader import CDSEDownloader
+from .cdses3_downloader import CDSES3Downloader

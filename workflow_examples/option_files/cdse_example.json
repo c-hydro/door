@@ -1,25 +1,27 @@
 {
   "TAGS": {
-    "source": "cdse",
+    "source": "CDSE",
     "product": "fapar",
     "prod_name": "CDSE-fapar"
   },
   "DATASETS": {
     "destination": {
       "type": "local",
-      "path": "output/{source}/{product}/%Y/{variable}",
+      "path": "output/{source}_Europe/{product}/%Y/%m/%d/{variable}",
       "filename": "{prod_name}_{variable}_%Y%m%d.tif"
     }
   },
   "DOOR_DOWNLOADER": {
     "source": "{source}",
     "product": "{product}",
-    "bounds": [8, 33, 20, 45],
+    "bounds": [-26 ,34, 41, 71],
     "destination": "{DATASETS.destination}",
     "options": {
       "consolidation": [0,6],
       "mosaicking_order": "mostRecent",
-      "variables" : ["FAPAR"]
+      "variables" : ["FAPAR", "QFLAG"],
+      "make_mosaic" : false,
+      "max_workers": 1
     }
   }
 }

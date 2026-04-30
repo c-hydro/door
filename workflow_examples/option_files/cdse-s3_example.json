@@ -1,0 +1,23 @@
+{
+  "TAGS": {
+    "source": "CDSE-S3",
+    "product": "fapar",
+    "prod_name": "CDSE-fapar"
+  },
+  "DATASETS": {
+    "destination": {
+      "type": "local",
+      "path": "output/{source}_S3/{product}/%Y/%m/%d/{variable}",
+      "filename": "{prod_name}_{variable}_%Y%m%d.tif"
+    }
+  },
+  "DOOR_DOWNLOADER": {
+    "source": "{source}",
+    "product": "{product}",
+    "bounds": [-180,-90,180,90],
+    "destination": "{DATASETS.destination}",
+    "options": {
+      "variables" : ["FAPAR", "QFLAG"]
+    }
+  }
+}

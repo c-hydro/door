@@ -7,17 +7,19 @@ import requests
 from typing import Sequence
 import rioxarray as rxr
 import datetime as dt
+from rasterio.env import Env
 
 # d3tools e other cima
 from d3tools import timestepping as ts
 from d3tools import spatial as sp
+from d3tools.data import Dataset
 
 # internal imports
 from ...base_downloaders import DOORDownloader
 from ...utils.auth import get_credentials
 
 class CDSEDownloader(DOORDownloader):
-    source = "cdse"
+    source = "CDSE"
     name = "CDSE_Downloader"
 
     credential_env_vars = {'username' : 'CDSE_LOGIN', 'password' : 'CDSE_PWD'}
@@ -26,7 +28,7 @@ class CDSEDownloader(DOORDownloader):
     CATALOGUE_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search"
 
     # single_temp_folder = False
-    separate_vars = True
+    separate_vars = False
 
     default_options = {
         "product": "fapar",
@@ -35,12 +37,11 @@ class CDSEDownloader(DOORDownloader):
         "mosaicking_order": "mostRecent",
         "max_workers": 4,
         "make_mosaic": True,
+        "mask" : None # Dataset to use as mask to decide what data to download. Should have same CRS and resolution of the product, but can have different bounds. Only tiles intersecting with the mask will be downloaded.
     }
 
     tile_options = {
         "max_tile_pixels": 2500,
-        "tile_overlap_pixels": 0,
-        "retry_max_attempts": 5,
         "retry_backoff_base_s": 1.0,
         "retry_on_status": [429, 500, 502, 503, 504],
     }
@@ -56,6 +57,7 @@ class CDSEDownloader(DOORDownloader):
             "frequency": "dekad",
             "data_type" : "UINT8",
             "resolution": 1/336,
+            "available_bounds": (-180, -60, 180, 80),
         }
     }
     last_available = {}
@@ -75,6 +77,8 @@ class CDSEDownloader(DOORDownloader):
         super().__init__()
         self.set_product(product)
         self.session = self._make_session()
+        
+        self.token = self._get_access_token()
 
     def check_options(self, options):
         options = super().check_options(options)
@@ -88,6 +92,11 @@ class CDSEDownloader(DOORDownloader):
                 f"Invalid consolidation {self.consolidation}. "
                 f"Choose one or more of {list(self.collections.keys())}"
             )
+
+        if options.get("mask") is not None and isinstance(options["mask"], Dataset):
+            mask = options["mask"].get_data()
+            mask = mask.chunk({mask.rio.x_dim: 1024, mask.rio.y_dim: 1024})
+            options["mask"] = mask
 
         return options
 
@@ -116,22 +125,32 @@ class CDSEDownloader(DOORDownloader):
         This token is used for subsequent API calls.
         """
 
-        username, password = self._get_credentials().split(":", 1)
+        if not hasattr(self, "refresh_token") or self.refresh_token is None:
+            username, password = self._get_credentials().split(":", 1)
+            auth_data = {
+                "client_id": "cdse-public",
+                "grant_type": "password",
+                "username": username,
+                "password": password,
+            }
+        else:
+            auth_data = {
+                "client_id": "cdse-public",
+                "grant_type": "refresh_token",
+                "refresh_token": self.refresh_token,
+            }
 
-        auth_data = {
-            "client_id": "cdse-public",
-            "grant_type": "password",
-            "username": username,
-            "password": password,
-        }
         resp = requests.post(self.TOKEN_URL, data=auth_data, verify=True, allow_redirects=False)
         resp.raise_for_status()
 
         payload = resp.json()
-        token = payload.get("access_token")
-        if not token:
+        access_token = payload.get("access_token")
+        
+        if not access_token:
             raise RuntimeError(f"No access_token in response: {payload}")
-        return token
+        
+        self.refresh_token = payload.get("refresh_token")
+        return access_token
 
     @staticmethod
     def _estimate_output_size(bbox, resolution):
@@ -145,29 +164,53 @@ class CDSEDownloader(DOORDownloader):
         if tile_size <= 0:
             raise ValueError(f"tile_size must be > 0, got {tile_size}")
 
+        tile_size = min(tile_size, length)
+        rem = 0
+        for n in range(tile_size, 1, -1):
+            if length % n == 0:
+                tile_size = n
+                break
+            if length % n > rem:
+                rem = length % n
+                tile_size = n
+
         edges = list(range(0, length, tile_size))
         if edges[-1] != length:
             edges.append(length)
         return edges
 
     @staticmethod
-    def _pixel_edges_to_coords(min_value: float, max_value: float, edges_px):
-        span = max_value - min_value
-        if span <= 0:
-            raise ValueError(
-                f"Invalid coordinate span: min={min_value}, max={max_value}"
-            )
+    def _pixel_edges_to_coords(v0: float, v1: float, edges_px):
+        span = v1 - v0
 
         total_px = edges_px[-1]
         if total_px <= 0:
             raise ValueError(f"Invalid pixel span: {total_px}")
 
-        return [min_value + (span * px / total_px) for px in edges_px]
+        return [v0 + (span * px / total_px) for px in edges_px]
+
+    def _get_tile_specs(self, bbox):
+        if hasattr(self, "_tile_specs_cache") and self._tile_specs_cache.get(bbox) is not None:
+            return self._tile_specs_cache[bbox]
+
+        specs = self._compute_tile_specs(bbox)
+
+        if not hasattr(self, "_tile_specs_cache"):
+            self._tile_specs_cache = {}
+        self._tile_specs_cache[bbox] = specs
+
+        return specs
 
     def _compute_tile_specs(self, bbox):
+
+        self.log.info(f"Computing tile specs for bbox {bbox} with resolution {self.resolution}")
+
         max_tile_pixels = self.tile_options["max_tile_pixels"]
         full_width, full_height = self._estimate_output_size(bbox, self.resolution)
         minx, miny, maxx, maxy = bbox
+
+        if self.mask is not None:
+            mask = self.mask.compute()
 
         x_edges_px = self._tile_edges(full_width, max_tile_pixels)
         y_edges_px = self._tile_edges(full_height, max_tile_pixels)
@@ -176,24 +219,31 @@ class CDSEDownloader(DOORDownloader):
         y_edges = self._pixel_edges_to_coords(miny, maxy, y_edges_px)
 
         specs = []
-        tile_id = 0
         nx = len(x_edges_px) - 1
         ny = len(y_edges_px) - 1
 
         for row in range(ny):
             for col in range(nx):
+
+                #print(f"{row=}/{ny}, {col=}/{nx}", end="\r")
                 x0_px, x1_px = x_edges_px[col], x_edges_px[col + 1]
                 y0_px, y1_px = y_edges_px[row], y_edges_px[row + 1]
 
+                if self.mask is not None:
+                    this_mask = mask.sel({self.mask.rio.x_dim: slice(x_edges[col], x_edges[col+1]),
+                                          self.mask.rio.y_dim: slice(y_edges[row+1], y_edges[row])})
+
+                    if not(this_mask.any()):
+                        continue
+
                 width = x1_px - x0_px
                 height = y1_px - y0_px
-
                 if width <= 0 or height <= 0:
                     continue
 
                 specs.append(
                     {
-                        "tile_id": tile_id,
+                        "tile_id": f"r{row+1:02}c{col+1:02}",
                         "row": row,
                         "col": col,
                         "width": width,
@@ -206,7 +256,6 @@ class CDSEDownloader(DOORDownloader):
                         ],
                     }
                 )
-                tile_id += 1
 
         return specs
 
@@ -271,11 +320,11 @@ function evaluatePixel(sample) {{
             "evalscript": self._build_evalscript(bands),
         }
 
-    def _request_tiff(self, payload, token):
+    def _request_tiff(self, payload):
         resp = self.session.post(
             self.PROCESS_URL,
             headers={
-                "Authorization": f"Bearer {token}",
+                "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/json",
                 "Accept": "image/tiff",
             },
@@ -312,20 +361,25 @@ function evaluatePixel(sample) {{
         jitter = random.uniform(0.0, 0.25 * base_delay)
         return base_delay * (2 ** max(0, attempt - 1)) + jitter
 
-    def _download_and_save_tiff(self, payload, token, tmp_file, tile_id=None):
+    def _download_and_save_tiff(self, payload, tmp_file, tile_id=None):
         max_attempts = int(self.tile_options.get("retry_max_attempts", 5))
         retry_on_status = set(self.tile_options.get("retry_on_status", [429, 500, 502, 503, 504]))
 
         for attempt in range(1, max_attempts + 1):
             try:
-                raw_tiff = self._request_tiff(payload, token)
+                raw_tiff = self._request_tiff(payload)
                 with open(tmp_file, "wb") as f:
                     f.write(raw_tiff)
                 return tmp_file
             except requests.HTTPError as exc:
                 response = exc.response
                 status_code = response.status_code if response is not None else None
-                should_retry = status_code in retry_on_status and attempt < max_attempts
+                if status_code == 401: # Unauthorized - token might have expired, try refreshing it
+                    self.log.info("Access token may have expired, refreshing token and retrying...")
+                    self.token = self._get_access_token()
+                    should_retry = True
+                else:
+                    should_retry = status_code in retry_on_status
                 if not should_retry:
                     tile_msg = f" for tile {tile_id}" if tile_id is not None else ""
                     raise RuntimeError(
@@ -334,11 +388,10 @@ function evaluatePixel(sample) {{
 
                 delay = self._get_retry_delay(attempt, response=response)
                 self.log.warning(
-                    "Retrying CDSE download for tile %s after HTTP %s (attempt %s/%s, %.2fs)",
+                    "Retrying CDSE download for tile %s after HTTP %s (attempt %s, %.2fs)",
                     tile_id,
                     status_code,
                     attempt,
-                    max_attempts,
                     delay,
                 )
                 time.sleep(delay)
@@ -365,10 +418,19 @@ function evaluatePixel(sample) {{
         Returns:
             list[(xr.DataArray, tags_dict)]
         """
-        token = self._get_access_token()
-        bands = [self.variable]
 
-        tile_specs = self._compute_tile_specs(space_bounds.bbox)
+        bands = list(self.variables.keys())
+
+        # correct the bounds to be within the available bounds for the product
+        minx, miny, maxx, maxy = space_bounds.bbox
+        avail_minx, avail_miny, avail_maxx, avail_maxy = self.available_bounds
+        minx = max(minx, avail_minx)
+        maxx = min(maxx, avail_maxx)
+        miny = max(miny, avail_miny)
+        maxy = min(maxy, avail_maxy)
+        space_bounds = sp.BoundingBox(minx, miny, maxx, maxy)
+
+        tile_specs = self._get_tile_specs(space_bounds.bbox)
 
         # find the highest consolidation that has data available for this timestep
         for c in sorted(self.consolidation, reverse=True):
@@ -386,62 +448,82 @@ function evaluatePixel(sample) {{
         for spec in tile_specs:
             bbox = spec["bbox"]
             payload = self._build_payload(timestep, bbox, bands, consolidation)
-            tmp_file = f"{tmp_path}/cdse_request_{self.variable}_{spec['tile_id']}.tiff"
+            tmp_file = f"{tmp_path}/cdse_request_{spec['tile_id']}.tiff"
             download_jobs.append((spec, payload, tmp_file))
 
         tmp_files_by_tile = {}
         max_workers = max(1, int(getattr(self, "max_workers", 1)))
-
+        
         if max_workers == 1 or len(download_jobs) == 1:
+            tn=1
             for spec, payload, tmp_file in download_jobs:
-                self._download_and_save_tiff(payload, token, tmp_file, tile_id=spec["tile_id"])
-                tmp_files_by_tile[spec["tile_id"]] = tmp_file
+                self.log.info(f"Downloading tile {spec['tile_id']} ({tn}/{len(download_jobs)})")
+                self._download_and_save_tiff(payload, tmp_file, tile_id=spec["tile_id"])
+                tn += 1
+                if self.make_mosaic or len(download_jobs) == 1:
+                    tmp_files_by_tile[spec["tile_id"]] = tmp_file
+                else:
+                    with Env(CPL_DEBUG=False): da = rxr.open_rasterio(tmp_file)
+                    for i, var in enumerate(self.variables.keys()):
+                        da_var = da.isel(band=i).drop("band")
+                        da_var = self.set_attributes(da_var, variable = var, consolidation=consolidation, tile_id=spec["tile_id"])
+                        yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
         else:
+            self.log.info(f"Downloading {len(download_jobs)} tiles with up to {max_workers} parallel workers")
+            tn=1
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_job = {
                     executor.submit(
                         self._download_and_save_tiff,
                         payload,
-                        token,
                         tmp_file,
                         spec["tile_id"],
                     ): (spec, tmp_file)
                     for spec, payload, tmp_file in download_jobs
                 }
-
                 for future in as_completed(future_to_job):
+                    self.log.info(f"Completed download of tile {tn}/{len(download_jobs)}")
+                    tn += 1
                     spec, tmp_file = future_to_job[future]
                     future.result()
-                    tmp_files_by_tile[spec["tile_id"]] = tmp_file
+                    if self.make_mosaic:
+                        tmp_files_by_tile[spec["tile_id"]] = tmp_file
+                    else:
+                        with Env(CPL_DEBUG=False): da = rxr.open_rasterio(tmp_file)
+                        for i, var in enumerate(self.variables.keys()):
+                            da_var = da.isel(band=i).drop("band")
+                            da_var = self.set_attributes(da_var, variable = var, consolidation=consolidation, tile_id=spec["tile_id"])
+                            yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
 
-        tmp_files = [tmp_files_by_tile[spec["tile_id"]] for spec in tile_specs]
-
-        if self.make_mosaic:
+        if self.make_mosaic or len(download_jobs) == 1:
+            self.log.info(f"Merging {len(tmp_files_by_tile)} tiles into a single DataArray")
+            tmp_files = [tmp_files_by_tile[spec["tile_id"]] for spec in tile_specs]
             # Open multiple files with dask for efficient processing
             das = [rxr.open_rasterio(f, chunks={'x': 'auto', 'y': 'auto'}) for f in tmp_files]
             # Merge tiles spatially into a single DataArray
-            da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
-            da.name = self.variable
-            da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
-            da.attrs['consolidation'] = consolidation
-            da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
-            yield da, {'variable': self.variable}
-        else:
-            for i, f in enumerate(tmp_files):
-                da = rxr.open_rasterio(f)
-                da.name = self.variable
-                da.attrs['scale_factor'] = self.variables[self.variable]['scale_factor']
-                da.attrs['consolidation'] = consolidation
-                da.attrs['_FillValue'] = self.variables[self.variable]['fill_value']
-                da.attrs['tile_id'] = tile_specs[i]['tile_id']
-                yield da, {'variable': self.variable, 'tile' : f'{tile_specs[i]['tile_id']}'}
+            if len(das) == 1:
+                da = das[0]
+            else:
+                da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
+                for d in das: d.close()  # close the individual datasets to free resources
+            for i, var in enumerate(self.variables.keys()):
+                da_var = da.isel(band=i).drop("band")
+                da_var = self.set_attributes(da_var, variable = var, consolidation=consolidation)
+                yield da_var, {'variable': var}
+
+    def set_attributes(self, da: xr.DataArray, variable: str, **kwargs):
+        da.name = variable
+        da.attrs['scale_factor'] = self.variables[variable]['scale_factor']
+        da.attrs['_FillValue'] = self.variables[variable]['fill_value']
+        for key, value in kwargs.items():
+            da.attrs[key] = str(value)
+        return da
 
     def get_last_published_ts(self, consolidation=None):
         """
         Placeholder.
         Implement from product publication rules or a metadata endpoint if you have one.
         """
-        token = self._get_access_token()
         if consolidation is None:
             consolidation = self.consolidation
         if isinstance(consolidation, Sequence):
@@ -468,7 +550,7 @@ function evaluatePixel(sample) {{
             resp = self.session.post(
                 self.CATALOGUE_URL,
                 headers={
-                    "Authorization": f"Bearer {token}",
+                    "Authorization": f"Bearer {self.token}",
                     "Content-Type": "application/json",
                 },
                 json=payload,
