@@ -78,6 +78,7 @@ class CDSES3Downloader(DOORDownloader):
         },
 
         "swi": {
+            # 10-daily Soil Water Index at different characteristic time lengths
             "SWI001": {"scale_factor": 1 / 2, "fill_value": 255},
             "SWI005": {"scale_factor": 1 / 2, "fill_value": 255},
             "SWI010": {"scale_factor": 1 / 2, "fill_value": 255},
@@ -87,6 +88,7 @@ class CDSES3Downloader(DOORDownloader):
             "SWI060": {"scale_factor": 1 / 2, "fill_value": 255},
             "SWI100": {"scale_factor": 1 / 2, "fill_value": 255},
 
+            # Quality flags
             "QFLAG001": {"scale_factor": 1 / 2, "fill_value": 255},
             "QFLAG005": {"scale_factor": 1 / 2, "fill_value": 255},
             "QFLAG010": {"scale_factor": 1 / 2, "fill_value": 255},
@@ -96,9 +98,18 @@ class CDSES3Downloader(DOORDownloader):
             "QFLAG060": {"scale_factor": 1 / 2, "fill_value": 255},
             "QFLAG100": {"scale_factor": 1 / 2, "fill_value": 255},
 
-            "SSF": {"scale_factor": 1, "fill_value": 255},
+            # Percentage of valid observations in the 10-day synthesis period
+            "VOBS001": {"scale_factor": 1, "fill_value": 255},
+            "VOBS005": {"scale_factor": 1, "fill_value": 255},
+            "VOBS010": {"scale_factor": 1, "fill_value": 255},
+            "VOBS015": {"scale_factor": 1, "fill_value": 255},
+            "VOBS020": {"scale_factor": 1, "fill_value": 255},
+            "VOBS040": {"scale_factor": 1, "fill_value": 255},
+            "VOBS060": {"scale_factor": 1, "fill_value": 255},
+            "VOBS100": {"scale_factor": 1, "fill_value": 255},
         },
     }
+    
     def __init__(self, product: str, **kwargs) -> None:
         super().__init__()
         self.log.info(f"CDSES3Downloader.__init__ called with product='{product}' (type: {type(product).__name__})")

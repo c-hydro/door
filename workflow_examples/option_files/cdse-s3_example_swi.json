@@ -17,7 +17,7 @@
     "bounds": [-180,-90,180,90],
     "destination": "{DATASETS.destination}",
     "options": {
-      "variables" : ["SWI015"]
+      "variables" : ["SWI015", "QFLAG015", "VOBS015"]
     }
   }
 }
