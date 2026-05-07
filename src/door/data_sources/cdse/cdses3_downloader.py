@@ -34,38 +34,119 @@ class CDSES3Downloader(DOORDownloader):
     # odata_download_url = "https://download.dataspace.copernicus.eu/odata/v1/Products"
 
     default_options = {
-        "product": "fapar",
-        "consolidation": [0,6], # will take the highest available for a timestep
+        # Note: "product" is not included here because it's set via __init__, not set_options
+        "consolidation": [0,6], # will take the highest available for a timestep (FAPAR only)
         "variables": None,      # None means all available variables for the product
     }
 
     available_products = {
-        'fapar' : {
-            'product_name'   : ['fapar_global_300m_10daily_v2'],
-            'file_catalogue' : ['https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/bio-geophysical/vegetation_properties/fapar_global_300m_10daily_v2/fapar_global_300m_10daily_v2_cog.csv'],
+        'fapar': {
+            'product_name': ['fapar_global_300m_10daily_v2'],
+            'file_catalogue': [
+                'https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/'
+                'bio-geophysical/vegetation_properties/fapar_global_300m_10daily_v2/'
+                'fapar_global_300m_10daily_v2_cog.csv'
+            ],
             "frequency": "dekad",
-            "data_type" : "UINT8",
-            "resolution": 1/336,
+            "data_type": "UINT8",
+            "resolution": 1 / 336,
             "available_bounds": (-180, -60, 180, 80),
+        },
+
+        'swi': {
+            'product_name': ['swi_global_12.5km_10daily_v4'],
+            'file_catalogue': [
+                'https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/'
+                'bio-geophysical/soil_water_index/swi_global_12.5km_10daily_v4/'
+                'swi_global_12.5km_10daily_v4_cog.csv'
+            ],
+            "frequency": "dekad",
+            "data_type": "UINT8",
+            "resolution": 0.1,  # docs describe this as 0.1 degree / ~12.5 km
+            "available_bounds": (-180, -90, 180, 90),
         }
     }
+
     available_variables = {
         "fapar": {
-            "FAPAR":         {"scale_factor": 1/250,"fill_value": 255},
-            "NOBS":          {"scale_factor": 1,    "fill_value": 255},
-            "QFLAG":         {"scale_factor": 1,    "fill_value": 255},
-            "RMSE":          {"scale_factor": 1/250,"fill_value": 255},
-            "LENGTH_BEFORE": {"scale_factor": 1,    "fill_value": 255},
-            "LENGTH_AFTER":  {"scale_factor": 1,    "fill_value": 255},
-        }
+            "FAPAR":         {"scale_factor": 1 / 250, "fill_value": 255},
+            "NOBS":          {"scale_factor": 1,       "fill_value": 255},
+            "QFLAG":         {"scale_factor": 1,       "fill_value": 255},
+            "RMSE":          {"scale_factor": 1 / 250, "fill_value": 255},
+            "LENGTH_BEFORE": {"scale_factor": 1,       "fill_value": 255},
+            "LENGTH_AFTER":  {"scale_factor": 1,       "fill_value": 255},
+        },
+
+        "swi": {
+            "SWI001": {"scale_factor": 1 / 2, "fill_value": 255},
+            "SWI005": {"scale_factor": 1 / 2, "fill_value": 255},
+            "SWI010": {"scale_factor": 1 / 2, "fill_value": 255},
+            "SWI015": {"scale_factor": 1 / 2, "fill_value": 255},
+            "SWI020": {"scale_factor": 1 / 2, "fill_value": 255},
+            "SWI040": {"scale_factor": 1 / 2, "fill_value": 255},
+            "SWI060": {"scale_factor": 1 / 2, "fill_value": 255},
+            "SWI100": {"scale_factor": 1 / 2, "fill_value": 255},
+
+            "QFLAG001": {"scale_factor": 1 / 2, "fill_value": 255},
+            "QFLAG005": {"scale_factor": 1 / 2, "fill_value": 255},
+            "QFLAG010": {"scale_factor": 1 / 2, "fill_value": 255},
+            "QFLAG015": {"scale_factor": 1 / 2, "fill_value": 255},
+            "QFLAG020": {"scale_factor": 1 / 2, "fill_value": 255},
+            "QFLAG040": {"scale_factor": 1 / 2, "fill_value": 255},
+            "QFLAG060": {"scale_factor": 1 / 2, "fill_value": 255},
+            "QFLAG100": {"scale_factor": 1 / 2, "fill_value": 255},
+
+            "SSF": {"scale_factor": 1, "fill_value": 255},
+        },
     }
-
-    def __init__(self, product: str) -> None:
+    def __init__(self, product: str, **kwargs) -> None:
         super().__init__()
+        self.log.info(f"CDSES3Downloader.__init__ called with product='{product}' (type: {type(product).__name__})")
+        
+        # Check if product is a template string that wasn't replaced
+        if isinstance(product, str) and '{' in product:
+            self.log.error(f"Product is a template string: '{product}' - it appears the workflow didn't substitute template variables!")
+            raise ValueError(f"Product contains template variable: {product}")
+        
         self.set_product(product)
+        self.log.info(f"After set_product: self.product='{self.product}'")
 
+        # For SWI, consolidation should be None since SWI doesn't have RT levels
+        if self.product == "swi":
+            self.consolidation = None
+            self.log.info("SWI product detected: consolidation set to None")
+        else:
+            self.log.info(f"Non-SWI product: consolidation will be {getattr(self, 'consolidation', 'not yet set')}")
+        
+        # Initialize catalogue and S3 client for both products
         self.catalogue = self._make_catalogue()
         self.s3_client = self._make_client()
+    
+    def set_options(self, options: dict) -> None:
+        """
+        Override to ensure SWI products ignore consolidation in options.
+        - SWI does not have consolidation levels, so consolidation must be None
+        - Product is set via __init__, not via options, so preserve it
+        """
+        current_product = self.product  # Save in case it gets overwritten
+        self.log.info(f"set_options called: product={self.product}, options={options}")
+        
+        super().set_options(options)
+        
+        # Restore product if it was accidentally overwritten
+        if current_product != self.product:
+            self.log.warning(f"set_options overwrote product from '{current_product}' to '{self.product}', restoring to '{current_product}'")
+            self.product = current_product
+        
+        self.log.info(f"After super().set_options(): consolidation={getattr(self, 'consolidation', 'not set')}, product={self.product}")
+        
+        # Ensure SWI products don't use consolidation
+        if self.product == "swi":
+            if self.consolidation is not None:
+                self.log.info(f"SWI detected: resetting consolidation from {self.consolidation} to None")
+                self.consolidation = None
+        else:
+            self.log.debug(f"Non-SWI product '{self.product}': consolidation={self.consolidation}")
     
     def _make_catalogue(self):
         catalogues = [pd.read_csv(c, sep =';', parse_dates=['content_date_start', 'content_date_end']) for c in self.file_catalogue]
@@ -74,6 +155,11 @@ class CDSES3Downloader(DOORDownloader):
         # add version and RT information to the catalogue
         full_catalogue['version'] = full_catalogue['name'].apply(lambda name: re.search(r'[Vv]\d+\.\d+\.\d+', name).group(0) if re.search(r'[Vv]\d+\.\d+\.\d+', name) else None)
         full_catalogue['consolidation'] = full_catalogue['name'].apply(lambda name: int(re.search(r'RT(\d+)', name).group(1)) if re.search(r'RT\d+', name) else None)
+
+        # aggiungo un giorno alla data se prodotto = swi
+        if self.product == "swi":
+            full_catalogue['content_date_start'] = full_catalogue['content_date_start'] + pd.Timedelta(days=1)
+            
         return full_catalogue
 
     def _make_client(self):
@@ -91,17 +177,35 @@ class CDSES3Downloader(DOORDownloader):
             self.log.error(msg)
             raise ValueError(msg)
 
-    def _filter_catalogue(self, timestep = None, consolidation = None):
+    def _filter_catalogue(self, timestep=None, consolidation=None):
         if consolidation is None:
             consolidation = self.consolidation
         
+        # SWI products NEVER use consolidation filtering
+        # This is a hard requirement - SWI data doesn't have RT levels
+        if self.product == "swi":
+            consolidation = None
+
         filtered_catalogue = self.catalogue.copy()
 
-        if consolidation is not None:
-            filtered_catalogue = filtered_catalogue[filtered_catalogue['consolidation'].isin(consolidation)].copy()
+        # FAPAR has RT/consolidation; SWI does not.
+        # Do not filter by consolidation if the catalogue has no RT information.
+        if (
+            consolidation is not None
+            and "consolidation" in filtered_catalogue.columns
+            and filtered_catalogue["consolidation"].notna().any()
+        ):
+            filtered_catalogue = filtered_catalogue[
+                filtered_catalogue["consolidation"].isin(consolidation)
+            ].copy()
 
         if timestep is not None:
-            filtered_catalogue = filtered_catalogue[(filtered_catalogue['content_date_start'] == timestep.start)].copy()
+            # SWI catalogue dates are commonly at 12:00, while TimeStep starts
+            # are often midnight. Match by calendar date to avoid missing files.
+            target_date = pd.Timestamp(timestep.start).date()
+            filtered_catalogue = filtered_catalogue[
+                filtered_catalogue["content_date_start"].dt.date == target_date
+            ].copy()
 
         return filtered_catalogue
 
@@ -137,7 +241,23 @@ class CDSES3Downloader(DOORDownloader):
         last_date = max(end_dates).to_pydatetime()
         #last_date = last_date.replace(hour=0, minute=0, second=0, microsecond=0)
         return last_date
+    
+    def _make_cog_filename(self, catalogue_name: str, variable: str) -> str:
+        """
+        Convert the catalogue product name into the per-variable COG filename.
+        """
 
+        base = catalogue_name.replace("_cog", "")
+
+        if self.product == "fapar":
+            return base.replace("-RT", f"-{variable}-RT") + ".tiff"
+
+        elif self.product == "swi":           
+            return base.replace("c_gls_SWI10_", f"c_gls_SWI10-{variable}_", 1) + ".tiff"
+        
+        else:
+            raise ValueError(f"No COG filename rule implemented for product: {self.product}")
+    
     def _get_data_ts(self,
                      time_step: TimeStep,
                      space_bounds: BoundingBox,
@@ -147,33 +267,75 @@ class CDSES3Downloader(DOORDownloader):
         """
         Get the data for a specific timestep.
         """
-        # filter the catalogue based on the accepted RTs
+        # Ensure consolidation is None for SWI products
+        self.log.info(f"_get_data_ts START: product={self.product}, consolidation={self.consolidation}, timestep={time_step}")
+        
+        if self.product == "swi" and self.consolidation is not None:
+            self.log.warning(f"ALERT: SWI product has consolidation={self.consolidation}, resetting to None")
+            self.consolidation = None
+        
+        self.log.debug(f"_get_data_ts after check: product={self.product}, consolidation={self.consolidation}")
         filtered_catalogue = self._filter_catalogue(timestep = time_step)
+        self.log.debug(f"_get_data_ts after filter: got {len(filtered_catalogue)} matching entries")
 
         if len(filtered_catalogue) == 0:
-            msg = f"No file found for timestep {time_step} and RTs {self.consolidation}"
-            self.log.error(msg)
+            # For SWI, never mention consolidation
+            self.log.error(f"=== ERROR BLOCK === product='{self.product}' (type={type(self.product)}), consolidation={self.consolidation}, is_swi={self.product == 'swi'}")
+            
+            if self.product == "swi":
+                msg = f"No file found for timestep {time_step}"
+            elif self.consolidation is None:
+                msg = f"No file found for timestep {time_step}"
+            else:
+                msg = f"No file found for timestep {time_step} and RTs {self.consolidation}"
+            
+            # Debug info
+            available_dates = sorted(self.catalogue['content_date_start'].unique()) if 'content_date_start' in self.catalogue.columns else []
+            self.log.error(f"{msg} [product={self.product}, consolidation={self.consolidation}, catalogue_size={len(self.catalogue)}, available_dates={available_dates[:5] if available_dates else 'none'}]")
             raise ValueError(msg)
 
         # arrange the catalogue based on the consolidation and versions (newest version first and highest consolidation first)
-        filtered_catalogue.sort_values(by=['consolidation', 'version'], ascending=[False, False], inplace=True)
+        sort_columns = []
+        ascending = []
+
+        if filtered_catalogue["consolidation"].notna().any():
+            sort_columns.append("consolidation")
+            ascending.append(False)
+
+        if filtered_catalogue["version"].notna().any():
+            sort_columns.append("version")
+            ascending.append(False)
+
+        if sort_columns:
+            filtered_catalogue.sort_values(
+                by=sort_columns,
+                ascending=ascending,
+                inplace=True,
+            )
 
         S3_path = filtered_catalogue.iloc[0]['s3_path']
         key_prefix = S3_path.replace('s3://eodata/', '')
         for variable, varoptions in self.variables.items():
-            filename = filtered_catalogue.iloc[0]['name'].replace('_cog', '.tiff').replace('-RT', f'-{variable}-RT')
-            key = f'{key_prefix}/{filename}'
+            filename = self._make_cog_filename(
+                filtered_catalogue.iloc[0]["name"],
+                variable,
+            )
 
-            # download the file from S3 to the temporary path
+            key = f"{key_prefix}/{filename}"
             tmp_destination = os.path.join(tmp_path, filename)
+
             self.log.info(f"Downloading file from S3: {filename}")
             self.s3_client.download_file(self.bucket, key, tmp_destination)
 
-            # open the file using dask for efficient processing
-            data = rxr.open_rasterio(tmp_destination, chunks={'x': 1024, 'y': 1024})
-
-            # crop to the bounding box
+            data = rxr.open_rasterio(tmp_destination, chunks={"x": 1024, "y": 1024})
             data = crop_to_bb(data, space_bounds)
 
-            # all of the metadata in the file is actually already correct...
-            yield data, {'variable': variable}
+            fill_value = varoptions.get("fill_value")
+            scale_factor = varoptions.get("scale_factor", 1)
+
+            if fill_value is not None:
+                data = data.where(data != fill_value)
+
+            data = data * scale_factor
+
+            yield data, {"variable": variable}

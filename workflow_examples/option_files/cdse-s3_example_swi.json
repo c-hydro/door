@@ -1,0 +1,23 @@
+{
+  "TAGS": {
+    "source": "CDSE-S3",
+    "product": "swi",
+    "prod_name": "CDSE-swi"
+  },
+  "DATASETS": {
+    "destination": {
+      "type": "local",
+      "path": "/home/riccardo/Documents/07_Archive/download_tests/{source}_S3/{product}/%Y/%m/%d/{variable}",
+      "filename": "{prod_name}_{variable}_%Y%m%d.tif"
+    }
+  },
+  "DOOR_DOWNLOADER": {
+    "source": "{source}",
+    "product": "{product}",
+    "bounds": [-180,-90,180,90],
+    "destination": "{DATASETS.destination}",
+    "options": {
+      "variables" : ["SWI015"]
+    }
+  }
+}
