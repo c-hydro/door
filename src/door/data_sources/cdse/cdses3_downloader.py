@@ -35,8 +35,9 @@ class CDSES3Downloader(DOORDownloader):
 
     default_options = {
         # Note: "product" is not included here because it's set via __init__, not set_options
-        "consolidation": [0,6], # will take the highest available for a timestep (FAPAR only)
-        "variables": None,      # None means all available variables for the product
+        "consolidation": None, # FAPAR only
+        "tvalue"       : None, # SWI only
+        "variables"    : None, # None means all available variables for the product
     }
 
     available_products = {
@@ -47,6 +48,7 @@ class CDSES3Downloader(DOORDownloader):
                 'bio-geophysical/vegetation_properties/fapar_global_300m_10daily_v2/'
                 'fapar_global_300m_10daily_v2_cog.csv'
             ],
+            "default_consolidation": [0,6], # RT0 and RT6 are the most commonly used consolidation levels for FAPAR, but we can include more if needed
             "frequency": "dekad",
             "data_type": "UINT8",
             "resolution": 1 / 336,
@@ -60,6 +62,7 @@ class CDSES3Downloader(DOORDownloader):
                 'bio-geophysical/soil_water_index/swi_global_12.5km_10daily_v4/'
                 'swi_global_12.5km_10daily_v4_cog.csv'
             ],
+            "default_t-value" : [1,5,10,15,20,40,60,100], # all available t-values
             "frequency": "dekad",
             "data_type": "UINT8",
             "resolution": 0.1,  # docs describe this as 0.1 degree / ~12.5 km
@@ -78,35 +81,9 @@ class CDSES3Downloader(DOORDownloader):
         },
 
         "swi": {
-            # 10-daily Soil Water Index at different characteristic time lengths
-            "SWI001": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI005": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI010": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI015": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI020": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI040": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI060": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI100": {"scale_factor": 0.05, "fill_value": 255},
-
-            # Quality flags
-            "QFLAG001": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG005": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG010": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG015": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG020": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG040": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG060": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG100": {"scale_factor": 0.05, "fill_value": 255},
-
-            # Percentage of valid observations in the 10-day synthesis period
-            "VOBS001": {"scale_factor": 0.1, "fill_value": 255},
-            "VOBS005": {"scale_factor": 0.1, "fill_value": 255},
-            "VOBS010": {"scale_factor": 0.1, "fill_value": 255},
-            "VOBS015": {"scale_factor": 0.1, "fill_value": 255},
-            "VOBS020": {"scale_factor": 0.1, "fill_value": 255},
-            "VOBS040": {"scale_factor": 0.1, "fill_value": 255},
-            "VOBS060": {"scale_factor": 0.1, "fill_value": 255},
-            "VOBS100": {"scale_factor": 0.1, "fill_value": 255},
+            "SWI":   {"scale_factor": 0.05, "fill_value": 255}, # 10-daily Soil Water Index
+            "QFLAG": {"scale_factor": 0.05, "fill_value": 255}, # Quality flags
+            "VOBS":  {"scale_factor": 0.1,  "fill_value": 255}, # Percentage of valid observations in the 10-day synthesis period
         },
     }
     
@@ -144,6 +121,18 @@ class CDSES3Downloader(DOORDownloader):
             if self.consolidation is not None:
                 self.log.info(f"Consolidation option will be ignored for product '{self.product}'")
                 self.consolidation = None
+            if self.tvalue is None:
+                self.tvalue = self.available_products[self.product]["default_t-value"]
+            elif not isinstance(self.tvalue, list):
+                self.tvalue = [self.tvalue]
+        elif self.product == "fapar":
+            if self.t_values is not None:
+                self.log.info(f"t-values option will be ignored for product '{self.product}'")
+            self.tvalue = [None]
+            if self.consolidation is None:
+                self.consolidation = self.available_products[self.product]["default_consolidation"]
+            elif not isinstance(self.consolidation, list):
+                self.consolidation = [self.consolidation]
     
     def _make_catalogue(self):
         catalogues = [pd.read_csv(c, sep =';', parse_dates=['content_date_start', 'content_date_end']) for c in self.file_catalogue]
@@ -287,23 +276,40 @@ class CDSES3Downloader(DOORDownloader):
             filtered_catalogue.sort_values(by=sort_columns,ascending=ascending,inplace=True)
 
         S3_path = filtered_catalogue.iloc[0]['s3_path']
+        this_consolidation = filtered_catalogue.iloc[0]['consolidation'] if 'consolidation' in filtered_catalogue.columns else None
         key_prefix = S3_path.replace('s3://eodata/', '')
         for variable, varoptions in self.variables.items():
-            filename = self._make_cog_filename(filtered_catalogue.iloc[0]["name"],variable)
+            for t in self.tvalue:
+                if t is not None:
+                    t = int(t)
+                    varname = f"{variable}{t:03d}"
+                else:
+                    varname = variable
 
-            key = f"{key_prefix}/{filename}"
-            tmp_destination = os.path.join(tmp_path, filename)
+                filename = self._make_cog_filename(filtered_catalogue.iloc[0]["name"], varname)
 
-            self.log.info(f"Downloading file from S3: {filename}")
-            self.s3_client.download_file(self.bucket, key, tmp_destination)
+                key = f"{key_prefix}/{filename}"
+                tmp_destination = os.path.join(tmp_path, filename)
 
-            # open the file using dask for efficient processing
-            data = rxr.open_rasterio(tmp_destination, chunks={"x": 1024, "y": 1024})
-            data = crop_to_bb(data, space_bounds)
+                self.log.info(f"Downloading file from S3: {filename}")
+                self.s3_client.download_file(self.bucket, key, tmp_destination)
 
-            fill_value   = varoptions.get("fill_value")
-            scale_factor = varoptions.get("scale_factor", 1)
+                # open the file using dask for efficient processing
+                data = rxr.open_rasterio(tmp_destination, chunks={"x": 1024, "y": 1024})
+                data = crop_to_bb(data, space_bounds)
 
-            data.attrs.update({"scale_factor": scale_factor,"fill_value": fill_value})
+                fill_value   = varoptions.get("fill_value")
+                scale_factor = varoptions.get("scale_factor", 1)
 
-            yield data, {"variable": variable}
+                attrs = {
+                    "scale_factor": scale_factor,
+                    "fill_value": fill_value,
+                }
+                data.attrs.update(attrs)
+
+                if t is not None:
+                    data.attrs["t_value"] = t
+                    yield data, {"variable": variable, "tvalue": t}
+                if this_consolidation is not None:
+                    data.attrs["consolidation"] = this_consolidation
+                    yield data, {"variable": variable}
