@@ -34,7 +34,6 @@ class CDSEDownloader(DOORDownloader):
     separate_vars = True
 
     default_options = {
-        "product": "fapar",
         "consolidation": None,  # FAPAR only. If None, defaults to [0, 6].
         "version": None,        # SWI only. If None, defaults to 4.
         "variables": None,      # None means all available variables for the product.
@@ -47,7 +46,6 @@ class CDSEDownloader(DOORDownloader):
 
     tile_options = {
         "max_tile_pixels": 2500,
-        "retry_max_attempts": 5,
         "retry_backoff_base_s": 1.0,
         "retry_on_status": [429, 500, 502, 503, 504],
     }
@@ -63,8 +61,8 @@ class CDSEDownloader(DOORDownloader):
                 6: "f3d558b9-7f12-46ff-aaef-7ea0dab397ed",
             },
             "default_consolidation": [0, 6],
-            "frequency": "dekad",
-            "data_type": "UINT8",
+            "frequency" : "dekad",
+            "data_type" : "UINT8",
             "resolution": 1 / 336,
             "available_bounds": (-180, -60, 180, 80),
         },
@@ -99,32 +97,32 @@ class CDSEDownloader(DOORDownloader):
         },
 
         "swi": {
-            "SWI001": {"scale_factor": 1 / 2, "fill_value": 255},
-            "SWI005": {"scale_factor": 1 / 2, "fill_value": 255},
-            "SWI010": {"scale_factor": 1 / 2, "fill_value": 255},
-            "SWI015": {"scale_factor": 1 / 2, "fill_value": 255},
-            "SWI020": {"scale_factor": 1 / 2, "fill_value": 255},
-            "SWI040": {"scale_factor": 1 / 2, "fill_value": 255},
-            "SWI060": {"scale_factor": 1 / 2, "fill_value": 255},
-            "SWI100": {"scale_factor": 1 / 2, "fill_value": 255},
+            "SWI001": {"scale_factor": 0.05, "fill_value": 255},
+            "SWI005": {"scale_factor": 0.05, "fill_value": 255},
+            "SWI010": {"scale_factor": 0.05, "fill_value": 255},
+            "SWI015": {"scale_factor": 0.05, "fill_value": 255},
+            "SWI020": {"scale_factor": 0.05, "fill_value": 255},
+            "SWI040": {"scale_factor": 0.05, "fill_value": 255},
+            "SWI060": {"scale_factor": 0.05, "fill_value": 255},
+            "SWI100": {"scale_factor": 0.05, "fill_value": 255},
 
-            "QFLAG001": {"scale_factor": 1 / 2, "fill_value": 255},
-            "QFLAG005": {"scale_factor": 1 / 2, "fill_value": 255},
-            "QFLAG010": {"scale_factor": 1 / 2, "fill_value": 255},
-            "QFLAG015": {"scale_factor": 1 / 2, "fill_value": 255},
-            "QFLAG020": {"scale_factor": 1 / 2, "fill_value": 255},
-            "QFLAG040": {"scale_factor": 1 / 2, "fill_value": 255},
-            "QFLAG060": {"scale_factor": 1 / 2, "fill_value": 255},
-            "QFLAG100": {"scale_factor": 1 / 2, "fill_value": 255},
+            "QFLAG001": {"scale_factor": 0.05, "fill_value": 255},
+            "QFLAG005": {"scale_factor": 0.05, "fill_value": 255},
+            "QFLAG010": {"scale_factor": 0.05, "fill_value": 255},
+            "QFLAG015": {"scale_factor": 0.05, "fill_value": 255},
+            "QFLAG020": {"scale_factor": 0.05, "fill_value": 255},
+            "QFLAG040": {"scale_factor": 0.05, "fill_value": 255},
+            "QFLAG060": {"scale_factor": 0.05, "fill_value": 255},
+            "QFLAG100": {"scale_factor": 0.05, "fill_value": 255},
 
-            "VOBS001": {"scale_factor": 1 / 2, "fill_value": 255},
-            "VOBS005": {"scale_factor": 1 / 2, "fill_value": 255},
-            "VOBS010": {"scale_factor": 1 / 2, "fill_value": 255},
-            "VOBS015": {"scale_factor": 1 / 2, "fill_value": 255},
-            "VOBS020": {"scale_factor": 1 / 2, "fill_value": 255},
-            "VOBS040": {"scale_factor": 1 / 2, "fill_value": 255},
-            "VOBS060": {"scale_factor": 1 / 2, "fill_value": 255},
-            "VOBS100": {"scale_factor": 1 / 2, "fill_value": 255},
+            "VOBS001": {"scale_factor": 0.05, "fill_value": 255},
+            "VOBS005": {"scale_factor": 0.05, "fill_value": 255},
+            "VOBS010": {"scale_factor": 0.05, "fill_value": 255},
+            "VOBS015": {"scale_factor": 0.05, "fill_value": 255},
+            "VOBS020": {"scale_factor": 0.05, "fill_value": 255},
+            "VOBS040": {"scale_factor": 0.05, "fill_value": 255},
+            "VOBS060": {"scale_factor": 0.05, "fill_value": 255},
+            "VOBS100": {"scale_factor": 0.05, "fill_value": 255},
         },
     }
 
@@ -137,21 +135,13 @@ class CDSEDownloader(DOORDownloader):
     def check_options(self, options):
         options = super().check_options(options)
 
-        # Important:
-        # super().check_options() merges default_options, where product defaults to "fapar".
-        # But the downloader was already initialized with the real product.
-        # Therefore self.product is the source of truth here.
-        product = self.product
-        options["product"] = product
-
-        product_cfg = self.available_products[product]
-        collection_selector = product_cfg.get("collection_selector", "consolidation")
+        collection_selector = self.collection_selector
 
         if collection_selector == "consolidation":
             consolidation = options.get("consolidation")
 
             if consolidation is None:
-                consolidation = product_cfg.get("default_consolidation", [0, 6])
+                consolidation =self.default_consolidation
 
             if isinstance(consolidation, int):
                 consolidation = [consolidation]
@@ -171,7 +161,7 @@ class CDSEDownloader(DOORDownloader):
             # For SWI, ignore the FAPAR default consolidation if it leaked in
             # from old configs or class defaults.
             if version is None:
-                version = product_cfg.get("default_version")
+                version = self.default_version
 
             if version not in self.collections:
                 raise ValueError(
@@ -192,14 +182,8 @@ class CDSEDownloader(DOORDownloader):
 
         return options
 
-    def _get_collection_selector(self):
-        return self.available_products[self.product].get(
-            "collection_selector",
-            "consolidation",
-        )
-
     def _get_collection_key(self, timestep=None):
-        collection_selector = self._get_collection_selector()
+        collection_selector = self.collection_selector
 
         if collection_selector == "version":
             return self.version
@@ -221,6 +205,11 @@ class CDSEDownloader(DOORDownloader):
         return session
 
     def _get_credentials(self) -> str:
+        # credentials will be looked for in the environment variables
+        # username = 'CDSE_LOGIN', password = 'CDSE_PWD'
+        # should be saved in a .netrc file in the user's home directory
+        # with the following line:
+        # machine sh.dataspace.copernicus.eu login <username> password <password>
         if not hasattr(self, "credentials") or not isinstance(self.credentials, str):
             self.credentials = get_credentials(
                 env_variables=self.credential_env_vars,
@@ -251,12 +240,7 @@ class CDSEDownloader(DOORDownloader):
                 "refresh_token": self.refresh_token,
             }
 
-        resp = requests.post(
-            self.TOKEN_URL,
-            data=auth_data,
-            verify=True,
-            allow_redirects=False,
-        )
+        resp = requests.post(self.TOKEN_URL, data=auth_data, verify=True, allow_redirects=False)
         resp.raise_for_status()
 
         payload = resp.json()
@@ -271,7 +255,7 @@ class CDSEDownloader(DOORDownloader):
     @staticmethod
     def _estimate_output_size(bbox, resolution):
         minx, miny, maxx, maxy = bbox
-        width = max(1, int(round((maxx - minx) / resolution)))
+        width  = max(1, int(round((maxx - minx) / resolution)))
         height = max(1, int(round((maxy - miny) / resolution)))
         return width, height
 
@@ -324,10 +308,7 @@ class CDSEDownloader(DOORDownloader):
         return specs
 
     def _compute_tile_specs(self, bbox):
-        self.log.info(
-            f"Computing tile specs for bbox {bbox} "
-            f"with resolution {self.resolution}"
-        )
+        self.log.info(f"Computing tile specs for bbox {bbox} with resolution {self.resolution}")
 
         max_tile_pixels = self.tile_options["max_tile_pixels"]
         full_width, full_height = self._estimate_output_size(bbox, self.resolution)
@@ -354,19 +335,8 @@ class CDSEDownloader(DOORDownloader):
                 y0_px, y1_px = y_edges_px[row], y_edges_px[row + 1]
 
                 if mask is not None:
-                    this_mask = mask.sel(
-                        {
-                            self.mask.rio.x_dim: slice(
-                                x_edges[col],
-                                x_edges[col + 1],
-                            ),
-                            self.mask.rio.y_dim: slice(
-                                y_edges[row + 1],
-                                y_edges[row],
-                            ),
-                        }
-                    )
-
+                    this_mask = mask.sel({self.mask.rio.x_dim: slice(x_edges[col],    x_edges[col + 1]),
+                                          self.mask.rio.y_dim: slice(y_edges[row + 1],y_edges[row]    )})
                     if not this_mask.any():
                         continue
 
@@ -474,10 +444,7 @@ function evaluatePixel(sample) {{
         content_type = resp.headers.get("Content-Type", "")
 
         if "image/tiff" not in content_type.lower():
-            raise RuntimeError(
-                f"Unexpected response Content-Type: {content_type}\n"
-                f"{resp.text[:1000]}"
-            )
+            raise RuntimeError(f"Unexpected response Content-Type: {content_type}\n{resp.text[:1000]}")
 
         return resp.content
 
@@ -491,46 +458,33 @@ function evaluatePixel(sample) {{
             if retry_after is not None:
                 try:
                     retry_after_value = float(retry_after)
-
                     if retry_after_value > 1000:
                         return retry_after_value / 1000.0
-
                     return retry_after_value
-
                 except ValueError:
                     pass
 
         base_delay = float(self.tile_options.get("retry_backoff_base_s", 1.0))
         jitter = random.uniform(0.0, 0.25 * base_delay)
-
         return base_delay * (2 ** max(0, attempt - 1)) + jitter
 
     def _download_and_save_tiff(self, payload, tmp_file, tile_id=None):
-        max_attempts = int(self.tile_options.get("retry_max_attempts", 5))
-        retry_on_status = set(
-            self.tile_options.get(
-                "retry_on_status",
-                [429, 500, 502, 503, 504],
-            )
-        )
+        max_attempts = 50
+        retry_on_status = set(self.tile_options.get("retry_on_status",[429, 500, 502, 503, 504],))
 
         for attempt in range(1, max_attempts + 1):
             try:
                 raw_tiff = self._request_tiff(payload)
-
                 with open(tmp_file, "wb") as f:
                     f.write(raw_tiff)
-
                 return tmp_file
 
             except requests.HTTPError as exc:
                 response = exc.response
                 status_code = response.status_code if response is not None else None
 
-                if status_code == 401:
-                    self.log.info(
-                        "Access token may have expired, refreshing token and retrying..."
-                    )
+                if status_code == 401:  # Unauthorized - token might have expired, try refreshing it
+                    self.log.info("Access token may have expired, refreshing token and retrying...")
                     self.token = self._get_access_token()
                     should_retry = True
                 else:
@@ -538,45 +492,19 @@ function evaluatePixel(sample) {{
 
                 if not should_retry or attempt >= max_attempts:
                     tile_msg = f" for tile {tile_id}" if tile_id is not None else ""
-                    raise RuntimeError(
-                        f"CDSE download failed{tile_msg} after "
-                        f"{attempt} attempt(s): {exc}"
-                    ) from exc
+                    raise RuntimeError(f"CDSE download failed{tile_msg} after {attempt} attempt(s): {exc}") from exc
 
                 delay = self._get_retry_delay(attempt, response=response)
-
-                self.log.warning(
-                    "Retrying CDSE download for tile %s after HTTP %s "
-                    "(attempt %s/%s, %.2fs)",
-                    tile_id,
-                    status_code,
-                    attempt,
-                    max_attempts,
-                    delay,
-                )
-
+                self.log.warning(f"Retrying CDSE download for tile {tile_id} after HTTP {status_code} (attempt {attempt}/{max_attempts}, {delay:.2fs})")
                 time.sleep(delay)
 
             except (requests.ConnectionError, requests.Timeout) as exc:
                 if attempt >= max_attempts:
                     tile_msg = f" for tile {tile_id}" if tile_id is not None else ""
-                    raise RuntimeError(
-                        f"CDSE download failed{tile_msg} after "
-                        f"{attempt} attempt(s): {exc}"
-                    ) from exc
+                    raise RuntimeError("CDSE download failed{tile_msg} after {attempt} attempt(s): {exc}") from exc
 
                 delay = self._get_retry_delay(attempt)
-
-                self.log.warning(
-                    "Retrying CDSE download for tile %s after network error %s "
-                    "(attempt %s/%s, %.2fs)",
-                    tile_id,
-                    type(exc).__name__,
-                    attempt,
-                    max_attempts,
-                    delay,
-                )
-
+                self.log.warning(f"Retrying CDSE download for tile {tile_id} after network error {type(exc).__name__} (attempt {attempt}/{max_attempts}, {delay:.2fs})")
                 time.sleep(delay)
 
     def _get_data_ts(self, timestep, space_bounds, tmp_path):
@@ -596,10 +524,7 @@ function evaluatePixel(sample) {{
         maxy = min(maxy, avail_maxy)
 
         if minx >= maxx or miny >= maxy:
-            self.log.warning(
-                f"Requested bounds {space_bounds.bbox} do not intersect "
-                f"available bounds {self.available_bounds} for product {self.product}."
-            )
+            self.log.warning("Requested bounds {space_bounds.bbox} do not intersect available bounds {self.available_bounds} for product {self.product}.")
             yield None, {}
             return
 
@@ -607,33 +532,24 @@ function evaluatePixel(sample) {{
         tile_specs = self._get_tile_specs(space_bounds.bbox)
 
         if not tile_specs:
-            self.log.warning(
-                f"No tile specs generated for bounds {space_bounds.bbox}."
-            )
+            self.log.warning("No tile specs generated for bounds {space_bounds.bbox}.")
             yield None, {}
             return
 
         collection_key = self._get_collection_key(timestep=timestep)
 
         if collection_key is None:
-            self.log.warning(
-                f"No data available for timestep {timestep} "
-                f"for product {self.product}."
-            )
+            self.log.warning("No data available for timestep {timestep} for product {self.product}.")
             yield None, {}
             return
 
-        selector = self._get_collection_selector()
+        selector = self.collection_selector
 
         download_jobs = []
-
         for spec in tile_specs:
             bbox = spec["bbox"]
             payload = self._build_payload(timestep, bbox, bands, collection_key)
-            tmp_file = (
-                f"{tmp_path}/cdse_request_"
-                f"{self.product}_{self.variable}_{spec['tile_id']}.tiff"
-            )
+            tmp_file = (f"{tmp_path}/cdse_request_{self.product}_{spec['tile_id']}.tiff")
             download_jobs.append((spec, payload, tmp_file))
 
         tmp_files_by_tile = {}
@@ -641,26 +557,18 @@ function evaluatePixel(sample) {{
 
         if max_workers == 1 or len(download_jobs) == 1:
             for spec, payload, tmp_file in download_jobs:
-                self._download_and_save_tiff(
-                    payload,
-                    tmp_file,
-                    tile_id=spec["tile_id"],
-                )
-
+                self._download_and_save_tiff(payload,tmp_file,tile_id=spec["tile_id"])
+                n = 1
                 if self.make_mosaic:
                     tmp_files_by_tile[spec["tile_id"]] = tmp_file
+                    if n>1 and (n%10 == 0 or n == len(download_jobs)):
+                        self.log.info(f"Completed download of {n} tiles of {len(download_jobs)} [{timestep}, {self.variable}]")
+                    n += 1
                 else:
                     da = rxr.open_rasterio(tmp_file)
-                    attrs = {
-                        "tile_id": spec["tile_id"],
-                        selector: collection_key,
-                    }
+                    attrs = {"tile_id": spec["tile_id"], selector: collection_key}
                     da = self.set_attributes(da, **attrs)
-
-                    yield da, {
-                        "variable": self.variable,
-                        "tile": f"{spec['tile_id']}",
-                    }
+                    yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
 
         else:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -673,62 +581,43 @@ function evaluatePixel(sample) {{
                     ): (spec, tmp_file)
                     for spec, payload, tmp_file in download_jobs
                 }
-
+                
+                n = 1
                 for future in as_completed(future_to_job):
                     spec, tmp_file = future_to_job[future]
                     future.result()
 
                     if self.make_mosaic:
                         tmp_files_by_tile[spec["tile_id"]] = tmp_file
+                        if n>1 and (n%10 == 0 or n == len(download_jobs)):
+                            self.log.info(f"Completed download of {n} tiles of {len(download_jobs)} [{timestep}, {self.variable}]")
+                        n += 1
                     else:
                         da = rxr.open_rasterio(tmp_file)
-                        attrs = {
-                            "tile_id": spec["tile_id"],
-                            selector: collection_key,
-                        }
+                        attrs = {"tile_id": spec["tile_id"], selector: collection_key}
                         da = self.set_attributes(da, **attrs)
-
-                        yield da, {
-                            "variable": self.variable,
-                            "tile": f"{spec['tile_id']}",
-                        }
+                        yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
 
         if self.make_mosaic:
-            tmp_files = [
-                tmp_files_by_tile[spec["tile_id"]]
-                for spec in tile_specs
-                if spec["tile_id"] in tmp_files_by_tile
-            ]
+            tmp_files = list(tmp_files_by_tile.values())
 
             if not tmp_files:
-                self.log.warning(
-                    f"No downloaded tiles available to mosaic for {self.variable}."
-                )
+                self.log.warning(f"No downloaded tiles available to mosaic for {self.variable}.")
                 yield None, {}
                 return
 
-            das = [
-                rxr.open_rasterio(
-                    f,
-                    chunks={"x": "auto", "y": "auto"},
-                )
-                for f in tmp_files
-            ]
-
-            da = xr.combine_by_coords(
-                das,
-                combine_attrs="override",
-                join="outer",
-                fill_value=self.variables[self.variable]["fill_value"],
-            )
-
-            for d in das:
-                d.close()
+            das = [rxr.open_rasterio(f,chunks={"x": "auto", "y": "auto"},)for f in tmp_files]
+            
+            if len(das) == 1:
+                da = das[0]
+            else:
+                self.log.info(f"Mosaicking {len(das)} tiles for variable {self.variable}...")
+                da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
+                for d in das: d.close()
 
             attrs = {selector: collection_key}
             da = self.set_attributes(da, **attrs)
-
-            yield da, {"variable": self.variable}
+            yield da, {'variable': self.variable}
 
     def set_attributes(self, da: xr.DataArray, **kwargs):
         da.name = self.variable
@@ -748,7 +637,7 @@ function evaluatePixel(sample) {{
         For SWI, the selector is version.
         """
 
-        selector = self._get_collection_selector()
+        selector = self.collection_selector
 
         if selector == "version":
             collection_key = version if version is not None else self.version
@@ -800,10 +689,6 @@ function evaluatePixel(sample) {{
             )
 
             if resp.status_code == 401:
-                self.log.info(
-                    "Access token may have expired while querying catalogue, "
-                    "refreshing token and retrying..."
-                )
                 self.token = self._get_access_token()
                 continue
 
