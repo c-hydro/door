@@ -1,5 +1,6 @@
 # input standard python (xarray, np ecc)
 import xarray as xr
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import random
@@ -266,18 +267,8 @@ class CDSEDownloader(DOORDownloader):
         if tile_size <= 0:
             raise ValueError(f"tile_size must be > 0, got {tile_size}")
 
-        tile_size = min(tile_size, length)
-        rem = 0
-
-        for n in range(tile_size, 1, -1):
-            if length % n == 0:
-                tile_size = n
-                break
-
-            if length % n > rem:
-                rem = length % n
-                tile_size = n
-
+        n_tiles = np.ceil(length / tile_size)
+        tile_size = int(np.ceil(length / n_tiles))
         edges = list(range(0, length, tile_size))
 
         if edges[-1] != length:
@@ -581,12 +572,7 @@ function evaluatePixel(sample) {{
         else:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_job = {
-                    executor.submit(
-                        self._download_and_save_tiff,
-                        payload,
-                        tmp_file,
-                        tile_id,
-                    ): (tile_id, tmp_file)
+                    executor.submit(self._download_and_save_tiff, payload ,tmp_file, tile_id): (tile_id, tmp_file)
                     for tile_id, payload, tmp_file in download_jobs
                 }
                 
