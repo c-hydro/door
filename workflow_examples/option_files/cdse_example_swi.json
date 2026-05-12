@@ -7,8 +7,8 @@
   "DATASETS": {
     "destination": {
       "type": "local",
-      "path": "/home/riccardo/Documents/07_Archive/download_tests_tiles/{source}_S3/{product}/%Y/%m/%d/{variable}",
-      "filename": "{prod_name}_{variable}_%Y%m%d.tif"
+      "path": "output/{source}/{product}/%Y/%m/%d/{variable}",
+      "filename": "{prod_name}_{variable}-{tvalue:03}_%Y%m%d.tif"
     }
   },
   "DOOR_DOWNLOADER": {
@@ -16,9 +16,10 @@
     "product": "{product}",
     "bounds": [-26, 34, 41, 71],
     "destination": "{DATASETS.destination}",
+    
     "options": {
-      "version": 4,
-      "variables": ["SWI015"]
+      "variables": ["SWI", "QFLAG", "VOBS"],
+      "tvalue" : [5,15,40]
     }
   }
 }
