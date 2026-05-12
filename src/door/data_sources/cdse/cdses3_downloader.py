@@ -51,6 +51,7 @@ class CDSES3Downloader(DOORDownloader):
             "default_consolidation": [0,6], # RT0 and RT6 are the most commonly used consolidation levels for FAPAR, but we can include more if needed
             "frequency": "dekad",
             "data_type": "UINT8",
+            "fill_value": 255,
             "resolution": 1 / 336,
             "available_bounds": (-180, -60, 180, 80),
         },
@@ -65,6 +66,7 @@ class CDSES3Downloader(DOORDownloader):
             "default_t-value" : [1,5,10,15,20,40,60,100], # all available t-values
             "frequency": "dekad",
             "data_type": "UINT8",
+            "fill_value": 255,
             "resolution": 0.1,  # docs describe this as 0.1 degree / ~12.5 km
             "available_bounds": (-180, -90, 180, 90),
         }
@@ -72,18 +74,18 @@ class CDSES3Downloader(DOORDownloader):
 
     available_variables = {
         "fapar": {
-            "FAPAR":         {"scale_factor": 1 / 250, "fill_value": 255},
-            "NOBS":          {"scale_factor": 1,       "fill_value": 255},
-            "QFLAG":         {"scale_factor": 1,       "fill_value": 255},
-            "RMSE":          {"scale_factor": 1 / 250, "fill_value": 255},
-            "LENGTH_BEFORE": {"scale_factor": 1,       "fill_value": 255},
-            "LENGTH_AFTER":  {"scale_factor": 1,       "fill_value": 255},
+            "FAPAR":         {"scale_factor": 1 / 250},
+            "NOBS":          {"scale_factor": 1      },
+            "QFLAG":         {"scale_factor": 1      },
+            "RMSE":          {"scale_factor": 1 / 250},
+            "LENGTH_BEFORE": {"scale_factor": 1      },
+            "LENGTH_AFTER":  {"scale_factor": 1      },
         },
 
         "swi": {
-            "SWI":   {"scale_factor": 0.05, "fill_value": 255}, # 10-daily Soil Water Index
-            "QFLAG": {"scale_factor": 0.05, "fill_value": 255}, # Quality flags
-            "VOBS":  {"scale_factor": 0.1,  "fill_value": 255}, # Percentage of valid observations in the 10-day synthesis period
+            "SWI":   {"scale_factor": 1 / 200}, # 10-daily Soil Water Index
+            "QFLAG": {"scale_factor": 1 / 200}, # Quality flags
+            "VOBS":  {"scale_factor": 1 / 100}, # Percentage of valid observations in the 10-day synthesis period
         },
     }
     
@@ -298,7 +300,7 @@ class CDSES3Downloader(DOORDownloader):
                 data = rxr.open_rasterio(tmp_destination, chunks={"x": 1024, "y": 1024})
                 data = crop_to_bb(data, space_bounds)
 
-                fill_value   = varoptions.get("fill_value")
+                fill_value   = self.fill_value
                 scale_factor = varoptions.get("scale_factor", 1)
 
                 attrs = {
