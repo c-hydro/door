@@ -31,7 +31,7 @@ class CDSEDownloader(DOORDownloader):
     PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
     CATALOGUE_URL = "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search"
 
-    separate_vars = True
+    separate_vars = False
 
     default_options = {
         "consolidation": None,  # FAPAR only. If None, defaults to [0, 6].
@@ -515,7 +515,7 @@ function evaluatePixel(sample) {{
             list[(xr.DataArray, tags_dict)]
         """
 
-        bands = [self.variable]
+        bands = list(self.variables.keys())
 
         minx, miny, maxx, maxy = space_bounds.bbox
         avail_minx, avail_miny, avail_maxx, avail_maxy = self.available_bounds
@@ -564,13 +564,15 @@ function evaluatePixel(sample) {{
                 if self.make_mosaic:
                     tmp_files_by_tile[spec["tile_id"]] = tmp_file
                     if n>1 and (n%10 == 0 or n == len(download_jobs)):
-                        self.log.info(f"Completed download of {n} tiles of {len(download_jobs)} [{timestep}, {self.variable}]")
+                        self.log.info(f"Completed download of {n} tiles of {len(download_jobs)} [{timestep}]")
                     n += 1
                 else:
                     da = rxr.open_rasterio(tmp_file)
-                    attrs = {"tile_id": spec["tile_id"], selector: collection_key}
-                    da = self.set_attributes(da, **attrs)
-                    yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
+                    for i, var in enumerate(self.variables.keys()):
+                        da_var = da.isel(band=i).drop("band").rename(var)
+                        attrs = {"tile_id": spec["tile_id"], selector: collection_key}
+                        da_var = self.set_attributes(da_var, variable=var, **attrs)
+                    yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
 
         else:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -592,19 +594,21 @@ function evaluatePixel(sample) {{
                     if self.make_mosaic:
                         tmp_files_by_tile[spec["tile_id"]] = tmp_file
                         if n>1 and (n%10 == 0 or n == len(download_jobs)):
-                            self.log.info(f"Completed download of {n} tiles of {len(download_jobs)} [{timestep}, {self.variable}]")
+                            self.log.info(f"Completed download of {n} tiles of {len(download_jobs)} [{timestep}]")
                         n += 1
                     else:
                         da = rxr.open_rasterio(tmp_file)
-                        attrs = {"tile_id": spec["tile_id"], selector: collection_key}
-                        da = self.set_attributes(da, **attrs)
-                        yield da, {'variable': self.variable, 'tile' : f'{spec["tile_id"]}'}
+                        for i, var in enumerate(self.variables.keys()):
+                            da_var = da.isel(band=i).drop("band").rename(var)
+                            attrs = {"tile_id": spec["tile_id"], selector: collection_key}
+                            da_var = self.set_attributes(da_var, variable=var, **attrs)
+                        yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
 
         if self.make_mosaic:
             tmp_files = list(tmp_files_by_tile.values())
 
             if not tmp_files:
-                self.log.warning(f"No downloaded tiles available to mosaic for {self.variable}.")
+                self.log.warning(f"No downloaded tiles available to mosaic for {timestep}.")
                 yield None, {}
                 return
 
@@ -613,17 +617,19 @@ function evaluatePixel(sample) {{
             if len(das) == 1:
                 da = das[0]
             else:
-                self.log.info(f"Mosaicking {len(das)} tiles for variable {self.variable}...")
+                self.log.info(f"Mosaicking {len(das)} tiles for {timestep}...")
                 da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.fill_value)
                 for d in das: d.close()
 
-            attrs = {selector: collection_key}
-            da = self.set_attributes(da, **attrs)
-            yield da, {'variable': self.variable}
+                for i, var in enumerate(self.variables.keys()):
+                    da_var = da.isel(band=i).drop("band").rename(var)
+                    attrs = {selector: collection_key}
+                    da_var = self.set_attributes(da_var, variable=var, **attrs)
+                yield da_var, {'variable': var}
 
-    def set_attributes(self, da: xr.DataArray, **kwargs):
+    def set_attributes(self, da: xr.DataArray, variable, **kwargs):
         da.name = self.variable
-        da.attrs["scale_factor"] = self.variables[self.variable]["scale_factor"]
+        da.attrs["scale_factor"] = self.variables[variable]["scale_factor"]
         da.attrs["_FillValue"] = self.fill_value
 
         for key, value in kwargs.items():
