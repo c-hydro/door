@@ -497,16 +497,16 @@ function evaluatePixel(sample) {{
                     raise RuntimeError(f"CDSE download failed{tile_msg} after {attempt} attempt(s): {exc}") from exc
 
                 delay = self._get_retry_delay(attempt, response=response)
-                self.log.warning(f"Retrying CDSE download for tile {tile_id} after HTTP {status_code} (attempt {attempt}/{max_attempts}, {delay:.2fs})")
+                self.log.warning(f"Retrying CDSE download for tile {tile_id} after HTTP {status_code} (attempt {attempt}/{max_attempts}, {delay:.2f})")
                 time.sleep(delay)
 
             except (requests.ConnectionError, requests.Timeout) as exc:
                 if attempt >= max_attempts:
                     tile_msg = f" for tile {tile_id}" if tile_id is not None else ""
-                    raise RuntimeError("CDSE download failed{tile_msg} after {attempt} attempt(s): {exc}") from exc
+                    raise RuntimeError(f"CDSE download failed{tile_msg} after {attempt} attempt(s): {exc}") from exc
 
                 delay = self._get_retry_delay(attempt)
-                self.log.warning(f"Retrying CDSE download for tile {tile_id} after network error {type(exc).__name__} (attempt {attempt}/{max_attempts}, {delay:.2fs})")
+                self.log.warning(f"Retrying CDSE download for tile {tile_id} after network error {type(exc).__name__} (attempt {attempt}/{max_attempts}, {delay:.2f})")
                 time.sleep(delay)
 
     def _get_data_ts(self, timestep, space_bounds, tmp_path):
@@ -552,27 +552,31 @@ function evaluatePixel(sample) {{
             bbox = spec["bbox"]
             payload = self._build_payload(timestep, bbox, bands, collection_key)
             tmp_file = (f"{tmp_path}/cdse_request_{self.product}_{spec['tile_id']}.tiff")
-            download_jobs.append((spec, payload, tmp_file))
+            download_jobs.append((spec['tile_id'], payload, tmp_file))
 
         tmp_files_by_tile = {}
-        max_workers = max(1, int(getattr(self, "max_workers", 1)))
+        def _register_tile_for_mosaic(i, tile_id, tmp_file):
+            tmp_files_by_tile[tile_id] = tmp_file
+            if i>1 and (i%10 == 0 or i == len(download_jobs)):
+                self.log.info(f"Completed download of {i} tiles of {len(download_jobs)} [{timestep}]")
 
+        def _yield_tile(tile_id, tmp_file):
+                da = rxr.open_rasterio(tmp_file)
+                for v, var in enumerate(self.variables.keys()):
+                    da_var = da.isel(band=v).drop("band").rename(var)
+                    attrs = {"tile_id": tile_id, selector: collection_key}
+                    da_var = self.set_attributes(da_var, variable=var, **attrs)
+                    yield da_var, {'variable': var, 'tile' : tile_id}
+
+        max_workers = max(1, int(getattr(self, "max_workers", 1)))
         if max_workers == 1 or len(download_jobs) == 1:
-            for spec, payload, tmp_file in download_jobs:
-                self._download_and_save_tiff(payload,tmp_file,tile_id=spec["tile_id"])
-                n = 1
+            for i, this_job in enumerate(download_jobs):
+                tile_id, payload, tmp_file = this_job
+                self._download_and_save_tiff(payload,tmp_file,tile_id=tile_id)
                 if self.make_mosaic:
-                    tmp_files_by_tile[spec["tile_id"]] = tmp_file
-                    if n>1 and (n%10 == 0 or n == len(download_jobs)):
-                        self.log.info(f"Completed download of {n} tiles of {len(download_jobs)} [{timestep}]")
-                    n += 1
+                    _register_tile_for_mosaic(i+1, tile_id, tmp_file)
                 else:
-                    da = rxr.open_rasterio(tmp_file)
-                    for i, var in enumerate(self.variables.keys()):
-                        da_var = da.isel(band=i).drop("band").rename(var)
-                        attrs = {"tile_id": spec["tile_id"], selector: collection_key}
-                        da_var = self.set_attributes(da_var, variable=var, **attrs)
-                    yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
+                    yield from _yield_tile(tile_id, tmp_file)
 
         else:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -581,28 +585,18 @@ function evaluatePixel(sample) {{
                         self._download_and_save_tiff,
                         payload,
                         tmp_file,
-                        spec["tile_id"],
-                    ): (spec, tmp_file)
-                    for spec, payload, tmp_file in download_jobs
+                        tile_id,
+                    ): (tile_id, tmp_file)
+                    for tile_id, payload, tmp_file in download_jobs
                 }
                 
-                n = 1
-                for future in as_completed(future_to_job):
-                    spec, tmp_file = future_to_job[future]
+                for i, future in enumerate(as_completed(future_to_job)):
+                    tile_id, tmp_file = future_to_job[future]
                     future.result()
-
                     if self.make_mosaic:
-                        tmp_files_by_tile[spec["tile_id"]] = tmp_file
-                        if n>1 and (n%10 == 0 or n == len(download_jobs)):
-                            self.log.info(f"Completed download of {n} tiles of {len(download_jobs)} [{timestep}]")
-                        n += 1
+                        _register_tile_for_mosaic(i+1, tile_id, tmp_file)
                     else:
-                        da = rxr.open_rasterio(tmp_file)
-                        for i, var in enumerate(self.variables.keys()):
-                            da_var = da.isel(band=i).drop("band").rename(var)
-                            attrs = {"tile_id": spec["tile_id"], selector: collection_key}
-                            da_var = self.set_attributes(da_var, variable=var, **attrs)
-                        yield da_var, {'variable': var, 'tile' : f'{spec["tile_id"]}'}
+                        yield from _yield_tile(tile_id, tmp_file)
 
         if self.make_mosaic:
             tmp_files = list(tmp_files_by_tile.values())
@@ -612,8 +606,7 @@ function evaluatePixel(sample) {{
                 yield None, {}
                 return
 
-            das = [rxr.open_rasterio(f,chunks={"x": "auto", "y": "auto"},)for f in tmp_files]
-            
+            das = [rxr.open_rasterio(f,chunks={"x": "auto", "y": "auto"},) for f in tmp_files]
             if len(das) == 1:
                 da = das[0]
             else:
@@ -625,10 +618,10 @@ function evaluatePixel(sample) {{
                     da_var = da.isel(band=i).drop("band").rename(var)
                     attrs = {selector: collection_key}
                     da_var = self.set_attributes(da_var, variable=var, **attrs)
-                yield da_var, {'variable': var}
+                    yield da_var, {'variable': var}
 
     def set_attributes(self, da: xr.DataArray, variable, **kwargs):
-        da.name = self.variable
+        da.name = variable
         da.attrs["scale_factor"] = self.variables[variable]["scale_factor"]
         da.attrs["_FillValue"] = self.fill_value
 
