@@ -203,6 +203,7 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
             if 'timestep' in tags:
                 timestep = tags.pop('timestep')
             self.destination.write_data(data, timestep, **tags)
+            data.close()
 
             tags_str = ', '.join(f'{k}={v}' for k, v in tags.items())
             msg0 = f"Data for {timestep}"
