@@ -36,12 +36,12 @@ class CDSEDownloader(DOORDownloader):
 
     default_options = {
         "consolidation": None,  # FAPAR only. If None, defaults to [0, 6].
-        "version": None,        # SWI only. If None, defaults to 4.
+        "tvalue": None,        # SWI only
         "variables": None,      # None means all available variables for the product.
+        "version": None,        # 
         "mosaicking_order": "mostRecent",
         "max_workers": 4,
         "make_mosaic": True,
-        "skip_empty_tiles": False,
         "mask": None,
     }
 
@@ -54,7 +54,6 @@ class CDSEDownloader(DOORDownloader):
     available_products = {
         "fapar": {
             # FAPAR collections are selected by consolidation level.
-            "collection_selector": "consolidation",
             "collections": {
                 0: "0dfe26be-b9ca-4286-b624-37591ea2addf",
                 1: "5e850ca5-2925-40b2-b377-d2410cb7fa21",
@@ -71,11 +70,10 @@ class CDSEDownloader(DOORDownloader):
 
         "swi": {
             # SWI collections are selected by product version, not consolidation.
-            "collection_selector": "version",
             "collections": {
-                4: "d0413fe0-46dc-4c2c-96a2-437e726d89a3",
+                0: "d0413fe0-46dc-4c2c-96a2-437e726d89a3",
             },
-            "default_version": 4,
+            "default_tvalue" : [1,5,10,15,20,40,60,100], # all available t-values
             "frequency": "dekad",
             "data_type": "UINT8",
             "fill_value": 255,
@@ -85,8 +83,6 @@ class CDSEDownloader(DOORDownloader):
     }
 
     # Cache of last available timesteps.
-    # Keyed as: (product, selector, key), e.g. ("fapar", "consolidation", 6)
-    # or ("swi", "version", 4)
     last_available = {}
 
     available_variables = {
@@ -100,32 +96,9 @@ class CDSEDownloader(DOORDownloader):
         },
 
         "swi": {
-            "SWI001": {"scale_factor": 1 / 200},
-            "SWI005": {"scale_factor": 1 / 200},
-            "SWI010": {"scale_factor": 1 / 200},
-            "SWI015": {"scale_factor": 1 / 200},
-            "SWI020": {"scale_factor": 1 / 200},
-            "SWI040": {"scale_factor": 1 / 200},
-            "SWI060": {"scale_factor": 1 / 200},
-            "SWI100": {"scale_factor": 1 / 200},
-
-            "QFLAG001": {"scale_factor": 1 / 200},
-            "QFLAG005": {"scale_factor": 1 / 200},
-            "QFLAG010": {"scale_factor": 1 / 200},
-            "QFLAG015": {"scale_factor": 1 / 200},
-            "QFLAG020": {"scale_factor": 1 / 200},
-            "QFLAG040": {"scale_factor": 1 / 200},
-            "QFLAG060": {"scale_factor": 1 / 200},
-            "QFLAG100": {"scale_factor": 1 / 200},
-
-            "VOBS001": {"scale_factor": 1 / 100},
-            "VOBS005": {"scale_factor": 1 / 100},
-            "VOBS010": {"scale_factor": 1 / 100},
-            "VOBS015": {"scale_factor": 1 / 100},
-            "VOBS020": {"scale_factor": 1 / 100},
-            "VOBS040": {"scale_factor": 1 / 100},
-            "VOBS060": {"scale_factor": 1 / 100},
-            "VOBS100": {"scale_factor": 1 / 100},
+            "SWI":   {"scale_factor": 1 / 200}, # 10-daily Soil Water Index
+            "QFLAG": {"scale_factor": 1 / 200}, # Quality flags
+            "VOBS":  {"scale_factor": 1 / 100}, # Percentage of valid observations in the 10-day synthesis period
         },
     }
 
@@ -138,45 +111,33 @@ class CDSEDownloader(DOORDownloader):
     def check_options(self, options):
         options = super().check_options(options)
 
-        collection_selector = self.collection_selector
+        if self.product == "fapar":
+            if options['consolidation'] is None:
+                options['consolidation'] = self.default_consolidation
+            elif isinstance(options['consolidation'], int):
+                options['consolidation'] = [options['consolidation']]
+            if options['tvalue'] is not None:
+                self.log.warning("tvalue option is not applicable for FAPAR product and will be ignored.")
+                options['tvalue'] = None
+            
+            wrong_consolidations = [c for c in options['consolidation'] if c not in self.collections]
+            if wrong_consolidations:
+                self.log.warning(f"Invalid consolidation levels {wrong_consolidations} for product {self.product} will be ignored.")
+            options['consolidation'] = [c for c in options['consolidation'] if c in self.collections]
 
-        if collection_selector == "consolidation":
-            consolidation = options.get("consolidation")
+        elif self.product == "swi":
+            if options['consolidation'] is not None:
+                self.log.warning("consolidation option is not applicable for SWI product and will be ignored.")
+            options['consolidation'] = 0
+            if options['tvalue'] is None:
+                options['tvalue'] = self.default_t_value
+            elif isinstance(options['tvalue'], int):
+                options['tvalue'] = [options['tvalue']]
 
-            if consolidation is None:
-                consolidation =self.default_consolidation
-
-            if isinstance(consolidation, int):
-                consolidation = [consolidation]
-
-            if not all(c in self.collections for c in consolidation):
-                raise ValueError(
-                    f"Invalid consolidation {consolidation}. "
-                    f"Choose one or more of {list(self.collections.keys())}"
-                )
-
-            options["consolidation"] = consolidation
-            options["version"] = None
-
-        elif collection_selector == "version":
-            version = options.get("version")
-
-            # For SWI, ignore the FAPAR default consolidation if it leaked in
-            # from old configs or class defaults.
-            if version is None:
-                version = self.default_version
-
-            if version not in self.collections:
-                raise ValueError(
-                    f"Invalid version {version}. "
-                    f"Choose one of {list(self.collections.keys())}"
-                )
-
-            options["version"] = version
-            options["consolidation"] = None
-
-        else:
-            raise ValueError(f"Unsupported collection_selector: {collection_selector}")
+            wrong_tvalues = [t for t in options['tvalue'] if t not in self.default_tvalue]
+            if wrong_tvalues:
+                self.log.warning(f"Invalid t-values {wrong_tvalues} for product {self.product} will be ignored.")
+            options['tvalue'] = [t for t in options['tvalue'] if t in self.default_tvalue]
 
         if options.get("mask") is not None and isinstance(options["mask"], Dataset):
             mask = options["mask"].get_data()
@@ -185,21 +146,16 @@ class CDSEDownloader(DOORDownloader):
 
         return options
 
-    def _get_collection_key(self, timestep=None):
-        collection_selector = self.collection_selector
-
-        if collection_selector == "version":
-            return self.version
-
-        if collection_selector == "consolidation":
+    def _get_consolidation(self, timestep=None):
+        if isinstance(self.consolidation, int):
+            return self.consolidation
+        elif isinstance(self.consolidation, list):
             for c in sorted(self.consolidation, reverse=True):
                 last_ts = self.get_last_published_ts(consolidation=c)
                 if last_ts >= timestep:
                     return c
-
-            return None
-
-        raise ValueError(f"Unsupported collection_selector: {collection_selector}")
+            else:
+                return None
 
     @staticmethod
     def _make_session() -> requests.Session:
@@ -358,6 +314,7 @@ class CDSEDownloader(DOORDownloader):
         return specs
 
     def _build_evalscript(self, bands):
+
         input_list = ", ".join(f'"{band}"' for band in bands)
         output_exprs = ",\n      ".join(f"sample.{band}" for band in bands)
 
@@ -506,8 +463,6 @@ function evaluatePixel(sample) {{
             list[(xr.DataArray, tags_dict)]
         """
 
-        bands = list(self.variables.keys())
-
         minx, miny, maxx, maxy = space_bounds.bbox
         avail_minx, avail_miny, avail_maxx, avail_maxy = self.available_bounds
 
@@ -529,19 +484,22 @@ function evaluatePixel(sample) {{
             yield None, {}
             return
 
-        collection_key = self._get_collection_key(timestep=timestep)
-
-        if collection_key is None:
+        consolidation = self._get_consolidation(timestep=timestep)
+        if consolidation is None:
             self.log.warning("No data available for timestep {timestep} for product {self.product}.")
             yield None, {}
             return
-
-        selector = self.collection_selector
+        
+        var_keys = list(self.variables.keys())
+        if self.product == 'swi':
+            bands = {f"{key}{t:03}" : dict(variable = key, tvalue=t) for key in var_keys for t in self.tvalue}
+        elif self.product == 'fapar':
+            bands = {key: dict(variable=key) for key in var_keys}
 
         download_jobs = []
         for spec in tile_specs:
             bbox = spec["bbox"]
-            payload = self._build_payload(timestep, bbox, bands, collection_key)
+            payload = self._build_payload(timestep, bbox, list(bands.keys()), consolidation)
             tmp_file = (f"{tmp_path}/cdse_request_{self.product}_{spec['tile_id']}.tiff")
             download_jobs.append((spec['tile_id'], payload, tmp_file))
 
@@ -553,11 +511,14 @@ function evaluatePixel(sample) {{
 
         def _yield_tile(tile_id, tmp_file):
                 da = rxr.open_rasterio(tmp_file)
-                for v, var in enumerate(self.variables.keys()):
+                for v, key in enumerate(bands.keys()):
+                    var = bands[key]['variable']
                     da_var = da.isel(band=v).drop("band").rename(var)
-                    attrs = {"tile_id": tile_id, selector: collection_key}
-                    da_var = self.set_attributes(da_var, variable=var, **attrs)
-                    yield da_var, {'variable': var, 'tile' : tile_id}
+                    tags = bands[key]
+                    tags['tile'] = tile_id
+                    if self.product == 'fapar': tags['consolidation'] = consolidation
+                    da_var = self.set_attributes(da_var, **tags)
+                    yield da_var, tags
 
         max_workers = max(1, int(getattr(self, "max_workers", 1)))
         if max_workers == 1 or len(download_jobs) == 1:
@@ -598,13 +559,14 @@ function evaluatePixel(sample) {{
             else:
                 self.log.info(f"Mosaicking {len(das)} tiles for {timestep}...")
                 da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.fill_value)
-                for d in das: d.close()
 
-                for i, var in enumerate(self.variables.keys()):
-                    da_var = da.isel(band=i).drop("band").rename(var)
-                    attrs = {selector: collection_key}
-                    da_var = self.set_attributes(da_var, variable=var, **attrs)
-                    yield da_var, {'variable': var}
+            for v, key in enumerate(bands.keys()):
+                var = bands[key]['variable']
+                da_var = da.isel(band=v).drop("band").rename(var)
+                tags = bands[key]
+                if self.product == 'fapar': tags['consolidation'] = consolidation
+                da_var = self.set_attributes(da_var, **tags)
+                yield da_var, tags
 
     def set_attributes(self, da: xr.DataArray, variable, **kwargs):
         da.name = variable
@@ -616,7 +578,7 @@ function evaluatePixel(sample) {{
 
         return da
 
-    def get_last_published_ts(self, consolidation=None, version=None):
+    def get_last_published_ts(self, consolidation=None):
         """
         Get last available timestep for the selected BYOC collection.
 
@@ -624,29 +586,20 @@ function evaluatePixel(sample) {{
         For SWI, the selector is version.
         """
 
-        selector = self.collection_selector
-
-        if selector == "version":
-            collection_key = version if version is not None else self.version
-
-        elif selector == "consolidation":
+        if self.product == 'swi':
+            consolidation = 0
+        elif self.product == 'fapar':
             if consolidation is None:
                 consolidation = self.consolidation
+        
+        # the lower consolidation will have more recent data
+        if isinstance(consolidation, list):
+            consolidation = min(consolidation)
 
-            if isinstance(consolidation, Sequence) and not isinstance(consolidation, str):
-                consolidation = min(consolidation)
+        if consolidation in self.last_available:
+            return self.last_available[consolidation]
 
-            collection_key = consolidation
-
-        else:
-            raise ValueError(f"Unsupported collection selector: {selector}")
-
-        cache_key = (self.product, selector, collection_key)
-
-        if cache_key in self.last_available:
-            return self.last_available[cache_key]
-
-        collection_id = self.collections[collection_key]
+        collection_id = self.collections[consolidation]
 
         timestep = ts.TimeStep.from_unit(self.frequency)
         now = dt.datetime.now()
@@ -688,7 +641,7 @@ function evaluatePixel(sample) {{
             else:
                 latest_datetime = results[0]["properties"]["datetime"]
                 latest_ts = timestep.from_date(latest_datetime[:10])
-                self.last_available[cache_key] = latest_ts
+                self.last_available[consolidation] = latest_ts
                 return latest_ts
 
     def get_last_published_date(self):

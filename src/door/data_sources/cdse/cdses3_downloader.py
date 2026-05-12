@@ -129,7 +129,7 @@ class CDSES3Downloader(DOORDownloader):
                 self.tvalue = [self.tvalue]
         elif self.product == "fapar":
             if self.t_values is not None:
-                self.log.info(f"t-values option will be ignored for product '{self.product}'")
+                self.log.info(f"tvalues option will be ignored for product '{self.product}'")
             self.tvalue = [None]
             if self.consolidation is None:
                 self.consolidation = self.available_products[self.product]["default_consolidation"]
@@ -310,8 +310,8 @@ class CDSES3Downloader(DOORDownloader):
                 data.attrs.update(attrs)
 
                 if t is not None:
-                    data.attrs["t_value"] = t
+                    data.attrs["tvalue"] = t
                     yield data, {"variable": variable, "tvalue": t}
                 if this_consolidation is not None:
                     data.attrs["consolidation"] = this_consolidation
-                    yield data, {"variable": variable}
+                    yield data, {"variable": variable, "consolidation": this_consolidation}
