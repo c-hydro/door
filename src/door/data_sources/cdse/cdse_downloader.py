@@ -63,6 +63,7 @@ class CDSEDownloader(DOORDownloader):
             "default_consolidation": [0, 6],
             "frequency" : "dekad",
             "data_type" : "UINT8",
+            "fill_value": 255,
             "resolution": 1 / 336,
             "available_bounds": (-180, -60, 180, 80),
         },
@@ -76,6 +77,7 @@ class CDSEDownloader(DOORDownloader):
             "default_version": 4,
             "frequency": "dekad",
             "data_type": "UINT8",
+            "fill_value": 255,
             "resolution": 0.1,
             "available_bounds": (-180, -90, 180, 90),
         },
@@ -88,41 +90,41 @@ class CDSEDownloader(DOORDownloader):
 
     available_variables = {
         "fapar": {
-            "FAPAR": {"scale_factor": 1 / 250, "fill_value": 255},
-            "NOBS": {"scale_factor": 1, "fill_value": 255},
-            "QFLAG": {"scale_factor": 1, "fill_value": 255},
-            "RMSE": {"scale_factor": 1 / 250, "fill_value": 255},
-            "LENGTH_BEFORE": {"scale_factor": 1, "fill_value": 255},
-            "LENGTH_AFTER": {"scale_factor": 1, "fill_value": 255},
+            "FAPAR"         : {"scale_factor": 1 / 250},
+            "NOBS"          : {"scale_factor": 1      },
+            "QFLAG"         : {"scale_factor": 1      },
+            "RMSE"          : {"scale_factor": 1 / 250},
+            "LENGTH_BEFORE" : {"scale_factor": 1      },
+            "LENGTH_AFTER"  : {"scale_factor": 1      },
         },
 
         "swi": {
-            "SWI001": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI005": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI010": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI015": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI020": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI040": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI060": {"scale_factor": 0.05, "fill_value": 255},
-            "SWI100": {"scale_factor": 0.05, "fill_value": 255},
+            "SWI001": {"scale_factor": 1 / 200},
+            "SWI005": {"scale_factor": 1 / 200},
+            "SWI010": {"scale_factor": 1 / 200},
+            "SWI015": {"scale_factor": 1 / 200},
+            "SWI020": {"scale_factor": 1 / 200},
+            "SWI040": {"scale_factor": 1 / 200},
+            "SWI060": {"scale_factor": 1 / 200},
+            "SWI100": {"scale_factor": 1 / 200},
 
-            "QFLAG001": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG005": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG010": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG015": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG020": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG040": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG060": {"scale_factor": 0.05, "fill_value": 255},
-            "QFLAG100": {"scale_factor": 0.05, "fill_value": 255},
+            "QFLAG001": {"scale_factor": 1 / 200},
+            "QFLAG005": {"scale_factor": 1 / 200},
+            "QFLAG010": {"scale_factor": 1 / 200},
+            "QFLAG015": {"scale_factor": 1 / 200},
+            "QFLAG020": {"scale_factor": 1 / 200},
+            "QFLAG040": {"scale_factor": 1 / 200},
+            "QFLAG060": {"scale_factor": 1 / 200},
+            "QFLAG100": {"scale_factor": 1 / 200},
 
-            "VOBS001": {"scale_factor": 0.05, "fill_value": 255},
-            "VOBS005": {"scale_factor": 0.05, "fill_value": 255},
-            "VOBS010": {"scale_factor": 0.05, "fill_value": 255},
-            "VOBS015": {"scale_factor": 0.05, "fill_value": 255},
-            "VOBS020": {"scale_factor": 0.05, "fill_value": 255},
-            "VOBS040": {"scale_factor": 0.05, "fill_value": 255},
-            "VOBS060": {"scale_factor": 0.05, "fill_value": 255},
-            "VOBS100": {"scale_factor": 0.05, "fill_value": 255},
+            "VOBS001": {"scale_factor": 1 / 100},
+            "VOBS005": {"scale_factor": 1 / 100},
+            "VOBS010": {"scale_factor": 1 / 100},
+            "VOBS015": {"scale_factor": 1 / 100},
+            "VOBS020": {"scale_factor": 1 / 100},
+            "VOBS040": {"scale_factor": 1 / 100},
+            "VOBS060": {"scale_factor": 1 / 100},
+            "VOBS100": {"scale_factor": 1 / 100},
         },
     }
 
@@ -612,7 +614,7 @@ function evaluatePixel(sample) {{
                 da = das[0]
             else:
                 self.log.info(f"Mosaicking {len(das)} tiles for variable {self.variable}...")
-                da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.variables[self.variable]['fill_value'])
+                da = xr.combine_by_coords(das, combine_attrs="override", join='outer', fill_value=self.fill_value)
                 for d in das: d.close()
 
             attrs = {selector: collection_key}
@@ -622,7 +624,7 @@ function evaluatePixel(sample) {{
     def set_attributes(self, da: xr.DataArray, **kwargs):
         da.name = self.variable
         da.attrs["scale_factor"] = self.variables[self.variable]["scale_factor"]
-        da.attrs["_FillValue"] = self.variables[self.variable]["fill_value"]
+        da.attrs["_FillValue"] = self.fill_value
 
         for key, value in kwargs.items():
             da.attrs[key] = str(value)
