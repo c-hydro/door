@@ -34,46 +34,123 @@ class CDSES3Downloader(DOORDownloader):
     # odata_download_url = "https://download.dataspace.copernicus.eu/odata/v1/Products"
 
     default_options = {
-        "product": "fapar",
-        "consolidation": [0,6], # will take the highest available for a timestep
-        "variables": None,      # None means all available variables for the product
+        # Note: "product" is not included here because it's set via __init__, not set_options
+        "consolidation": None, # FAPAR only
+        "tvalue"       : None, # SWI only
+        "variables"    : None, # None means all available variables for the product
     }
 
     available_products = {
-        'fapar' : {
-            'product_name'   : ['fapar_global_300m_10daily_v2'],
-            'file_catalogue' : ['https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/bio-geophysical/vegetation_properties/fapar_global_300m_10daily_v2/fapar_global_300m_10daily_v2_cog.csv'],
+        'fapar': {
+            'product_name': ['fapar_global_300m_10daily_v2'],
+            'file_catalogue': [
+                'https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/'
+                'bio-geophysical/vegetation_properties/fapar_global_300m_10daily_v2/'
+                'fapar_global_300m_10daily_v2_cog.csv'
+            ],
+            "default_consolidation": [0,6], # RT0 and RT6 are the most commonly used consolidation levels for FAPAR, but we can include more if needed
             "frequency": "dekad",
-            "data_type" : "UINT8",
-            "resolution": 1/336,
+            "data_type": "UINT8",
+            "fill_value": 255,
+            "resolution": 1 / 336,
             "available_bounds": (-180, -60, 180, 80),
+        },
+
+        'swi': {
+            'product_name': ['swi_global_12.5km_10daily_v4'],
+            'file_catalogue': [
+                'https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/'
+                'bio-geophysical/soil_water_index/swi_global_12.5km_10daily_v4/'
+                'swi_global_12.5km_10daily_v4_cog.csv'
+            ],
+            "default_t-value" : [1,5,10,15,20,40,60,100], # all available t-values
+            "frequency": "dekad",
+            "data_type": "UINT8",
+            "fill_value": 255,
+            "resolution": 0.1,  # docs describe this as 0.1 degree / ~12.5 km
+            "available_bounds": (-180, -90, 180, 90),
         }
     }
+
     available_variables = {
         "fapar": {
-            "FAPAR":         {"scale_factor": 1/250,"fill_value": 255},
-            "NOBS":          {"scale_factor": 1,    "fill_value": 255},
-            "QFLAG":         {"scale_factor": 1,    "fill_value": 255},
-            "RMSE":          {"scale_factor": 1/250,"fill_value": 255},
-            "LENGTH_BEFORE": {"scale_factor": 1,    "fill_value": 255},
-            "LENGTH_AFTER":  {"scale_factor": 1,    "fill_value": 255},
-        }
+            "FAPAR":         {"scale_factor": 1 / 250},
+            "NOBS":          {"scale_factor": 1      },
+            "QFLAG":         {"scale_factor": 1      },
+            "RMSE":          {"scale_factor": 1 / 250},
+            "LENGTH_BEFORE": {"scale_factor": 1      },
+            "LENGTH_AFTER":  {"scale_factor": 1      },
+        },
+
+        "swi": {
+            "SWI":   {"scale_factor": 1 / 200}, # 10-daily Soil Water Index
+            "QFLAG": {"scale_factor": 1 / 200}, # Quality flags
+            "VOBS":  {"scale_factor": 1 / 100}, # Percentage of valid observations in the 10-day synthesis period
+        },
     }
-
-    def __init__(self, product: str) -> None:
+    
+    def __init__(self, product: str, **kwargs) -> None:
         super().__init__()
+        self.log.debug(f"CDSES3Downloader.__init__ called with product='{product}' (type: {type(product).__name__})")
+        
+        # Check if product is a template string that wasn't replaced
+        if isinstance(product, str) and '{' in product:
+            self.log.error(f"Product is a template string: '{product}' - it appears the workflow didn't substitute template variables!")
+            raise ValueError(f"Product contains template variable: {product}")
+        
         self.set_product(product)
+        self.log.debug(f"After set_product: self.product='{self.product}'")
 
+        # Initialize catalogue and S3 client for both products
         self.catalogue = self._make_catalogue()
         self.s3_client = self._make_client()
+    
+    def set_options(self, options: dict) -> None:
+        """
+        Override to ensure SWI products ignore consolidation in options.
+        - SWI does not have consolidation levels, so consolidation must be None
+        - Product is set via __init__, not via options, so preserve it
+        """
+
+        self.log.debug(f"set_options called: product={self.product}, options={options}")
+        
+        super().set_options(options)
+        
+        self.log.debug(f"After super().set_options(): consolidation={getattr(self, 'consolidation', 'not set')}, product={self.product}")
+        
+        # Ensure SWI products don't use consolidation
+        if self.product == "swi":
+            if self.consolidation is not None:
+                self.log.info(f"Consolidation option will be ignored for product '{self.product}'")
+                self.consolidation = None
+            if self.tvalue is None:
+                self.tvalue = self.available_products[self.product]["default_t-value"]
+            elif not isinstance(self.tvalue, list):
+                self.tvalue = [self.tvalue]
+        elif self.product == "fapar":
+            if self.t_values is not None:
+                self.log.info(f"tvalues option will be ignored for product '{self.product}'")
+            self.tvalue = [None]
+            if self.consolidation is None:
+                self.consolidation = self.available_products[self.product]["default_consolidation"]
+            elif not isinstance(self.consolidation, list):
+                self.consolidation = [self.consolidation]
     
     def _make_catalogue(self):
         catalogues = [pd.read_csv(c, sep =';', parse_dates=['content_date_start', 'content_date_end']) for c in self.file_catalogue]
         full_catalogue = pd.concat(catalogues, ignore_index=True).copy()
 
-        # add version and RT information to the catalogue
+        # add version to the catalogue
         full_catalogue['version'] = full_catalogue['name'].apply(lambda name: re.search(r'[Vv]\d+\.\d+\.\d+', name).group(0) if re.search(r'[Vv]\d+\.\d+\.\d+', name) else None)
-        full_catalogue['consolidation'] = full_catalogue['name'].apply(lambda name: int(re.search(r'RT(\d+)', name).group(1)) if re.search(r'RT\d+', name) else None)
+        
+        # if the product is FAPAR, add consolidation (RT) to the catalogue
+        if self.product == "fapar":
+            full_catalogue['consolidation'] = full_catalogue['name'].apply(lambda name: int(re.search(r'RT(\d+)', name).group(1)) if re.search(r'RT\d+', name) else None)
+
+        # add 1 day to the content_date_start for SWI products to align with the actual date of the data
+        if self.product == "swi":
+            full_catalogue['content_date_start'] = full_catalogue['content_date_start'] + pd.Timedelta(days=1)
+            
         return full_catalogue
 
     def _make_client(self):
@@ -91,17 +168,21 @@ class CDSES3Downloader(DOORDownloader):
             self.log.error(msg)
             raise ValueError(msg)
 
-    def _filter_catalogue(self, timestep = None, consolidation = None):
+    def _filter_catalogue(self, timestep=None, consolidation=None):
         if consolidation is None:
             consolidation = self.consolidation
-        
+
         filtered_catalogue = self.catalogue.copy()
 
-        if consolidation is not None:
-            filtered_catalogue = filtered_catalogue[filtered_catalogue['consolidation'].isin(consolidation)].copy()
+        # Filter by consolidation if specified and if the column exists
+        if consolidation is not None and "consolidation" in filtered_catalogue.columns:
+            filtered_catalogue = filtered_catalogue[filtered_catalogue["consolidation"].isin(consolidation)].copy()
 
         if timestep is not None:
-            filtered_catalogue = filtered_catalogue[(filtered_catalogue['content_date_start'] == timestep.start)].copy()
+            # SWI catalogue dates are commonly at 12:00, while TimeStep starts
+            # are often midnight. Match by calendar date to avoid missing files.
+            target_date = pd.Timestamp(timestep.start).date()
+            filtered_catalogue = filtered_catalogue[filtered_catalogue["content_date_start"].dt.date == target_date].copy()
 
         return filtered_catalogue
 
@@ -137,7 +218,23 @@ class CDSES3Downloader(DOORDownloader):
         last_date = max(end_dates).to_pydatetime()
         #last_date = last_date.replace(hour=0, minute=0, second=0, microsecond=0)
         return last_date
+    
+    def _make_cog_filename(self, catalogue_name: str, variable: str) -> str:
+        """
+        Convert the catalogue product name into the per-variable COG filename.
+        """
 
+        base = catalogue_name.replace("_cog", "")
+
+        if self.product == "fapar":
+            return base.replace("-RT", f"-{variable}-RT") + ".tiff"
+
+        elif self.product == "swi":           
+            return base.replace("c_gls_SWI10_", f"c_gls_SWI10-{variable}_", 1) + ".tiff"
+        
+        else:
+            raise ValueError(f"No COG filename rule implemented for product: {self.product}")
+    
     def _get_data_ts(self,
                      time_step: TimeStep,
                      space_bounds: BoundingBox,
@@ -147,33 +244,74 @@ class CDSES3Downloader(DOORDownloader):
         """
         Get the data for a specific timestep.
         """
-        # filter the catalogue based on the accepted RTs
+        # Ensure consolidation is None for SWI products
+        self.log.debug(f"_get_data_ts START: product={self.product}, consolidation={self.consolidation}, timestep={time_step}")
+        
+        self.log.debug(f"_get_data_ts after check: product={self.product}, consolidation={self.consolidation}")
         filtered_catalogue = self._filter_catalogue(timestep = time_step)
+        self.log.debug(f"_get_data_ts after filter: got {len(filtered_catalogue)} matching entries")
 
         if len(filtered_catalogue) == 0:
-            msg = f"No file found for timestep {time_step} and RTs {self.consolidation}"
-            self.log.error(msg)
+            if self.product == "swi" or self.consolidation is None:
+                msg = f"No file found for timestep {time_step}"
+            else:
+                msg = f"No file found for timestep {time_step} and RTs {self.consolidation}"
+            
+            # Debug info
+            available_dates = sorted(self.catalogue['content_date_start'].unique()) if 'content_date_start' in self.catalogue.columns else []
+            self.log.error(f"{msg} [product={self.product}, consolidation={self.consolidation}, catalogue_size={len(self.catalogue)}, available_dates={available_dates[:5] if available_dates else 'none'}]")
             raise ValueError(msg)
 
         # arrange the catalogue based on the consolidation and versions (newest version first and highest consolidation first)
-        filtered_catalogue.sort_values(by=['consolidation', 'version'], ascending=[False, False], inplace=True)
+        sort_columns = []
+        ascending = []
+
+        if "consolidation" in filtered_catalogue.columns and filtered_catalogue["consolidation"].notna().any():
+            sort_columns.append("consolidation")
+            ascending.append(False)
+
+        if filtered_catalogue["version"].notna().any():
+            sort_columns.append("version")
+            ascending.append(False)
+
+        if sort_columns:
+            filtered_catalogue.sort_values(by=sort_columns,ascending=ascending,inplace=True)
 
         S3_path = filtered_catalogue.iloc[0]['s3_path']
+        this_consolidation = filtered_catalogue.iloc[0]['consolidation'] if 'consolidation' in filtered_catalogue.columns else None
         key_prefix = S3_path.replace('s3://eodata/', '')
         for variable, varoptions in self.variables.items():
-            filename = filtered_catalogue.iloc[0]['name'].replace('_cog', '.tiff').replace('-RT', f'-{variable}-RT')
-            key = f'{key_prefix}/{filename}'
+            for t in self.tvalue:
+                if t is not None:
+                    t = int(t)
+                    varname = f"{variable}{t:03d}"
+                else:
+                    varname = variable
 
-            # download the file from S3 to the temporary path
-            tmp_destination = os.path.join(tmp_path, filename)
-            self.log.info(f"Downloading file from S3: {filename}")
-            self.s3_client.download_file(self.bucket, key, tmp_destination)
+                filename = self._make_cog_filename(filtered_catalogue.iloc[0]["name"], varname)
 
-            # open the file using dask for efficient processing
-            data = rxr.open_rasterio(tmp_destination, chunks={'x': 1024, 'y': 1024})
+                key = f"{key_prefix}/{filename}"
+                tmp_destination = os.path.join(tmp_path, filename)
 
-            # crop to the bounding box
-            data = crop_to_bb(data, space_bounds)
+                self.log.info(f"Downloading file from S3: {filename}")
+                self.s3_client.download_file(self.bucket, key, tmp_destination)
 
-            # all of the metadata in the file is actually already correct...
-            yield data, {'variable': variable}
+                # open the file using dask for efficient processing
+                data = rxr.open_rasterio(tmp_destination, chunks={"x": 1024, "y": 1024})
+                data = crop_to_bb(data, space_bounds)
+
+                fill_value   = self.fill_value
+                scale_factor = varoptions.get("scale_factor", 1)
+
+                attrs = {
+                    "scale_factor": scale_factor,
+                    "fill_value": fill_value,
+                }
+                data.attrs.update(attrs)
+
+                if t is not None:
+                    data.attrs["tvalue"] = t
+                    yield data, {"variable": variable, "tvalue": t}
+                if this_consolidation is not None:
+                    data.attrs["consolidation"] = this_consolidation
+                    yield data, {"variable": variable, "consolidation": this_consolidation}

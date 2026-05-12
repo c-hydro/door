@@ -7,21 +7,22 @@
   "DATASETS": {
     "destination": {
       "type": "local",
-      "path": "output/{source}_Europe/{product}/%Y/%m/%d/{variable}",
-      "filename": "{prod_name}_{variable}_%Y%m%d.tif"
+      "path": "output/{source}_Italy/{product}/%Y/%m/%d/{variable}",
+      "filename": "{prod_name}_{variable}_%Y%m%d_{tile}.tif"
     }
   },
   "DOOR_DOWNLOADER": {
     "source": "{source}",
     "product": "{product}",
-    "bounds": [-26 ,34, 41, 71],
+    "bounds": [6.7, 36.6, 18.5, 47.2],
     "destination": "{DATASETS.destination}",
     "options": {
       "consolidation": [0,6],
       "mosaicking_order": "mostRecent",
       "variables" : ["FAPAR", "QFLAG"],
       "make_mosaic" : false,
-      "max_workers": 1
+      "max_workers": 4,
+      "tvalue" : 50
     }
   }
 }

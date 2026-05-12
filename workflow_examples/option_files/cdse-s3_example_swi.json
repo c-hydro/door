@@ -1,0 +1,24 @@
+{
+  "TAGS": {
+    "source": "CDSE-S3",
+    "product": "swi",
+    "prod_name": "CDSE-swi"
+  },
+  "DATASETS": {
+    "destination": {
+      "type": "local",
+      "path": "output/{source}/{product}/%Y/%m/%d/{variable}",
+      "filename": "{prod_name}_{variable}-{tvalue:03d}_%Y%m%d.tif"
+    }
+  },
+  "DOOR_DOWNLOADER": {
+    "source": "{source}",
+    "product": "{product}",
+    "bounds": [-180,-90,180,90],
+    "destination": "{DATASETS.destination}",
+    "options": {
+      "variables" : ["SWI", "QFLAG", "VOBS"],
+      "tvalue"   : [1,15,100]
+    }
+  }
+}
