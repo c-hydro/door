@@ -213,7 +213,9 @@ class VIIRSDownloader(VIIRSMODISDownloader):
             'provider'   : 'LPDAAC_ECS',
             'freq'       : '8-day',
             'version'    : '002',
-            'product_id' : {'SNPP':'VNP15A2H', 'JPSS1':'VJ115A2H'},
+            'product_id' : {'SNPP'  : 'VNP15A2H',
+                            'JPSS1' : 'VJ115A2H', 'NOAA20' : 'VJ115A2H',
+                            'JPSS2' : 'VJ215A2H', 'NOAA21' : 'VJ215A2H'}
         },
         'phenology': {
             'provider'   : 'LPDAAC_ECS',
@@ -225,7 +227,9 @@ class VIIRSDownloader(VIIRSMODISDownloader):
             'provider'   : 'NSIDCDAAC_ECS',
             'freq'       : 'daily',
             'version'    : '002',
-            'product_id' : {'SNPP':'VNP10A1', 'JPSS1':'VJ110A1'},
+            'product_id' : {'SNPP'  : 'VNP10A1',
+                            'JPSS1' : 'VJ110A1', 'NOAA20' : 'VJ110A1',
+                            'JPSS2' : 'VJ210A1', 'NOAA21' : 'VJ210A1'},
         }
     }
 
