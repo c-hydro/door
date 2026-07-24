@@ -7,11 +7,12 @@ import os
 import re
 import xarray as xr
 import rioxarray as rxr
+import numpy as np
 
 from .cmr_downloader import CMRDownloader
 
 from d3tools.spatial import BoundingBox, crop_to_bb
-from d3tools.timestepping.timestep import TimeStep
+from d3tools.timestepping import TimeStep
 from d3tools.errors import GDAL_ImportError
 
 class VIIRSMODISDownloader(CMRDownloader):
@@ -194,7 +195,7 @@ class VIIRSMODISDownloader(CMRDownloader):
         scale_factor = varopts.get('scale_factor', None)
 
         if valid_range is not None:
-            dataset = dataset.where((dataset >= valid_range[0]) & (dataset <= valid_range[1]), fill_value)
+            dataset.values = np.where((dataset.values >= valid_range[0]) & (dataset.values <= valid_range[1]), dataset.values, fill_value)
 
         dataset.attrs['valid_range']  = valid_range
         dataset.attrs['_FillValue']   = fill_value
@@ -282,8 +283,10 @@ class VIIRSDownloader(VIIRSMODISDownloader):
     def start(self):
         if self.satellite == 'SNPP':
             start = datetime(2012, 1, 19)
-        elif self.satellite == 'JPSS1':
+        elif self.satellite in ['JPSS1', 'NOAA20']:
             start = datetime(2018, 1, 1)
+        elif self.satellite in ['JPSS2', 'NOAA21']:
+            start = datetime(2023, 2, 10)
 
         if self.freq != 'annual':
             return start
