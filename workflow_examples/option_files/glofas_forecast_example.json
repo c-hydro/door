@@ -1,0 +1,66 @@
+{
+  "TAGS": {
+    "source": "GLOFAS_FORECAST",
+    "product": "cems-glofas-forecast",
+    "domain": "africa",
+    "version": "2.7.4",
+    "title": "DOOR - Copernicus GLOFAS forecast"
+  },
+  "DATASETS": {
+    "destination": {
+      "type": "local",
+      "path": "output/{source}/{domain}/%Y/%m/%d/0000/average/",
+      "filename": "glofas_fc_avg_time_{lead_time}.nc"
+    },
+    "ancillary": {
+      "type": "local",
+      "format": "file",
+      "path": "output/{source}/{domain}/%Y/%m/%d/0000/raw/",
+      "filename": "glofas_fc_%Y%m%d%H%M.grib"
+    }
+  },
+  "DOOR_DOWNLOADER": {
+    "source": "{source}",
+    "product": "{product}",
+    "destination": "{DATASETS.destination}",
+    "bounds": [
+      -19.95,
+      -34.95,
+      52.05,
+      40.05
+    ],
+    "options": {
+      "dataset": "{product}",
+      "time_steps": [
+        "24",
+        "48",
+        "72",
+        "96",
+        "120"
+      ],
+      "variable": "river_discharge_in_the_last_24_hours",
+      "raw_destination": "{DATASETS.ancillary}",
+      "retry_attempts": 5,
+      "retry_seconds": 180,
+      "standardize_coordinates": false,
+      "cdo_path": "cdo",
+      "grib_copy_path": "grib_copy",
+      "processing_backend": "cdo",
+      "ensemble_members": 51,
+      "system_version": "operational",
+      "hydrological_model": "lisflood",
+      "product_type": [
+        "control_forecast",
+        "ensemble_perturbed_forecasts"
+      ],
+      "force_tls12_cipher": true,
+      "tls12_cipher": "ECDHE-RSA-AES128-GCM-SHA256"
+    }
+  },
+  "workflow_name": "glofas_forecast",
+  "workflow_log": {
+    "file": "log/GLOFAS/door_glofas_{now:%Y%m%d%H%M}.log",
+    "level": "INFO",
+    "console": true
+  }
+}

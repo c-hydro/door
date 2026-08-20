@@ -1,0 +1,50 @@
+{
+  "TAGS": {
+    "source": "GFS",
+    "product": "GFS0p25",
+    "domain": "africa",
+    "version": "2.7.4",
+    "title": "DOOR - NOAA GFS forecast"
+  },
+  "DATASETS": {
+    "destination": {
+      "type": "local",
+      "path": "output/{source}/{domain}/%Y/%m/%d/",
+      "filename": "%Y%m%d%H_gfs0p25-{domain}.nc"
+    }
+  },
+  "DOOR_DOWNLOADER": {
+    "source": "{source}",
+    "product": "{product}",
+    "destination": "{DATASETS.destination}",
+    "bounds": [
+      -20,
+      -40,
+      55,
+      40
+    ],
+    "options": {
+      "frc_max_step": 120,
+      "variables": {
+        "tot_prec": "tp",
+        "t_2m": "2t",
+        "u_10m": "10u",
+        "v_10m": "10v"
+      },
+      "convert_temperature_to_c": true,
+      "aggregate_wind_components": true,
+      "decumulate_precipitation": true,
+      "download_attempts": 5,
+      "retry_seconds": 3,
+      "timeout_seconds": 240,
+      "sleep_between_requests": 0,
+      "precipitation_bucket_hours": 6
+    }
+  },
+  "workflow_name": "gfs_forecast",
+  "workflow_log": {
+    "file": "log/GFS/door_gfs_{now:%Y%m%d%H%M}.log",
+    "level": "INFO",
+    "console": true
+  }
+}

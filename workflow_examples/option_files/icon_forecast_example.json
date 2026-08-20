@@ -1,0 +1,52 @@
+{
+  "TAGS": {
+    "source": "ICON",
+    "product": "ICON0p125",
+    "domain": "africa",
+    "version": "2.7.4",
+    "title": "DOOR - DWD ICON forecast"
+  },
+  "DATASETS": {
+    "destination": {
+      "type": "local",
+      "path": "output/{source}/{domain}/%Y/%m/%d/",
+      "filename": "%Y%m%d%H_icon0p125-{domain}.nc"
+    }
+  },
+  "DOOR_DOWNLOADER": {
+    "source": "{source}",
+    "product": "{product}",
+    "destination": "{DATASETS.destination}",
+    "bounds": [
+      -20,
+      -40,
+      55,
+      40
+    ],
+    "options": {
+      "frc_max_step": 120,
+      "variables": {
+        "tot_prec": "tp",
+        "u_10m": "10u",
+        "v_10m": "10v"
+      },
+      "convert_temperature_to_c": true,
+      "aggregate_wind_components": true,
+      "decumulate_precipitation": true,
+      "decumulate_radiation": true,
+      "hourly_output": true,
+      "download_workers": 4,
+      "download_attempts": 3,
+      "retry_seconds": 5,
+      "timeout_seconds": 180,
+      "cdo_path": "cdo",
+      "cache_dir": "~/.cache/door/icon"
+    }
+  },
+  "workflow_name": "icon_forecast",
+  "workflow_log": {
+    "file": "log/ICON/door_icon_{now:%Y%m%d%H%M}.log",
+    "level": "INFO",
+    "console": true
+  }
+}
