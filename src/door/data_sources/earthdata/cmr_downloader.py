@@ -162,7 +162,7 @@ class CMRDownloader(DOORDownloader):
                         '&sort_key=start_date&sort_key=producer_granule_id'
                         '&page_size={2}'.format(self.cmr_url, self.provider, self.cmr_page_size))
 
-        product_query = self.fomat_product(self.product_id)
+        product_query = self.format_product(self.product_id)
         version_query = self.format_version(self.version)
         temporal_query = self.format_temporal(time_start, time_end)
         spatial_query = self.format_spatial(bounding_box)
@@ -213,7 +213,7 @@ class CMRDownloader(DOORDownloader):
             quit()
 
     @staticmethod
-    def fomat_product(product: str) -> str:
+    def format_product(product: str) -> str:
         """
         Formats the product name to be used in the CMR query.
         """
