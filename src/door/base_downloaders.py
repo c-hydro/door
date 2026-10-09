@@ -1,10 +1,19 @@
-from typing import Optional, Iterable, Sequence
+from typing import Optional, Iterable, Sequence, Any
+from copy import deepcopy
 import logging
 from abc import ABC, ABCMeta, abstractmethod
 import datetime as dt
 
 import tempfile
+import shutil
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 import xarray as xr
+import numpy as np
+import rasterio
+from rasterio.crs import CRS
+from rasterio.transform import Affine
 import os
 
 import paramiko
@@ -12,10 +21,20 @@ import ftplib
 import requests
 
 from .utils.io import check_download, handle_missing
+from .utils.time import HalfHourTimeStep
+from .utils.exceptions import (
+    ConfigurationError,
+    DataUnavailableError,
+    DataValidationError,
+    OperationalError,
+    ProcessingError,
+)
 
 from d3tools import spatial as sp
 from d3tools import timestepping as ts
 from d3tools.data import Dataset
+from d3tools.spatial import BoundingBox
+from d3tools.timestepping.timestep import TimeStep
 from d3tools.exit import rm_at_exit
 
 class MetaDOORDownloader(ABCMeta):
@@ -24,7 +43,11 @@ class MetaDOORDownloader(ABCMeta):
         if not hasattr(cls, 'subclasses'):
             cls.subclasses = {}
         elif 'source' in attrs:
-            cls.subclasses[attrs['source']] = cls
+            sources = [attrs['source'], *attrs.get('source_aliases', [])]
+            for source in sources:
+                cls.subclasses[source] = cls
+                if isinstance(source, str):
+                    cls.subclasses[source.lower()] = cls
 
 class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
     """
@@ -36,11 +59,10 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
 
     single_temp_folder = False
     separate_vars = False
-
     def __init__(self) -> None:
         self.log = logging.getLogger("door." + self.name)
 
-    ## CLASS METHODS FOR FACTORY
+    # Factory ---------
     @classmethod
     def from_options(cls, source: dict|str|None, *args, **kwargs) -> 'DOORDownloader':
         if isinstance(source, dict):
@@ -79,6 +101,8 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
     def get_subclass(cls, source: str):
         source = cls.get_source(source)
         Subclass: 'Dataset'|None = cls.subclasses.get(source)
+        if Subclass is None and isinstance(source, str):
+            Subclass = cls.subclasses.get(source.lower())
         if Subclass is None:
             raise ValueError(f"Invalid data source: {source}")
         return Subclass
@@ -96,6 +120,8 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         """
         if bounds is None:
             return
+        elif isinstance(bounds, sp.BoundingBox):
+            _bounds = bounds
         elif isinstance(bounds, (list, tuple)):
             _bounds = sp.BoundingBox(*bounds)
         elif isinstance(bounds, str):
@@ -103,8 +129,8 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         else:
             try:
                 _bounds = sp.BoundingBox.from_dataset(bounds)
-            except:
-                raise ValueError('Invalid bounds')
+            except Exception as error:
+                raise ValueError('Invalid bounds') from error
 
         self.bounds = _bounds
 
@@ -135,8 +161,18 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         time_range = self._check_get_data_args(time_range, space_bounds, destination, options)
 
         timesteps = self._get_timesteps(time_range)
+        if not timesteps:
+            self.log.warning(f"No valid timesteps found between {time_range.start} and {time_range.end}")
+            return
 
-        self.log.info(f"Getting data from {time_range.start:%Y-%m-%d} to {time_range.end:%Y-%m-%d} ({len(timesteps)}{timesteps[0].unit}) and space bounds {self.bounds.bbox}")
+        self.log.info(
+            " --> Download window: %s to %s (%s %s)",
+            time_range.start.strftime("%Y-%m-%d %H:%M"),
+            time_range.end.strftime("%Y-%m-%d %H:%M"),
+            len(timesteps),
+            timesteps[0].unit,
+        )
+        self.log.info(" --> Space bounds: %s", self.bounds.bbox)
 
         # sometimes it is convenient to download each variable separately, others it is better to download all the data at once
         if self.separate_vars:
@@ -184,35 +220,43 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
             with tempfile.TemporaryDirectory(ignore_cleanup_errors=True, dir=os.getenv('TMP')) as tmp_path:
                 for timestep in timesteps:
                     self._get_and_save_data_ts(timestep, tmp_path)
-                    rm_at_exit(tmp_path)
+                rm_at_exit(tmp_path)
         else:
             for timestep in timesteps:
                 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True, dir=os.getenv('TMP')) as tmp_path:
                     self._get_and_save_data_ts(timestep, tmp_path)
-                    rm_at_exit(tmp_path)
+                rm_at_exit(tmp_path)
 
     def _get_and_save_data_ts(self,
                               timestep: ts.TimeStep,
                               tmp_path: str) -> None:
         
         data_struct = self._get_data_ts(timestep, self.bounds, tmp_path)
-        if not data_struct:
-            self.log.warning(f'No data found for timestep {timestep}')
+        if data_struct is None:
+            self.log.warning(' --> No data found for timestep %s', timestep)
             return
-        for data, tags in data_struct:
-            if 'timestep' in tags:
-                timestep = tags.pop('timestep')
-            self.destination.write_data(data, timestep, **tags)
-            data.close()
+
+        data_written = False
+        for data, item_tags in data_struct:
+            data_written = True
+            tags = dict(item_tags or {})
+            write_timestep = tags.pop('timestep', timestep)
+            try:
+                self.destination.write_data(data, write_timestep, **tags)
+            finally:
+                data.close()
 
             tags_str = ', '.join(f'{k}={v}' for k, v in tags.items())
-            msg0 = f"Data for {timestep}"
-            msg2 = f" saved to {self.destination.get_key(timestep, **tags)}"
+            msg0 = f"Data for {write_timestep}"
+            msg2 = f" saved to {self.destination.get_key(write_timestep, **tags)}"
             msg1 = f" [{tags_str}]" if tags_str else ""
-            self.log.info(msg0 + msg1 + msg2)
+            self.log.info(' --> ' + msg0 + msg1 + msg2)
+
+        if not data_written:
+            self.log.warning(' --> No data found for timestep %s', timestep)
 
     @abstractmethod
-    def _get_data_ts(self, time_range: ts.TimeStep, space_bounds: sp.BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:
+    def _get_data_ts(self, time_range: ts.TimeStep, space_bounds: sp.BoundingBox, tmp_path: str) -> Iterable[tuple[xr.DataArray, dict]]:
         """
         Get data from this downloader as xr.Dataset.
         The return structure is a list of tuples, where each tuple contains the data and a dictionary of tags related to that data.
@@ -252,25 +296,39 @@ class DOORDownloader(ABC, metaclass=MetaDOORDownloader):
         else:
             raise ValueError(f'Frequency {freq} not supported')
 
+    @staticmethod
+    def _copy_option_value(value):
+        """Copy option containers while retaining built workflow objects."""
+        if hasattr(value, 'get_key'):
+            return value
+        if isinstance(value, dict):
+            return {
+                key: DOORDownloader._copy_option_value(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [DOORDownloader._copy_option_value(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(DOORDownloader._copy_option_value(item) for item in value)
+        return deepcopy(value)
+
     def check_options(self, options: Optional[dict] = None) -> dict:
-        """
-        Check options and set defaults.
-        """
+        """Validate options and merge them with independent defaults."""
+        checked = {
+            key: self._copy_option_value(value)
+            for key, value in self.default_options.items()
+        }
         if options is None:
-            return self.default_options
-        for key, value in self.default_options.items():
-            if key not in options:
-                options[key] = value
+            return checked
+        if not isinstance(options, dict):
+            raise TypeError("Downloader options must be a mapping")
 
-        keys_to_delete = []
-        for key in options:
+        for key, value in options.items():
             if key not in self.default_options:
-                logging.warning(f'Unknown option {key} will be ignored')
-                keys_to_delete.append(key)
-        for key in keys_to_delete:
-            del options[key]
-
-        return options
+                self.log.warning(f'Unknown option {key} will be ignored')
+                continue
+            checked[key] = self._copy_option_value(value)
+        return checked
 
     def set_options(self, options: dict) -> None:
         options = self.check_options(options)
@@ -515,7 +573,7 @@ class FTPDownloader(DOORDownloader):
             try:
                 self.client.stat(url)
                 return True
-            except Exception as e:
+            except Exception:
                 pass
         return False
                 
@@ -558,5 +616,527 @@ class APIDownloader(DOORDownloader):
     
     def retrieve(self, **kwargs):
         return self.client.retrieve(**kwargs)
+
+
+# Generic raster downloader ---------
+@dataclass
+class RasterPayload:
+    """In-memory raster plus metadata and the downloaded raw file, if any."""
+
+    data: np.ndarray
+    transform: Affine
+    crs: CRS | str = "EPSG:4326"
+    nodata: float | int | None = None
+    dtype: str = "float32"
+    tags: dict[str, Any] = field(default_factory=dict)
+    raw_path: str | None = None
+
+
+@dataclass(frozen=True)
+class TimestepResult:
+    timestep: TimeStep
+    status: str
+    output_path: str | None = None
+    message: str | None = None
+
+
+class RasterDownloader(DOORDownloader):
+    """Base class for independent raster products written as GeoTIFFs.
+
+    Raster files are I/O-bound and independent by timestep. This class uses
+    a thread pool, writes each output atomically, and keeps expected missing
+    products separate from download, validation, and processing failures.
+    """
+
+    name = "RasterDownloader"
+    frequency = "hourly"
+    publication_delay_minutes = 240
+
+    default_options = {
+        "variables": {"precipitation": "precipitation"},
+        "download_workers": 1,
+        "download_attempts": 4,
+        "retry_seconds": 5.0,
+        "timeout_seconds": 120,
+        "sleep_between_requests": 0.0,
+        "minimum_file_size": 200,
+        "overwrite_existing": False,
+        "validate_existing": True,
+        "fail_on_missing": False,
+        "fail_if_all_missing": True,
+        "retry_not_found": False,
+        "output_dtype": "float32",
+        "output_nodata": -9999.0,
+        "compression": "deflate",
+        "compression_level": 6,
+        "tiled": True,
+        "block_size": 256,
+        "raw_destination": None,
+    }
+
+    def check_options(self, options=None) -> dict:
+        checked = super().check_options(options)
+        try:
+            checked["download_workers"] = max(1, int(checked["download_workers"]))
+            checked["download_attempts"] = max(1, int(checked["download_attempts"]))
+            checked["retry_seconds"] = max(0.0, float(checked["retry_seconds"]))
+            checked["timeout_seconds"] = max(1, int(checked["timeout_seconds"]))
+            checked["sleep_between_requests"] = max(
+                0.0, float(checked["sleep_between_requests"])
+            )
+            checked["minimum_file_size"] = max(1, int(checked["minimum_file_size"]))
+            checked["compression_level"] = int(checked["compression_level"])
+            checked["block_size"] = max(16, int(checked["block_size"]))
+        except (TypeError, ValueError) as error:
+            raise ConfigurationError(
+                "Invalid raster download setting.", [str(error)]
+            ) from error
+
+        if checked["compression_level"] not in range(1, 10):
+            raise ConfigurationError(
+                "Invalid GeoTIFF compression level.",
+                ["compression_level must be between 1 and 9."],
+            )
+        if str(checked["output_dtype"]).lower() not in {
+            "float32",
+            "float64",
+            "int16",
+            "uint16",
+            "int32",
+            "uint32",
+        }:
+            raise ConfigurationError(
+                "Unsupported GeoTIFF output dtype.",
+                [f"Value: {checked['output_dtype']}"],
+            )
+        return checked
+
+    # Time management ---------
+    def _get_timesteps(self, time_range) -> list[TimeStep]:
+        if getattr(self, "ts_per_year", None) != 17520:
+            return super()._get_timesteps(time_range)
+
+        timestep = HalfHourTimeStep.from_date(time_range.start)
+        timesteps = []
+        while timestep.start <= time_range.end:
+            timesteps.append(timestep)
+            timestep = timestep + 1
+        return timesteps
+
+    def get_last_published_ts(self, **kwargs) -> TimeStep:
+        now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+        available = now - dt.timedelta(minutes=self.publication_delay_minutes)
+
+        if getattr(self, "ts_per_year", None) == 17520:
+            minute = 30 if available.minute >= 30 else 0
+            available = available.replace(
+                minute=minute,
+                second=0,
+                microsecond=0,
+            )
+            return HalfHourTimeStep.from_date(available)
+
+        available = available.replace(minute=0, second=0, microsecond=0)
+        return ts.Hour.from_date(available)
+
+    def get_last_ts(self, **kwargs) -> tuple[TimeStep, TimeStep | None]:
+        if getattr(self, "ts_per_year", None) != 17520:
+            return super().get_last_ts(**kwargs)
+
+        last_date = self.destination.get_last_date(**kwargs)
+        last_output = (
+            HalfHourTimeStep.from_date(last_date)
+            if last_date is not None
+            else None
+        )
+        return self.get_last_published_ts(), last_output
+
+    # Public run ---------
+    def get_data(self, time_range, space_bounds=None, destination=None, options=None):
+        checked_range = self._check_get_data_args(
+            time_range, space_bounds, destination, options
+        )
+        timesteps = self._get_timesteps(checked_range)
+        if not timesteps:
+            self.log.warning(
+                " --> No valid raster timesteps found between %s and %s",
+                checked_range.start,
+                checked_range.end,
+            )
+            return
+
+        self.log.info(
+            " --> Download window: %s to %s (%d timesteps)",
+            checked_range.start.strftime("%Y-%m-%d %H:%M"),
+            checked_range.end.strftime("%Y-%m-%d %H:%M"),
+            len(timesteps),
+        )
+        self.log.info(" --> Space bounds: %s", self.bounds.bbox)
+        self.log.info(" --> Parallel workers: %d", self.download_workers)
+
+        started = time.monotonic()
+        results: list[TimestepResult] = []
+        if self.download_workers <= 1 or len(timesteps) == 1:
+            for index, timestep in enumerate(timesteps, start=1):
+                self.log.info(
+                    " --> Timestep %d/%d: %s", index, len(timesteps), timestep
+                )
+                results.append(self._process_timestep(timestep))
+        else:
+            with ThreadPoolExecutor(
+                max_workers=min(self.download_workers, len(timesteps)),
+                thread_name_prefix=self.source.lower(),
+            ) as executor:
+                futures = {
+                    executor.submit(self._process_timestep, timestep): timestep
+                    for timestep in timesteps
+                }
+                completed = 0
+                for future in as_completed(futures):
+                    completed += 1
+                    timestep = futures[future]
+                    try:
+                        result = future.result()
+                    except OperationalError:
+                        for pending in futures:
+                            pending.cancel()
+                        raise
+                    except Exception as error:
+                        for pending in futures:
+                            pending.cancel()
+                        raise ProcessingError(
+                            "Unexpected raster timestep failure.",
+                            [f"Timestep: {timestep}", str(error)],
+                        ) from error
+                    results.append(result)
+                    self.log.info(
+                        " --> Completed %d/%d timesteps", completed, len(timesteps)
+                    )
+
+        missing = [item for item in results if item.status == "missing"]
+        written = [item for item in results if item.status == "written"]
+        skipped = [item for item in results if item.status == "skipped"]
+
+        self.log.info(
+            " --> Raster run summary: written=%d, skipped=%d, missing=%d (%.1f seconds)",
+            len(written),
+            len(skipped),
+            len(missing),
+            time.monotonic() - started,
+        )
+        for item in sorted(missing, key=lambda value: value.timestep.start):
+            self.log.warning(
+                " ---> Missing %s: %s",
+                item.timestep.start.strftime("%Y-%m-%d %H:%M"),
+                item.message or "remote product unavailable",
+            )
+
+        if missing and self.fail_on_missing:
+            raise DataUnavailableError(
+                "One or more requested raster products are unavailable.",
+                [
+                    f"Missing timesteps: {len(missing)}/{len(results)}",
+                    *[
+                        item.timestep.start.strftime("%Y-%m-%d %H:%M")
+                        for item in missing[:20]
+                    ],
+                ],
+            )
+        if missing and not written and not skipped and self.fail_if_all_missing:
+            raise DataUnavailableError(
+                "No requested raster product is available.",
+                [
+                    f"Missing timesteps: {len(missing)}",
+                    f"Window: {checked_range.start} to {checked_range.end}",
+                ],
+            )
+
+    # Per-timestep processing ---------
+    def _process_timestep(self, timestep: TimeStep) -> TimestepResult:
+        output_path = self._get_dataset_key(self.destination, timestep)
+        self._validate_output_path(output_path)
+
+        action, message = self._existing_output_policy(
+            output_path, timestep, incoming_tags=None
+        )
+        if action == "skip":
+            self.log.info(
+                " ---> %s already exists; skip%s",
+                timestep.start.strftime("%Y-%m-%d %H:%M"),
+                f" ({message})" if message else "",
+            )
+            return TimestepResult(timestep, "skipped", output_path)
+        if message == "existing GeoTIFF is invalid":
+            self.log.warning(
+                " ---> Existing GeoTIFF is invalid and will be replaced: %s",
+                output_path,
+            )
+
+        try:
+            with tempfile.TemporaryDirectory(
+                ignore_cleanup_errors=True, dir=os.getenv("TMP")
+            ) as tmp_path:
+                payload = self._download_and_prepare(timestep, self.bounds, tmp_path)
+                if payload is None:
+                    return TimestepResult(
+                        timestep, "missing", message="empty downloader result"
+                    )
+                self._validate_payload(payload, timestep)
+
+                action, message = self._existing_output_policy(
+                    output_path, timestep, incoming_tags=payload.tags
+                )
+                if action == "skip":
+                    self.log.info(
+                        " ---> %s downloaded but existing output is kept%s",
+                        timestep.start.strftime("%Y-%m-%d %H:%M"),
+                        f" ({message})" if message else "",
+                    )
+                    return TimestepResult(timestep, "skipped", output_path)
+                if os.path.isfile(output_path) and message:
+                    self.log.info(" ---> %s", message)
+
+                self._write_geotiff_atomic(payload, output_path)
+                if payload.raw_path and self.raw_destination is not None:
+                    self._preserve_raw_file(payload.raw_path, timestep)
+        except DataUnavailableError as error:
+            return TimestepResult(timestep, "missing", message=str(error))
+
+        self.log.info(
+            " ---> %s saved to %s",
+            timestep.start.strftime("%Y-%m-%d %H:%M"),
+            output_path,
+        )
+        if self.sleep_between_requests:
+            time.sleep(self.sleep_between_requests)
+        return TimestepResult(timestep, "written", output_path)
+
+    def _download_and_prepare(
+        self,
+        timestep: TimeStep,
+        space_bounds: BoundingBox,
+        tmp_path: str,
+    ) -> RasterPayload:
+        raise NotImplementedError
+
+    def _get_data_ts(self, timestep, space_bounds, tmp_path) -> Iterable:
+        """Raster downloader classes use direct atomic GeoTIFF writing in ``get_data``."""
+        raise NotImplementedError(
+            "RasterDownloader writes GeoTIFFs directly and does not use _get_data_ts."
+        )
+
+    # Retry ---------
+    def _run_with_retry(self, operation, description: str):
+        last_error: Exception | None = None
+        for attempt in range(1, self.download_attempts + 1):
+            try:
+                return operation()
+            except ConfigurationError:
+                raise
+            except DataUnavailableError as error:
+                last_error = error
+                if not self.retry_not_found or attempt == self.download_attempts:
+                    raise
+            except OperationalError as error:
+                last_error = error
+                if attempt == self.download_attempts:
+                    raise
+            except Exception as error:
+                last_error = error
+                if attempt == self.download_attempts:
+                    raise ProcessingError(
+                        "Raster operation failed.",
+                        [description, f"Attempt: {attempt}", str(error)],
+                    ) from error
+
+            wait_seconds = self.retry_seconds * attempt
+            self.log.warning(
+                " ---> %s failed (attempt %d/%d): %s",
+                description,
+                attempt,
+                self.download_attempts,
+                last_error,
+            )
+            if wait_seconds:
+                time.sleep(wait_seconds)
+
+        raise ProcessingError(
+            "Raster retry loop ended unexpectedly.", [description, str(last_error)]
+        )
+
+    # Output ---------
+    def _get_dataset_key(self, dataset, timestep: TimeStep, **tags: Any) -> str:
+        if isinstance(dataset, str):
+            context = {
+                "domain": getattr(self, "domain", "domain"),
+                "product": getattr(self, "product", "product"),
+                "source": getattr(self, "source", "source"),
+                **tags,
+            }
+            try:
+                path = dataset.format(**context)
+            except KeyError as error:
+                raise ConfigurationError(
+                    "Unable to resolve a raster output path.",
+                    [f"Missing tag: {error.args[0]}", dataset],
+                ) from error
+            path = timestep.start.strftime(path)
+            return os.path.expanduser(os.path.expandvars(path))
+        if isinstance(dataset, dict):
+            dataset = Dataset.from_options(dataset)
+        try:
+            path = dataset.get_key(timestep, **tags)
+        except (KeyError, TypeError):
+            path = dataset.get_key(
+                timestep,
+                domain=getattr(self, "domain", "domain"),
+                product=getattr(self, "product", "product"),
+                source=getattr(self, "source", "source"),
+                **tags,
+            )
+        try:
+            path = os.fspath(path)
+        except TypeError as error:
+            raise ConfigurationError(
+                "Unable to resolve a raster output path.",
+                [f"Timestep: {timestep}", f"Value: {path!r}"],
+            ) from error
+        if not isinstance(path, str) or not path:
+            raise ConfigurationError(
+                "Unable to resolve a raster output path.",
+                [f"Timestep: {timestep}"],
+            )
+        return path
+
+    @staticmethod
+    def _validate_output_path(output_path: str) -> None:
+        lowered = output_path.lower()
+        if not lowered.endswith((".tif", ".tiff")):
+            raise ConfigurationError(
+                "Raster destination must be a GeoTIFF.", [output_path]
+            )
+        if "://" in output_path:
+            raise ConfigurationError(
+                "Direct raster GeoTIFF writing currently requires a local destination.",
+                [output_path],
+            )
+
+    def _existing_output_policy(
+        self,
+        output_path: str,
+        timestep: TimeStep,
+        incoming_tags: dict[str, Any] | None = None,
+    ) -> tuple[str, str | None]:
+        """Decide whether an existing raster should be kept or replaced.
+
+        Subclasses can override this hook to implement source-specific
+        precedence rules while preserving the generic overwrite behaviour.
+        """
+        if not os.path.isfile(output_path):
+            return "write", None
+        if self.validate_existing and not self._existing_geotiff_is_valid(output_path):
+            return "write", "existing GeoTIFF is invalid"
+        if self.overwrite_existing:
+            return "write", "overwrite_existing is enabled"
+        return "skip", None
+
+    @staticmethod
+    def _existing_geotiff_is_valid(output_path: str) -> bool:
+        try:
+            with rasterio.open(output_path) as source:
+                return (
+                    source.count >= 1
+                    and source.width > 0
+                    and source.height > 0
+                    and source.crs is not None
+                    and source.transform is not None
+                )
+        except Exception:
+            return False
+
+    def _write_geotiff_atomic(self, payload: RasterPayload, output_path: str) -> None:
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        data = np.asarray(payload.data)
+        if data.ndim != 2:
+            raise DataValidationError(
+                "Satellite output raster must be two-dimensional.",
+                [f"Shape: {data.shape}"],
+            )
+
+        output_dtype = np.dtype(self.output_dtype)
+        data = data.astype(output_dtype, copy=False)
+        block_size = min(self.block_size, data.shape[0], data.shape[1])
+        # GeoTIFF tile sizes must be multiples of 16. Tiny test rasters are
+        # written striped instead of forcing an invalid tile size.
+        use_tiles = bool(self.tiled and block_size >= 16)
+        if use_tiles:
+            block_size = max(16, (block_size // 16) * 16)
+
+        temp_output = output_path + f".part-{os.getpid()}-{time.time_ns()}.tif"
+        profile = {
+            "driver": "GTiff",
+            "height": data.shape[0],
+            "width": data.shape[1],
+            "count": 1,
+            "dtype": output_dtype.name,
+            "crs": CRS.from_user_input(payload.crs),
+            "transform": payload.transform,
+            "nodata": payload.nodata,
+            "compress": self.compression,
+            "BIGTIFF": "IF_SAFER",
+            "tiled": use_tiles,
+        }
+        if str(self.compression).lower() == "deflate":
+            profile["zlevel"] = self.compression_level
+            if np.issubdtype(output_dtype, np.floating):
+                profile["predictor"] = 3
+        if use_tiles:
+            profile["blockxsize"] = block_size
+            profile["blockysize"] = block_size
+
+        try:
+            with rasterio.open(temp_output, "w", **profile) as destination:
+                destination.write(data, 1)
+                if payload.tags:
+                    destination.update_tags(
+                        **{key: str(value) for key, value in payload.tags.items()}
+                    )
+            os.replace(temp_output, output_path)
+        except Exception as error:
+            try:
+                os.remove(temp_output)
+            except OSError:
+                pass
+            raise ProcessingError(
+                "Unable to write the raster GeoTIFF.",
+                [output_path, str(error)],
+            ) from error
+
+    def _preserve_raw_file(self, raw_path: str, timestep: TimeStep) -> None:
+        if self.raw_destination is None:
+            raise ConfigurationError(
+                "Raw raster preservation is enabled but raw_destination is missing."
+            )
+        target_path = self._get_dataset_key(self.raw_destination, timestep)
+        if os.path.abspath(raw_path) == os.path.abspath(target_path):
+            return
+        os.makedirs(os.path.dirname(target_path) or ".", exist_ok=True)
+        shutil.copy2(raw_path, target_path)
+        self.log.info(" ---> Raw source saved to %s", target_path)
+
+    @staticmethod
+    def _validate_payload(payload: RasterPayload, timestep: TimeStep) -> None:
+        data = np.asarray(payload.data)
+        if data.ndim != 2 or data.size == 0:
+            raise DataValidationError(
+                "Downloaded raster is empty or malformed.",
+                [f"Timestep: {timestep}", f"Shape: {data.shape}"],
+            )
+        if not isinstance(payload.transform, Affine):
+            raise DataValidationError(
+                "Downloaded raster has no valid affine transform.",
+                [f"Timestep: {timestep}"],
+            )
+
 
 Downloader = DOORDownloader

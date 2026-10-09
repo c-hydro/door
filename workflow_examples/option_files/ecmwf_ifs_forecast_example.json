@@ -1,0 +1,72 @@
+{
+  "TAGS": {
+    "source": "ECMWF_OPEN_DATA",
+    "product": "IFS",
+    "domain": "africa",
+    "version": "2.7.4",
+    "title": "DOOR - ECMWF IFS forecast"
+  },
+  "DATASETS": {
+    "destination": {
+      "type": "local",
+      "path": "output/{source}/{product}/{domain}/%Y/%m/%d/",
+      "filename": "%Y%m%d%H%M_ecmwf0p25-{domain}.nc"
+    },
+    "ancillary": {
+      "type": "local",
+      "format": "file",
+      "path": "output/ancillary/{source}/{product}/{domain}/%Y/%m/%d/",
+      "filename": "%Y%m%d%H%M_ecmwf0p25-{domain}.grib2"
+    }
+  },
+  "DOOR_DOWNLOADER": {
+    "source": "{source}",
+    "product": "{product}",
+    "destination": "{DATASETS.destination}",
+    "bounds": [
+      -20,
+      -40,
+      55,
+      40
+    ],
+    "options": {
+      "frc_max_step": 120,
+      "variables": {
+        "tp": "tp",
+        "10u": "10u",
+        "10v": "10v",
+        "2t": "2t",
+        "2d": "2d",
+        "ssrd": "dswrf"
+      },
+      "raw_destination": "{DATASETS.ancillary}",
+      "convert_temperature_to_c": true,
+      "aggregate_wind_components": true,
+      "decumulate_precipitation": true,
+      "decumulate_radiation": true,
+      "calculate_relative_humidity": true,
+      "hourly_output": true,
+      "retry_seconds": 15,
+      "timeout_seconds": 180,
+      "providers": [
+        "ecmwf",
+        "aws",
+        "google",
+        "azure"
+      ],
+      "attempts_by_provider": {
+        "ecmwf": 1,
+        "aws": 2,
+        "google": 1,
+        "azure": 1
+      },
+      "internal_retries": 1
+    }
+  },
+  "workflow_name": "ecmwf_ifs_forecast",
+  "workflow_log": {
+    "file": "log/ECMWF/door_ecmwf_ifs_{now:%Y%m%d%H%M}.log",
+    "level": "INFO",
+    "console": true
+  }
+}

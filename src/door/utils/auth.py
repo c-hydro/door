@@ -2,9 +2,12 @@ import base64
 import logging
 import netrc
 import os
+from collections.abc import Mapping
 from typing import Optional
 from urllib.parse import urlparse
 from urllib.request import Request, build_opener, HTTPCookieProcessor, HTTPError
+
+from .exceptions import ConfigurationError
 
 def get_credentials(*, env_variables: Optional[dict] = None,
                     url: Optional[str] = None, test_url: Optional[str] = None,
@@ -61,3 +64,85 @@ def test_credentials(credentials: str, test_url: str) -> None:
     except HTTPError:
         logging.error(' ===> Incorrect username or password for {0}'.format(test_url))
         raise RuntimeError('Incorrect username or password')
+
+
+# Basic/netrc credential helpers ---------
+def _host_name(machine: str) -> str:
+    """Return the hostname component while accepting legacy URL-style netrc names."""
+    value = str(machine).strip()
+    parsed = urlparse(value if "://" in value else f"//{value}")
+    return parsed.hostname or value.removeprefix("https://").removeprefix("http://")
+
+
+def _netrc_candidates(machine: str) -> list[str]:
+    """Return compatible netrc machine names, preserving the configured value first."""
+    value = str(machine).strip()
+    host = _host_name(value)
+    candidates = [value, host, f"https://{host}", f"http://{host}"]
+    return list(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
+def credential_help(service: str, machine: str) -> list[str]:
+    """Build the common credential guidance used by configuration errors."""
+    return [
+        f"Service: {service}",
+        f"Host: {_host_name(machine)}",
+        "Provide downloader_settings.credentials.username/password or add a matching ~/.netrc entry.",
+    ]
+
+
+def authentication_error(service: str, machine: str) -> ConfigurationError:
+    """Return a consistent authentication-rejected error."""
+    return ConfigurationError(
+        f"{service} authentication was rejected.",
+        credential_help(service, machine),
+    )
+
+
+def resolve_basic_credentials(
+    settings: Mapping | None,
+    *,
+    machine: str,
+    service: str = "Satellite service",
+    required: bool = True,
+) -> tuple[str | None, str | None]:
+    """Resolve credentials from explicit values first, then ``~/.netrc``.
+
+    Environment-variable names are intentionally not part of the public
+    configuration contract. A standard host entry in ``~/.netrc`` is the
+    preferred unattended setup.
+    """
+    values = dict(settings or {})
+    username = values.get("username")
+    password = values.get("password")
+    configured_machine = str(values.get("netrc_machine") or machine)
+
+    if not username or not password:
+        try:
+            netrc_file = netrc.netrc()
+        except (FileNotFoundError, netrc.NetrcParseError, OSError):
+            netrc_file = None
+
+        if netrc_file is not None:
+            for candidate in _netrc_candidates(configured_machine):
+                credentials = netrc_file.authenticators(candidate)
+                if not credentials:
+                    continue
+                netrc_username, _, netrc_password = credentials
+                username = username or netrc_username
+                password = password or netrc_password
+                if username and password:
+                    break
+
+    if required and (not username or not password):
+        missing = []
+        if not username:
+            missing.append("username")
+        if not password:
+            missing.append("password")
+        raise ConfigurationError(
+            f"{service} credentials are not available.",
+            [f"Missing: {', '.join(missing)}", *credential_help(service, configured_machine)],
+        )
+
+    return username, password
