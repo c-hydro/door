@@ -20,7 +20,8 @@ class MERRA2Downloader(CMRDownloader):
         'tavg1_2d' : { # time-averaged (hourly), single level
             'provider'   : 'GES_DISC',
             'freq'       : 'daily', # files are daily, data is hourly
-            'version'    : '5.12.4'
+            'version'    : '5.12.4',
+            'product_id' : 'M2T1NX*' # this is the common pattern to the variables (should be sufficient to search the cmr)
         }
     }
 

@@ -128,7 +128,7 @@ class CDSES3Downloader(DOORDownloader):
             elif not isinstance(self.tvalue, list):
                 self.tvalue = [self.tvalue]
         elif self.product == "fapar":
-            if self.t_values is not None:
+            if hasattr(self, 'tvalues') and self.tvalues is not None:
                 self.log.info(f"tvalues option will be ignored for product '{self.product}'")
             self.tvalue = [None]
             if self.consolidation is None:
