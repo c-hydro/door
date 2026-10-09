@@ -217,7 +217,10 @@ class CMRDownloader(DOORDownloader):
         """
         Formats the product name to be used in the CMR query.
         """
-        return f'&short_name={product}'
+        addn = ''
+        if "*" in product:
+            addn = '&options[short_name][pattern]=true'
+        return f'&short_name={product}' + addn
     
     @staticmethod
     def format_version(version: str) -> str:
