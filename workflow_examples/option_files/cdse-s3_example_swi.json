@@ -18,7 +18,7 @@
     "destination": "{DATASETS.destination}",
     "options": {
       "variables" : ["SWI", "QFLAG", "VOBS"],
-      "tvalue"   : [1,15,100]
+      "tvalue"    : [1,15,100]
     }
   }
 }
