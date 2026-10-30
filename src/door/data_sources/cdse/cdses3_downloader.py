@@ -255,7 +255,10 @@ class CDSES3Downloader(DOORDownloader):
         self.log.debug(f"_get_data_ts START: product={self.product}, consolidation={self.consolidation}, timestep={time_step}")
         
         self.log.debug(f"_get_data_ts after check: product={self.product}, consolidation={self.consolidation}")
-        target_date = time_step.end.date()
+        if self.product == "swi":
+            target_date = time_step.start.date()
+        elif self.product == "fapar":
+            target_date = time_step.end.date()
         products = self._filter_products(self._list_products_on_date(target_date), consolidation=self.consolidation)
         self.log.debug(f"_get_data_ts after S3 listing for {target_date}: got {len(products)} matching entries")
 
@@ -299,6 +302,7 @@ class CDSES3Downloader(DOORDownloader):
                 # open the file using dask for efficient processing
                 data = rxr.open_rasterio(tmp_destination, chunks={"x": 1024, "y": 1024})
                 data = crop_to_bb(data, space_bounds)
+                data.close()
 
                 fill_value   = self.fill_value
                 scale_factor = varoptions.get("scale_factor", 1)
