@@ -1,10 +1,7 @@
 import os
-import requests
-import numpy as np
-import pandas as pd
 import xarray as xr
 import rioxarray as rxr
-from typing import Iterable
+from typing import Iterable, Iterator
 import datetime as dt
 import re
 import boto3
@@ -43,11 +40,11 @@ class CDSES3Downloader(DOORDownloader):
     available_products = {
         'fapar': {
             'product_name': ['fapar_global_300m_10daily_v2'],
-            'file_catalogue': [
-                'https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/'
-                'bio-geophysical/vegetation_properties/fapar_global_300m_10daily_v2/'
-                'fapar_global_300m_10daily_v2_cog.csv'
-            ],
+
+            's3_key_root'     : 'CLMS/bio-geophysical/vegetation_properties/fapar_global_300m_10daily_v2',
+            's3_path_pattern' : '%Y/%m/%d/c_gls_FAPAR300-RT{consolidation}_%Y%m%d0000_GLOBE_OLCI_{version}_cog',
+            's3_file_pattern' : 'c_gls_FAPAR300-{variable}-RT{consolidation}_%Y%m%d0000_GLOBE_OLCI_{version}_cog.tiff',
+
             "default_consolidation": [0,6], # RT0 and RT6 are the most commonly used consolidation levels for FAPAR, but we can include more if needed
             "frequency": "dekad",
             "data_type": "UINT8",
@@ -58,11 +55,10 @@ class CDSES3Downloader(DOORDownloader):
 
         'swi': {
             'product_name': ['swi_global_12.5km_10daily_v4'],
-            'file_catalogue': [
-                'https://s3.waw3-1.cloudferro.com/swift/v1/CatalogueCSV/'
-                'bio-geophysical/soil_water_index/swi_global_12.5km_10daily_v4/'
-                'swi_global_12.5km_10daily_v4_cog.csv'
-            ],
+            's3_key_root'     : 'CLMS/bio-geophysical/soil_water_index/swi_global_12.5km_10daily_v4',
+            's3_path_pattern' : '%Y/%m/%d/c_gls_SWI10_%Y%m%d1200_GLOBE_ASCAT_{version}_cog',
+            's3_file_pattern' : 'c_gls_SWI10-{variable}{t_value:03d}_%Y%m%d1200_GLOBE_ASCAT_{version}.tiff',
+
             "default_t-value" : [1,5,10,15,20,40,60,100], # all available t-values
             "frequency": "dekad",
             "data_type": "UINT8",
@@ -101,8 +97,6 @@ class CDSES3Downloader(DOORDownloader):
         self.set_product(product)
         self.log.debug(f"After set_product: self.product='{self.product}'")
 
-        # Initialize catalogue and S3 client for both products
-        self.catalogue = self._make_catalogue()
         self.s3_client = self._make_client()
     
     def set_options(self, options: dict) -> None:
@@ -136,23 +130,6 @@ class CDSES3Downloader(DOORDownloader):
             elif not isinstance(self.consolidation, list):
                 self.consolidation = [self.consolidation]
     
-    def _make_catalogue(self):
-        catalogues = [pd.read_csv(c, sep =';', parse_dates=['content_date_start', 'content_date_end']) for c in self.file_catalogue]
-        full_catalogue = pd.concat(catalogues, ignore_index=True).copy()
-
-        # add version to the catalogue
-        full_catalogue['version'] = full_catalogue['name'].apply(lambda name: re.search(r'[Vv]\d+\.\d+\.\d+', name).group(0) if re.search(r'[Vv]\d+\.\d+\.\d+', name) else None)
-        
-        # if the product is FAPAR, add consolidation (RT) to the catalogue
-        if self.product == "fapar":
-            full_catalogue['consolidation'] = full_catalogue['name'].apply(lambda name: int(re.search(r'RT(\d+)', name).group(1)) if re.search(r'RT\d+', name) else None)
-
-        # add 1 day to the content_date_start for SWI products to align with the actual date of the data
-        if self.product == "swi":
-            full_catalogue['content_date_start'] = full_catalogue['content_date_start'] + pd.Timedelta(days=1)
-            
-        return full_catalogue
-
     def _make_client(self):
         aws_access_key, aws_secret_key = self.get_credentials().split(':')
         s3_client = boto3.client('s3', aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key,
@@ -167,24 +144,6 @@ class CDSES3Downloader(DOORDownloader):
             msg = f"AWS credentials are invalid - must be set in the environment variables: {self.credential_env_vars['username']}, {self.credential_env_vars['password']}"
             self.log.error(msg)
             raise ValueError(msg)
-
-    def _filter_catalogue(self, timestep=None, consolidation=None):
-        if consolidation is None:
-            consolidation = self.consolidation
-
-        filtered_catalogue = self.catalogue.copy()
-
-        # Filter by consolidation if specified and if the column exists
-        if consolidation is not None and "consolidation" in filtered_catalogue.columns:
-            filtered_catalogue = filtered_catalogue[filtered_catalogue["consolidation"].isin(consolidation)].copy()
-
-        if timestep is not None:
-            # SWI catalogue dates are commonly at 12:00, while TimeStep starts
-            # are often midnight. Match by calendar date to avoid missing files.
-            target_date = pd.Timestamp(timestep.start).date()
-            filtered_catalogue = filtered_catalogue[filtered_catalogue["content_date_start"].dt.date == target_date].copy()
-
-        return filtered_catalogue
 
     def get_credentials(self) -> str:
         if not hasattr(self, 'credentials') or not isinstance(self.credentials, str):
@@ -201,24 +160,72 @@ class CDSES3Downloader(DOORDownloader):
         last_date = self.get_last_published_date(consolidation=consolidation)
         return ts.from_date(last_date)
 
+    def _list_subdirs(self, prefix: str) -> list[str]:
+        """Return the names of the folders directly under an S3 key prefix."""
+        paginator = self.s3_client.get_paginator('list_objects_v2')
+        names = []
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix, Delimiter='/'):
+            for common_prefix in page.get('CommonPrefixes', []):
+                names.append(common_prefix['Prefix'][len(prefix):].rstrip('/'))
+        return names
+
+    def _iter_dates_desc(self) -> Iterator[dt.date]:
+        """Yield every date folder (YYYY/MM/DD) under the product root, newest first."""
+        root = f"{self.s3_key_root}/"
+        for year in sorted(self._list_subdirs(root), reverse=True):
+            for month in sorted(self._list_subdirs(f"{root}{year}/"), reverse=True):
+                for day in sorted(self._list_subdirs(f"{root}{year}/{month}/"), reverse=True):
+                    yield dt.date(int(year), int(month), int(day))
+
+    def _product_folder_regex(self, date: dt.date) -> re.Pattern:
+        """Regex matching the product folder names expected on a date, capturing consolidation and version."""
+        leaf = date.strftime(self.s3_path_pattern.rsplit('/', 1)[-1])
+        regex = re.escape(leaf)
+        regex = regex.replace(re.escape('{consolidation}'), r'(?P<consolidation>\d+)')
+        regex = regex.replace(re.escape('{version}'), r'(?P<version>[Vv]\d+\.\d+\.\d+)')
+        return re.compile(regex)
+
+    def _list_products_on_date(self, date: dt.date) -> list[dict]:
+        """List the product folders available on S3 for a date, parsed into consolidation and version."""
+        regex = self._product_folder_regex(date)
+        prefix = f"{self.s3_key_root}/{date.strftime('%Y/%m/%d')}/"
+        products = []
+        for name in self._list_subdirs(prefix):
+            match = regex.fullmatch(name)
+            if match is None:
+                continue
+            groups = match.groupdict()
+            products.append({
+                'name': name,
+                'consolidation': int(groups['consolidation']) if groups.get('consolidation') else None,
+                'version': groups.get('version'),
+                'key_prefix': f"{prefix}{name}",
+            })
+        return products
+
+    @staticmethod
+    def _filter_products(products: list[dict], consolidation=None) -> list[dict]:
+        """Keep only the products whose consolidation is in the accepted list (no filter if None)."""
+        if consolidation is None:
+            return products
+        accepted = consolidation if isinstance(consolidation, list) else [consolidation]
+        return [p for p in products if p['consolidation'] in accepted]
+
     def get_last_published_date(self, consolidation = None, **kwargs) -> dt.datetime:
 
         """
-        Get the last published date for the dataset.
+        Get the last published date for the dataset, by searching the S3 date folders newest first.
         """
 
         if consolidation is None:
             consolidation = self.consolidation
 
-        # filter the catalogue based on the accepted RTs
-        filtered_catalogue = self._filter_catalogue(consolidation = consolidation)
+        for date in self._iter_dates_desc():
+            if self._filter_products(self._list_products_on_date(date), consolidation):
+                return dt.datetime.combine(date, dt.time())
 
-        # get the biggest end date (convert to a datetime.date)
-        end_dates = filtered_catalogue['content_date_end'].tolist()
-        last_date = max(end_dates).to_pydatetime()
-        #last_date = last_date.replace(hour=0, minute=0, second=0, microsecond=0)
-        return last_date
-    
+        raise ValueError(f"No products found on S3 for product '{self.product}' and consolidation {consolidation}")
+
     def _make_cog_filename(self, catalogue_name: str, variable: str) -> str:
         """
         Convert the catalogue product name into the per-variable COG filename.
@@ -248,38 +255,31 @@ class CDSES3Downloader(DOORDownloader):
         self.log.debug(f"_get_data_ts START: product={self.product}, consolidation={self.consolidation}, timestep={time_step}")
         
         self.log.debug(f"_get_data_ts after check: product={self.product}, consolidation={self.consolidation}")
-        filtered_catalogue = self._filter_catalogue(timestep = time_step)
-        self.log.debug(f"_get_data_ts after filter: got {len(filtered_catalogue)} matching entries")
+        target_date = time_step.end.date()
+        products = self._filter_products(self._list_products_on_date(target_date), consolidation=self.consolidation)
+        self.log.debug(f"_get_data_ts after S3 listing for {target_date}: got {len(products)} matching entries")
 
-        if len(filtered_catalogue) == 0:
+        if len(products) == 0:
             if self.product == "swi" or self.consolidation is None:
                 msg = f"No file found for timestep {time_step}"
             else:
                 msg = f"No file found for timestep {time_step} and RTs {self.consolidation}"
-            
-            # Debug info
-            available_dates = sorted(self.catalogue['content_date_start'].unique()) if 'content_date_start' in self.catalogue.columns else []
-            self.log.error(f"{msg} [product={self.product}, consolidation={self.consolidation}, catalogue_size={len(self.catalogue)}, available_dates={available_dates[:5] if available_dates else 'none'}]")
+
+            self.log.error(f"{msg} [product={self.product}, consolidation={self.consolidation}, s3_root={self.s3_key_root}, date={target_date}]")
             raise ValueError(msg)
 
-        # arrange the catalogue based on the consolidation and versions (newest version first and highest consolidation first)
-        sort_columns = []
-        ascending = []
+        # newest version first, then highest consolidation first
+        products.sort(
+            key=lambda p: (
+                p['consolidation'] if p['consolidation'] is not None else -1,
+                tuple(map(int, re.findall(r'\d+', p['version'] or ''))),
+            ),
+            reverse=True,
+        )
 
-        if "consolidation" in filtered_catalogue.columns and filtered_catalogue["consolidation"].notna().any():
-            sort_columns.append("consolidation")
-            ascending.append(False)
-
-        if filtered_catalogue["version"].notna().any():
-            sort_columns.append("version")
-            ascending.append(False)
-
-        if sort_columns:
-            filtered_catalogue.sort_values(by=sort_columns,ascending=ascending,inplace=True)
-
-        S3_path = filtered_catalogue.iloc[0]['s3_path']
-        this_consolidation = filtered_catalogue.iloc[0]['consolidation'] if 'consolidation' in filtered_catalogue.columns else None
-        key_prefix = S3_path.replace('s3://eodata/', '')
+        product = products[0]
+        this_consolidation = product['consolidation']
+        key_prefix = product['key_prefix']
         for variable, varoptions in self.variables.items():
             for t in self.tvalue:
                 if t is not None:
@@ -288,7 +288,7 @@ class CDSES3Downloader(DOORDownloader):
                 else:
                     varname = variable
 
-                filename = self._make_cog_filename(filtered_catalogue.iloc[0]["name"], varname)
+                filename = self._make_cog_filename(product["name"], varname)
 
                 key = f"{key_prefix}/{filename}"
                 tmp_destination = os.path.join(tmp_path, filename)
