@@ -26,8 +26,8 @@ class CHIRPSDownloader(FTPDownloader):
     host = 'ftp.chc.ucsb.edu'
     auth = ('anonymous', '')
 
-    homev2 = "/pub/org/chc/products/CHIRPS-2.0/"
-    homev3 = "/pub/org/chc/products/CHIRPS/v3.0/"
+    homev2 = "/products/CHIRPS/v2.0/"
+    homev3 = "/products/CHIRPS/v3.0/"
     
     available_products: dict = {
         "CHIRPSp25-daily": {
