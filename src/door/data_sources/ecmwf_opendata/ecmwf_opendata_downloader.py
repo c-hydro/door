@@ -30,7 +30,6 @@ from ...utils.forecast import (
     interpolate_hourly,
     relative_humidity_from_dewpoint,
     remove_file_family,
-    standardize_lat_lon,
     validate_dataset,
     validate_file,
 )
@@ -41,7 +40,16 @@ _ORIGINAL_MULTIURL_ROBUST = multiurl_robust
 
 
 class ECMWFOpenDataDownloader(ForecastDownloader):
-    """Download one IFS or AIFS issue from the ECMWF Open Data service."""
+    """Download one IFS or AIFS issue from the ECMWF Open Data service.
+
+    IFS (including the legacy IFS-HRES alias) and AIFS retain their 0.25 degree
+    grids. HIRES0p1 selects IFS at 0.1 degrees, published two hours later.
+    Spatial cropping is local: Open Data only subsets complete GRIB fields.
+
+    ``variables`` maps remote fields to names used during processing.
+    ``output_variables`` optionally selects and renames the processed fields,
+    including derived humidity and wind; by default all fields are retained.
+    """
 
     source = "ECMWF_OPEN_DATA"
     source_aliases = ["ecmwf-opendata", "ECMWF", "IFS", "AIFS"]
@@ -52,6 +60,7 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
     default_options = {
         "frc_max_step": 144,
         "variables": ["tp", "10u", "10v", "2t", "2d", "ssrd"],
+        "output_variables": None,
         "providers": ["ecmwf", "aws", "google", "azure"],
         "attempts_by_provider": {"ecmwf": 1, "aws": 2, "google": 1, "azure": 1},
         "retry_seconds": 15.0,
@@ -69,6 +78,17 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
     available_products = {
         "IFS": {
             "model": "ifs",
+            "resolution": "0p25",
+            "publication_delay_hours": 8,
+            "model_frequency_hours": 3,
+            "rain_factor": 1000.0,
+            "max_main_step": 144,
+            "max_intermediate_step": 90,
+        },
+        "HIRES0P1": {
+            "model": "ifs",
+            "resolution": "0p1",
+            "publication_delay_hours": 10,
             "model_frequency_hours": 3,
             "rain_factor": 1000.0,
             "max_main_step": 144,
@@ -76,6 +96,8 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
         },
         "AIFS": {
             "model": "aifs-single",
+            "resolution": "0p25",
+            "publication_delay_hours": 8,
             "model_frequency_hours": 6,
             "rain_factor": 1.0,
             "max_main_step": 144,
@@ -83,6 +105,8 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
         },
         "AIFS-SINGLE": {
             "model": "aifs-single",
+            "resolution": "0p25",
+            "publication_delay_hours": 8,
             "model_frequency_hours": 6,
             "rain_factor": 1.0,
             "max_main_step": 144,
@@ -96,6 +120,7 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
         "2t": "t2m",
         "2d": "d2m",
     }
+    _surface_variables = frozenset(default_options["variables"])
 
     def __init__(self, product: str = "IFS") -> None:
         super().__init__()
@@ -138,6 +163,19 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
 
     def check_options(self, options: dict | None = None) -> dict:
         checked = super().check_options(options)
+        output_variables = checked["output_variables"]
+        if output_variables is not None:
+            if not isinstance(output_variables, dict) or not output_variables:
+                raise ConfigurationError("output_variables must be a non-empty source-to-output name mapping.")
+            if any(
+                not isinstance(name, str) or not name.strip()
+                for pair in output_variables.items()
+                for name in pair
+            ):
+                raise ConfigurationError("output_variables names must be non-empty strings.")
+            names = list(output_variables.values())
+            if len(set(names)) != len(names) or set(names) & {"time", "lat", "lon"}:
+                raise ConfigurationError("output_variables names must be unique and must not replace coordinates.")
         try:
             checked["frc_max_step"] = max(1, int(checked["frc_max_step"]))
             checked["internal_retries"] = max(1, int(checked["internal_retries"]))
@@ -220,18 +258,20 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
                     client = Client(
                         source=provider,
                         model=self.model,
-                        resol="0p25",
+                        resol=self.resolution,
                         preserve_request_order=False,
                         infer_stream_keyword=True,
                     )
-                    client.retrieve(
-                        type="fc",
-                        date=issue_time.strftime("%Y%m%d"),
-                        time=issue_time.hour,
-                        step=steps,
-                        param=list(self.variable_map),
-                        target=destination,
-                    )
+                    request = {
+                        "type": "fc",
+                        "date": issue_time.strftime("%Y%m%d"),
+                        "time": issue_time.hour,
+                        "step": steps,
+                        "param": list(self.variable_map),
+                    }
+                    if self.resolution == "0p1" and self._surface_variables.issuperset(self.variable_map):
+                        request["levtype"] = "sfc"
+                    client.retrieve(**request, target=destination)
                     validate_file(destination, min_size=1000)
                     with open(destination, "rb") as stream:
                         if stream.read(4) != b"GRIB":
@@ -253,12 +293,18 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
             "ECMWF forecast is unavailable from all configured providers.",
             [
                 f"Model: {self.model}",
+                f"Resolution: {self.resolution}",
                 f"Run: {issue_time:%Y-%m-%d %H:%M UTC}",
                 *provider_errors[-8:],
             ],
         )
 
-    def _open_grib(self, grib_path: str, issue_time: dt.datetime) -> xr.Dataset:
+    def _open_grib(
+        self,
+        grib_path: str,
+        issue_time: dt.datetime,
+        space_bounds: BoundingBox | None = None,
+    ) -> xr.Dataset:
         datasets = cfgrib.open_datasets(
             grib_path,
             backend_kwargs={"indexpath": ""},
@@ -267,6 +313,9 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
         try:
             for dataset in datasets:
                 dataset = assign_valid_time(dataset, issue_time)
+                if space_bounds is not None:
+                    # Keep only the regional cube in memory, not all global steps.
+                    dataset = crop_to_bounds(dataset, space_bounds)
                 loaded.append(dataset.load())
         finally:
             for dataset in datasets:
@@ -387,6 +436,15 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
 
             data = xr.merge(parts, compat="override", join="exact")
 
+        if self.output_variables is not None:
+            missing = set(self.output_variables) - set(data.data_vars)
+            if missing:
+                raise DataValidationError(
+                    "Requested output variables are missing from the processed ECMWF forecast.",
+                    [f"Missing: {sorted(missing)}", f"Available: {list(data.data_vars)}"],
+                )
+            data = data[list(self.output_variables)].rename(self.output_variables)
+
         return validate_dataset(drop_grib_coordinates(data))
 
     def _download_run(
@@ -407,8 +465,9 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
         max_step = self._effective_max_step(issue_time)
         steps = list(range(self.model_frequency_hours, max_step + 1, self.model_frequency_hours))
         self.log.info(
-            " ---> ECMWF request: model=%s, %s variables, %s forecast steps",
+            " ---> ECMWF request: model=%s, resolution=%s, %s variables, %s forecast steps",
             self.model,
+            self.resolution,
             len(self.variable_map),
             len(steps),
         )
@@ -430,11 +489,9 @@ class ECMWFOpenDataDownloader(ForecastDownloader):
             self.log.info(" ----> Raw ECMWF GRIB saved to %s", raw_path)
         self.log.info(" ---> Download ECMWF forecast from configured providers...DONE")
         self.log.info(" ---> Decode and merge ECMWF GRIB fields...")
-        data = self._open_grib(grib_path, issue_time)
+        data = self._open_grib(grib_path, issue_time, space_bounds)
         self.log.info(" ---> Decode and merge ECMWF GRIB fields...DONE")
         self.log.info(" ---> Postprocess ECMWF variables...")
-        data = standardize_lat_lon(data)
-        data = crop_to_bounds(data, space_bounds)
         data = self._postprocess(data, issue_time, max_step)
         self.log.info(" ---> Postprocess ECMWF variables...DONE")
         return data
