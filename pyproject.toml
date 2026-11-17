@@ -26,13 +26,14 @@ classifiers = [
 ]
 
 # mandatory dependencies for basic functionality
-# Note: d3tools uses version pinning for compatibility
-# For development: uv pip install -e ../d3tools
-# For production: d3tools will be resolved from git+https://github.com/c-hydro/d3tools@main
+# Pin the verified fix/raster-netcdf commit: version 2.4.0 alone does not
+# guarantee Dataset-aware NetCDF writing and template alignment.
+# RemoteDataset is imported by d3tools, so its remote dependencies are required.
 dependencies = [
-    "d3tools>=2.3.0,<3.0.0",
+    "d3tools[remote-data]@git+https://github.com/c-hydro/d3tools@34ecf5816e1286c4c10de1921a1a265b92f4ba13",
     "numpy~=2.3.5",
     "rioxarray~=0.20.0",
+    "rasterio~=1.4",
     "xarray~=2025.11.0",
     "requests~=2.32.5",
     "cfgrib~=0.9.15.0",
@@ -42,10 +43,12 @@ dependencies = [
     "h5py~=3.15.1",             #only for viirs_downloader
     "pyhdf~=0.11.6",            #only for modis_downloader
     "cdsapi~=0.7.7",            #only for cds_downloader
-    "ecmwf-opendata~=0.3.24",   #only for ecmwf_opendata_downloader
+    "ecmwf-opendata~=0.3.35",   #0.1 degree and split surface/pressure-level files
+    "multiurl",            #explicitly used to bound ECMWF Open Data retries
     "aiohttp~=3.13.3",
     "pydap~=3.5.9",
     "paramiko~=4.0.0",
+    "pg8000~=1.31.5", # pure-Python PostgreSQL client for FANFAR
     "dask~=2025.11.0"
 ]
 

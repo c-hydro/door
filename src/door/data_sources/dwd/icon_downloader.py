@@ -1,177 +1,426 @@
-import os
-from typing import Optional, Iterable
-import tempfile
-import numpy as np
-import datetime as dt
-import xarray as xr
-import requests
-import subprocess
+"""DWD ICON global forecast downloader."""
 
-from ...base_downloaders import URLDownloader
-from ...utils.io import untar_file, decompress_bz2
-from ...utils.netcdf import save_netcdf
+from __future__ import annotations
+
+import bz2
+import datetime as dt
+import os
+import shutil
+import subprocess
+import tarfile
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
+
+import numpy as np
+import xarray as xr
 
 from d3tools.spatial import BoundingBox
-from d3tools import timestepping as ts
-from d3tools.timestepping.timestep import TimeStep
 
-class ICONDownloader(URLDownloader):
-    
+from ...base_forecast_downloader import ForecastDownloader
+from ...utils.forecast import (
+    crop_to_bounds,
+    deaverage_to_interval_rate,
+    decumulate_to_hourly_rate,
+    drop_grib_coordinates,
+    interpolate_hourly,
+    robust_http_download,
+    standardize_lat_lon,
+    validate_dataset,
+)
+from ...utils.exceptions import (
+    ConfigurationError,
+    DataValidationError,
+    DownloadError,
+    ExternalToolError,
+    ForecastUnavailableError,
+)
+
+
+class ICONDownloader(ForecastDownloader):
+    """Download ICON global 0.125 degree deterministic forecasts from DWD."""
+
     source = "ICON"
+    source_aliases = ["DWD_ICON", "ICON0p125"]
     name = "ICON_downloader"
-    
+    supports_ancillary = False
+    issue_hours = [0, 6, 12, 18]
+    publication_delay_hours = 6
+
     default_options = {
-        'frc_max_step': 180,
-        'variables': ["tp", "t_2m"],
-        'cdo_path': "/usr/bin/"
+        "frc_max_step": 180,
+        "variables": {"tot_prec": "tp", "u_10m": "10u", "v_10m": "10v"},
+        "cdo_path": "cdo",
+        "cache_dir": os.path.expanduser("~/.cache/door/icon"),
+        "download_workers": 1,
+        "download_attempts": 3,
+        "retry_seconds": 3.0,
+        "timeout_seconds": 180.0,
+        "convert_temperature_to_c": True,
+        "aggregate_wind_components": True,
+        "decumulate_precipitation": True,
+        "decumulate_radiation": True,
+        "hourly_output": True,
     }
 
-    def __init__(self, product: str) -> None:
-        self.cdo_path = None
-        self.working_path = None
-        self.product = product
-        if self.product == "ICON0p125":
-            url_blank = "https://opendata.dwd.de/weather/nwp/icon/grib/{run_time:%H}/{var}/icon_global_icosahedral_single-level_{run_time:%Y%m%d%H}_{step}_{VAR}.grib2.bz2"
-            self.ancillary_remote_path = "https://opendata.dwd.de/weather/lib/cdo/"
-            self.ancillary_remote_file = "ICON_GLOBAL2WORLD_0125_EASY.tar.bz2"
-            self.grid_file = "target_grid_world_0125.txt"
-            self.weight_file = "weights_icogl2world_0125.nc"
-            self.issue_hours = [0, 6, 12, 18]
-            self.frc_dims = {"time": "valid_time", "lat": "latitude", "lon": "longitude"}
+    available_products = {
+        "ICON0P125": {
+            "url_template": (
+                "https://opendata.dwd.de/weather/nwp/icon/grib/{hour:02d}/{variable}/"
+                "icon_global_icosahedral_single-level_{date}{hour:02d}_{step:03d}_{variable_upper}.grib2.bz2"
+            ),
+            "ancillary_url": "https://opendata.dwd.de/weather/lib/cdo/ICON_GLOBAL2WORLD_0125_EASY.tar.bz2",
+            "grid_relative_path": "ICON_GLOBAL2WORLD_0125_EASY/target_grid_world_0125.txt",
+            "weights_relative_path": "ICON_GLOBAL2WORLD_0125_EASY/weights_icogl2world_0125.nc",
+        }
+    }
+
+    variable_aliases = {
+        "tp": "tot_prec",
+        "tot_prec": "tot_prec",
+        "2t": "t_2m",
+        "t2m": "t_2m",
+        "t_2m": "t_2m",
+        "10u": "u_10m",
+        "u10": "u_10m",
+        "u_10m": "u_10m",
+        "10v": "v_10m",
+        "v10": "v_10m",
+        "v_10m": "v_10m",
+        "rh": "relhum_2m",
+        "2r": "relhum_2m",
+        "relhum_2m": "relhum_2m",
+        "dswrf": "aswdir_s",
+        "aswdir_s": "aswdir_s",
+    }
+
+    default_output_names = {
+        "tot_prec": "tp",
+        "t_2m": "2t",
+        "u_10m": "10u",
+        "v_10m": "10v",
+        "relhum_2m": "2r",
+        "aswdir_s": "dswrf",
+    }
+
+    def __init__(self, product: str = "ICON0p125") -> None:
+        super().__init__()
+        self.set_product(product)
+
+    def set_product(self, product: str) -> None:
+        key = product.upper()
+        if key not in self.available_products:
+            raise ConfigurationError(
+                "Unsupported ICON product.",
+                [f"Value: {product}", f"Available: {sorted(self.available_products)}"],
+            )
+        self.product = key
+        for name, value in self.available_products[key].items():
+            setattr(self, name, value)
+
+    def set_variables(self, variables: dict[str, str] | list[str] | str | None) -> None:
+        if variables is None:
+            variables = deepcopy(self.default_options["variables"])
+        if isinstance(variables, str):
+            variables = [variables]
+
+        variable_map: dict[str, str] = {}
+        if isinstance(variables, dict):
+            for remote, output in variables.items():
+                if str(remote).startswith("__"):
+                    continue
+                remote_name = self.variable_aliases.get(str(remote), str(remote))
+                variable_map[remote_name] = str(output)
+        elif isinstance(variables, (list, tuple)):
+            for variable in variables:
+                remote_name = self.variable_aliases.get(str(variable), str(variable))
+                variable_map[remote_name] = self.default_output_names.get(
+                    remote_name, str(variable)
+                )
         else:
-            url_blank = None
-        
-        super().__init__(url_blank, protocol = 'http')
-        if url_blank is None:
-            self.log.error(" --> ERROR! Only ICON0p125 has been implemented until now!")
-            raise NotImplementedError()
+            raise ConfigurationError(
+                "Invalid ICON variables configuration.",
+                ["Expected a mapping, list or string."],
+            )
 
-        self.frc_steps = None
-        self.frc_time_range = None
+        if not variable_map:
+            raise ConfigurationError("No ICON variables are configured.")
+        self.variable_map = variable_map
+        self.variables = variable_map
 
-    def check_options(self, options: dict) -> dict:
-        super().check_options(options)
+    def check_options(self, options: dict | None = None) -> dict:
+        checked = super().check_options(options)
+        try:
+            checked["frc_max_step"] = min(180, max(1, int(checked["frc_max_step"])))
+            checked["download_workers"] = max(1, int(checked["download_workers"]))
+        except (TypeError, ValueError) as error:
+            raise ConfigurationError(
+                "Invalid ICON downloader setting.", [str(error)]
+            ) from error
+        return checked
 
-        # also check that we are not asking for too many forecast steps
-        if options['frc_max_step'] > 180:
-            self.log.warning("WARNING! ICON only has 180 forecast steps available, setting max_steps to 180")
-            options['frc_max_step'] = 180
-        
-        return options
+    @staticmethod
+    def _resolve_executable(path: str, executable: str) -> str:
+        if os.path.isdir(path):
+            return os.path.join(path, executable)
+        return path
 
-    def _get_data_ts(self, time_range: TimeStep, space_bounds: BoundingBox) -> Iterable[tuple[xr.DataArray, dict]]:
-        pass
+    def _forecast_steps(self) -> list[int]:
+        if self.frc_max_step <= 77:
+            return list(range(1, self.frc_max_step + 1))
+        return list(range(1, 78)) + list(range(78, self.frc_max_step + 1, 3))
 
-    def get_data(self,
-                 time_range: ts.TimeRange,
-                 space_bounds: BoundingBox,
-                 destination: str,
-                 options: Optional[dict] = None) -> None:
+    def _prepare_remapping_files(self) -> tuple[str, str]:
+        cache_dir = os.path.expanduser(self.cache_dir)
+        grid_file = os.path.join(cache_dir, self.grid_relative_path)
+        weights_file = os.path.join(cache_dir, self.weights_relative_path)
+        if os.path.isfile(grid_file) and os.path.isfile(weights_file):
+            return grid_file, weights_file
 
-        # Check options
-        options = self.check_options(options)
-        self.cdo_path = options['cdo_path']
+        os.makedirs(cache_dir, exist_ok=True)
+        archive = os.path.join(cache_dir, "ICON_GLOBAL2WORLD_0125_EASY.tar.bz2")
+        self.log.info("Downloading ICON remapping tables")
+        robust_http_download(
+            self.ancillary_url,
+            archive,
+            attempts=self.download_attempts,
+            retry_seconds=self.retry_seconds,
+            timeout_seconds=self.timeout_seconds,
+            min_size=1000,
+        )
+        with tarfile.open(archive, "r:bz2") as tar:
+            root = os.path.realpath(cache_dir)
+            for member in tar.getmembers():
+                target = os.path.realpath(os.path.join(cache_dir, member.name))
+                if not target.startswith(root + os.sep):
+                    raise DataValidationError(
+                        "Unsafe path found in the ICON ancillary archive.",
+                        [member.name],
+                    )
+            tar.extractall(cache_dir)
+        os.remove(archive)
 
-        self.log.info(f'------------------------------------------')
-        self.log.info(f'Starting download of {self.product} data')
-        self.log.info(f'Data requested between {time_range.start:%Y-%m-%d %H:%M} and {time_range.end:%Y-%m-%d %H:%m}')
-        self.log.info(f'Bounding box: {space_bounds.bbox}')
-        self.log.info(f'------------------------------------------')
+        if not os.path.isfile(grid_file) or not os.path.isfile(weights_file):
+            raise DataValidationError(
+                "ICON remapping files were not found after extraction.",
+                [grid_file, weights_file],
+            )
+        return grid_file, weights_file
 
-        # Get the timesteps to download
-        timesteps = time_range.get_timesteps_from_issue_hour(self.issue_hours)
+    def _download_and_remap(
+        self,
+        issue_time: dt.datetime,
+        variable: str,
+        step: int,
+        tmp_path: str,
+        grid_file: str,
+        weights_file: str,
+    ) -> str:
+        url = self.url_template.format(
+            hour=issue_time.hour,
+            date=issue_time.strftime("%Y%m%d"),
+            variable=variable,
+            variable_upper=variable.upper(),
+            step=step,
+        )
+        variable_dir = os.path.join(tmp_path, variable)
+        os.makedirs(variable_dir, exist_ok=True)
+        compressed = os.path.join(variable_dir, f"frc_{step:03d}.grib2.bz2")
+        source_grib = compressed[:-4]
+        remapped = os.path.join(variable_dir, f"regr_frc_{step:03d}.grib2")
 
-        # Do all of this inside a temporary folder
-        tmpdirs = os.path.join(os.getenv('HOME'), 'tmp')
-        os.makedirs(tmpdirs, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir = tmpdirs) as tmp_path:
+        robust_http_download(
+            url,
+            compressed,
+            attempts=self.download_attempts,
+            retry_seconds=self.retry_seconds,
+            timeout_seconds=self.timeout_seconds,
+            min_size=200,
+        )
+        with bz2.open(compressed, "rb") as source, open(source_grib, "wb") as target:
+            shutil.copyfileobj(source, target)
+        os.remove(compressed)
 
-            self.working_path = tmp_path
+        cdo = self._resolve_executable(self.cdo_path, "cdo")
+        if shutil.which(cdo) is None and not os.path.isfile(cdo):
+            raise ExternalToolError(
+                "CDO executable was not found.", [f"Executable: {cdo}"]
+            )
+        command = [
+            cdo,
+            "-O",
+            f"remap,{grid_file},{weights_file}",
+            source_grib,
+            remapped,
+        ]
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        except subprocess.CalledProcessError as error:
+            raise DownloadError(
+                "ICON remapping with CDO failed.",
+                [f"Variable: {variable}", f"Step: {step}", error.stdout[-1000:]],
+            ) from error
+        finally:
+            if os.path.isfile(source_grib):
+                os.remove(source_grib)
+        return remapped
 
-            # Download preliminary files for file conversion if not available
-            if not os.path.isfile(os.path.join(tmp_path, self.grid_file)) or not os.path.isfile(os.path.join(tmp_path, self.weight_file)):
-                r = requests.get(self.ancillary_remote_path + self.ancillary_remote_file)
-                with open(os.path.join(tmp_path, "binary_grids.tar.bz2"), 'wb') as f:
-                    f.write(r.content)
-                untar_file(os.path.join(tmp_path, "binary_grids.tar.bz2"), move_to_root=True)
-                self.log.info("Binary decodification table downloaded and extracted")
+    def _open_variable(
+        self,
+        files: list[str],
+        issue_time: dt.datetime,
+        steps: list[int],
+        output_name: str,
+    ) -> xr.DataArray:
+        arrays: list[xr.DataArray] = []
+        for path, step in zip(files, steps):
+            with xr.open_dataset(
+                path,
+                engine="cfgrib",
+                backend_kwargs={"indexpath": ""},
+            ) as dataset:
+                names = list(dataset.data_vars)
+                if len(names) != 1:
+                    raise DataValidationError(
+                        "Unexpected ICON GRIB content.",
+                        [f"File: {path}", f"Variables: {names}"],
+                    )
+                array = dataset[names[0]].squeeze(drop=True)
+                for coord in ["time", "step", "valid_time", "surface", "heightAboveGround"]:
+                    if coord in array.coords and coord not in array.dims:
+                        array = array.reset_coords(coord, drop=True)
+                array = standardize_lat_lon(array)
+                valid_time = issue_time + dt.timedelta(hours=step)
+                arrays.append(array.expand_dims(time=[valid_time]).load())
+        output = xr.concat(arrays, dim="time")
+        output.name = output_name
+        return output
 
-            self.log.info(f'Found {len(timesteps)} model issues to download.')
-            # Download the data for the specified issue times
-            for i, timestep in enumerate(timesteps):
-                run_time = timestep.start
-                self.log.info(f' - Model issue {i+1}/{len(timesteps)}: {run_time:%Y-%m-%d_%H}')
-                # Set forecast steps
-                self.frc_time_range, self.frc_steps = self.compute_model_steps(run_time, options['frc_max_step'])
+    def _postprocess(self, data: xr.Dataset, issue_time: dt.datetime) -> xr.Dataset:
+        inverse = {remote: output for remote, output in self.variable_map.items()}
 
-                variables = options['variables']
-                for var_out in variables:
-                    self.log.info(f'  - Variable {var_out}: {i+1}/{len(variables)}')
+        if "tot_prec" in inverse and self.decumulate_precipitation:
+            name = inverse["tot_prec"]
+            data[name] = decumulate_to_hourly_rate(data[name], issue_time)
+            data[name].attrs["units"] = "mm h-1"
 
-                    temp_files = []
-                    for step in self.frc_steps:
-                        self.log.debug(f' ----> Downloading {var_out} data for +{step}h')
-     
-                        tmp_filename = f'temp_frc{self.product}_{run_time:%Y%m%d%H}_{step}_{var_out}.grib2.bz2'
-                        tmp_destination = os.path.join(tmp_path, var_out, tmp_filename)
-                        success = self.download(tmp_destination, min_size=200, missing_action='warn', run_time=run_time,
-                                                step=str(step).zfill(3), VAR=var_out.upper(), var=var_out)
-                        if success:
-                            breakpoint()
-                            temp_files.append(self.project_bin_file(tmp_destination))
-                            self.log.debug(f'  ---> SUCCESS! Downloaded {var_out} data for +{step}h')
-                        else:
-                            self.log.error(f'  ---> ERROR! {var_out} for forecast step {step}h not available, skipping this variable!')
-                            break
-                    
-                    if len(temp_files) > 0:
-                        self.log.debug(f' ----> Merging {var_out} data')
-                        with xr.open_mfdataset(temp_files, concat_dim='valid_time', data_vars='minimal',
-                                               combine='nested', coords='minimal',
-                                               compat='override', engine="cfgrib") as ds:
-                            var_names = [vars for vars in ds.data_vars.variables.mapping]
-                            if len(var_names) > 1:
-                                self.log.error("ERROR! Only one variable should be in the grib file, check file integrity!")
-                                raise TypeError
-                            else:
-                                ds = self.postprocess_forecast(ds[var_names[0]], space_bounds)
+        if "t_2m" in inverse and self.convert_temperature_to_c:
+            name = inverse["t_2m"]
+            data[name] = data[name] - 273.15
+            data[name].attrs.update(
+                long_name="2 metre temperature",
+                units="C",
+                standard_name="air_temperature",
+            )
 
-                        if not 'frc_out' in locals():
-                            frc_out = xr.Dataset({var_out: ds})
-                        else:
-                            frc_out[var_out] = ds
+        if (
+            "u_10m" in inverse
+            and "v_10m" in inverse
+            and self.aggregate_wind_components
+        ):
+            data["10wind"] = np.sqrt(
+                data[inverse["u_10m"]] ** 2 + data[inverse["v_10m"]] ** 2
+            )
+            data["10wind"].attrs.update(
+                long_name="10 m wind",
+                units="m s-1",
+                standard_name="wind_speed",
+            )
 
-                        out_name = run_time.strftime(destination)
-                        save_netcdf(frc_out, out_name)
-                        self.log.info(f'  -> SUCCESS! Data for {var_out} ({len(temp_files)} forecast steps) dowloaded and cropped to bounds.')
-        self.log.info(f'------------------------------------------')
-    
-    def compute_model_steps(self, time_run: dt.datetime, max_steps: int) -> tuple[list[dt.datetime], list[int]]:
-        """
-        extracts from a .gz file
-        """
-        max_step = max_steps + 1
-        if max_step > 181:
-            self.log.error(" ERROR! Only the first 180 forecast hours are available on the dwd website!")
-            raise NotImplementedError()
-            # this shouldn't be necessary, because we are checking before when we check the options.  
-        if max_step > 78:
-            forecast_steps = np.concatenate((np.arange(1, 78, 1), np.arange(78, np.min((max_step + 2, 180)), 3)))
-        else:
-            forecast_steps = np.arange(1, max_step, 1)
-        
-        time_range = [time_run + dt.timedelta(hours = float(i)) for i in forecast_steps]
-        return time_range, forecast_steps
+        if "aswdir_s" in inverse and self.decumulate_radiation:
+            name = inverse["aswdir_s"]
+            data[name] = deaverage_to_interval_rate(data[name], issue_time)
+            data[name] = data[name].where(data[name] >= 1, 0)
+            data[name].attrs["units"] = "W m-2"
 
-    def project_bin_file(self, file_in: str):
-        """
-        extracts from a .gz file
-        """
-        decompress_bz2(file_in)
-        os.remove(file_in)
-        subprocess.check_output([self.cdo_path + "cdo -O remap," + os.path.join(self.working_path,
-                                                                                self.grid_file) + "," + os.path.join(
-            self.working_path, self.weight_file) + " " + file_in[:-4] + " " + file_in[:-4].replace("frc", "regr_frc")],
-                                stderr=subprocess.STDOUT, shell=True)
-        os.remove(file_in[:-4])
-        return file_in[:-4].replace("frc", "regr_frc")
+        if self.hourly_output:
+            data = interpolate_hourly(
+                data,
+                issue_time,
+                self.frc_max_step,
+                method="nearest",
+                include_end=True,
+            )
+        return validate_dataset(drop_grib_coordinates(data))
+
+    def _download_run(
+        self,
+        issue_time: dt.datetime,
+        space_bounds: BoundingBox,
+        tmp_path: str,
+    ) -> xr.Dataset:
+        if issue_time.hour not in self.issue_hours:
+            raise ForecastUnavailableError(
+                "Invalid ICON issue hour.",
+                [f"Requested: {issue_time:%Y-%m-%d %H:%M UTC}"],
+            )
+
+        steps = self._forecast_steps()
+        self.log.info(
+            " ---> ICON request: %s variables, %s forecast steps, %s workers",
+            len(self.variable_map),
+            len(steps),
+            self.download_workers,
+        )
+        self.log.info(" ---> Prepare ICON remapping tables...")
+        grid_file, weights_file = self._prepare_remapping_files()
+        self.log.info(" ---> Prepare ICON remapping tables...DONE")
+        self.log.info(" ---> Download and remap ICON forecast fields...")
+        outputs: dict[str, list[str]] = {variable: [] for variable in self.variable_map}
+        tasks = []
+        with ThreadPoolExecutor(max_workers=self.download_workers) as executor:
+            for variable in self.variable_map:
+                for step in steps:
+                    future = executor.submit(
+                        self._download_and_remap,
+                        issue_time,
+                        variable,
+                        step,
+                        tmp_path,
+                        grid_file,
+                        weights_file,
+                    )
+                    tasks.append((future, variable, step))
+
+            errors: list[str] = []
+            for future, variable, step in tasks:
+                try:
+                    outputs[variable].append(future.result())
+                except Exception as error:
+                    errors.append(f"{variable} f{step:03d}: {error}")
+
+        if errors:
+            self.log.error(
+                " ---> Download and remap ICON forecast fields...FAILED (%s errors)",
+                len(errors),
+            )
+            first_step_missing = any("f001" in item for item in errors)
+            error_class = ForecastUnavailableError if first_step_missing else DownloadError
+            raise error_class(
+                "ICON forecast is unavailable or incomplete.",
+                [f"Run: {issue_time:%Y-%m-%d %H:%M UTC}", *errors[:10]],
+            )
+
+        self.log.info(" ---> Download and remap ICON forecast fields...DONE")
+        self.log.info(" ---> Decode and merge ICON variables...")
+        dataset = xr.Dataset()
+        for variable, output_name in self.variable_map.items():
+            files = sorted(outputs[variable])
+            dataset[output_name] = self._open_variable(
+                files,
+                issue_time,
+                steps,
+                output_name,
+            )
+
+        self.log.info(" ---> Decode and merge ICON variables...DONE")
+        self.log.info(" ---> Postprocess ICON variables...")
+        dataset = crop_to_bounds(dataset, space_bounds)
+        dataset = self._postprocess(dataset, issue_time)
+        self.log.info(" ---> Postprocess ICON variables...DONE")
+        return dataset
